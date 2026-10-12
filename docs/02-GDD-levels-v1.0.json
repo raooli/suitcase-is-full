@@ -1,0 +1,2308 @@
+{
+  "schemaVersion": "1.0",
+  "gameId": "suitcase-packing",
+  "levels": [
+    {
+      "levelId": 1,
+      "title": "周末出发",
+      "board": {
+        "rows": 3,
+        "cols": 3,
+        "blockedCells": []
+      },
+      "items": [
+        {
+          "id": "L01_A",
+          "itemType": "prop_01_A",
+          "name": "手机",
+          "spriteKey": "placeholder/01/A",
+          "cells": [
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              1
+            ]
+          ],
+          "rotatable": false,
+          "initialRotation": 0,
+          "trayOrder": 1
+        },
+        {
+          "id": "L01_B",
+          "itemType": "prop_01_B",
+          "name": "钱包",
+          "spriteKey": "placeholder/01/B",
+          "cells": [
+            [
+              0,
+              0
+            ],
+            [
+              1,
+              0
+            ]
+          ],
+          "rotatable": false,
+          "initialRotation": 0,
+          "trayOrder": 2
+        },
+        {
+          "id": "L01_C",
+          "itemType": "prop_01_C",
+          "name": "墨镜",
+          "spriteKey": "placeholder/01/C",
+          "cells": [
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              1
+            ]
+          ],
+          "rotatable": false,
+          "initialRotation": 0,
+          "trayOrder": 3
+        },
+        {
+          "id": "L01_D",
+          "itemType": "prop_01_D",
+          "name": "折叠雨伞",
+          "spriteKey": "placeholder/01/D",
+          "cells": [
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              1
+            ],
+            [
+              0,
+              2
+            ]
+          ],
+          "rotatable": false,
+          "initialRotation": 0,
+          "trayOrder": 4
+        }
+      ],
+      "solution": [
+        {
+          "itemId": "L01_A",
+          "row": 0,
+          "col": 0,
+          "rotation": 0
+        },
+        {
+          "itemId": "L01_B",
+          "row": 0,
+          "col": 2,
+          "rotation": 0
+        },
+        {
+          "itemId": "L01_C",
+          "row": 1,
+          "col": 0,
+          "rotation": 0
+        },
+        {
+          "itemId": "L01_D",
+          "row": 2,
+          "col": 0,
+          "rotation": 0
+        }
+      ],
+      "solutionGrid": [
+        "AAB",
+        "CCB",
+        "DDD"
+      ],
+      "verification": {
+        "solvable": true,
+        "solutionsFound": 8,
+        "solutionCountCapped": false,
+        "solvableWithoutRotation": true,
+        "occupiedCells": 9,
+        "blockedCells": 0,
+        "emptyCells": 0
+      }
+    },
+    {
+      "levelId": 2,
+      "title": "再装一件",
+      "board": {
+        "rows": 4,
+        "cols": 3,
+        "blockedCells": []
+      },
+      "items": [
+        {
+          "id": "L02_A",
+          "itemType": "prop_02_A",
+          "name": "帆布袋",
+          "spriteKey": "placeholder/02/A",
+          "cells": [
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              1
+            ],
+            [
+              1,
+              0
+            ]
+          ],
+          "rotatable": false,
+          "initialRotation": 0,
+          "trayOrder": 1
+        },
+        {
+          "id": "L02_B",
+          "itemType": "prop_02_B",
+          "name": "雨伞",
+          "spriteKey": "placeholder/02/B",
+          "cells": [
+            [
+              0,
+              0
+            ],
+            [
+              1,
+              0
+            ]
+          ],
+          "rotatable": false,
+          "initialRotation": 0,
+          "trayOrder": 2
+        },
+        {
+          "id": "L02_C",
+          "itemType": "prop_02_C",
+          "name": "耳机",
+          "spriteKey": "placeholder/02/C",
+          "cells": [
+            [
+              0,
+              0
+            ],
+            [
+              1,
+              0
+            ]
+          ],
+          "rotatable": false,
+          "initialRotation": 0,
+          "trayOrder": 3
+        },
+        {
+          "id": "L02_D",
+          "itemType": "prop_02_D",
+          "name": "旅行手账",
+          "spriteKey": "placeholder/02/D",
+          "cells": [
+            [
+              0,
+              0
+            ],
+            [
+              1,
+              0
+            ],
+            [
+              1,
+              1
+            ]
+          ],
+          "rotatable": false,
+          "initialRotation": 0,
+          "trayOrder": 4
+        }
+      ],
+      "solution": [
+        {
+          "itemId": "L02_A",
+          "row": 0,
+          "col": 0,
+          "rotation": 0
+        },
+        {
+          "itemId": "L02_B",
+          "row": 0,
+          "col": 2,
+          "rotation": 0
+        },
+        {
+          "itemId": "L02_C",
+          "row": 1,
+          "col": 1,
+          "rotation": 0
+        },
+        {
+          "itemId": "L02_D",
+          "row": 2,
+          "col": 0,
+          "rotation": 0
+        }
+      ],
+      "solutionGrid": [
+        "AAB",
+        "ACB",
+        "DC.",
+        "DD."
+      ],
+      "verification": {
+        "solvable": true,
+        "solutionsFound": 36,
+        "solutionCountCapped": false,
+        "solvableWithoutRotation": true,
+        "occupiedCells": 10,
+        "blockedCells": 0,
+        "emptyCells": 2
+      }
+    },
+    {
+      "levelId": 3,
+      "title": "换个方向",
+      "board": {
+        "rows": 4,
+        "cols": 4,
+        "blockedCells": []
+      },
+      "items": [
+        {
+          "id": "L03_A",
+          "itemType": "prop_03_A",
+          "name": "长围巾",
+          "spriteKey": "placeholder/03/A",
+          "cells": [
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              1
+            ],
+            [
+              0,
+              2
+            ]
+          ],
+          "rotatable": true,
+          "initialRotation": 0,
+          "trayOrder": 1
+        },
+        {
+          "id": "L03_B",
+          "itemType": "prop_03_B",
+          "name": "香水礼盒",
+          "spriteKey": "placeholder/03/B",
+          "cells": [
+            [
+              0,
+              1
+            ],
+            [
+              1,
+              0
+            ],
+            [
+              1,
+              1
+            ],
+            [
+              2,
+              1
+            ]
+          ],
+          "rotatable": true,
+          "initialRotation": 0,
+          "trayOrder": 2
+        },
+        {
+          "id": "L03_C",
+          "itemType": "prop_03_C",
+          "name": "化妆袋",
+          "spriteKey": "placeholder/03/C",
+          "cells": [
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              1
+            ],
+            [
+              1,
+              0
+            ],
+            [
+              2,
+              0
+            ]
+          ],
+          "rotatable": true,
+          "initialRotation": 0,
+          "trayOrder": 3
+        },
+        {
+          "id": "L03_D",
+          "itemType": "prop_03_D",
+          "name": "外套",
+          "spriteKey": "placeholder/03/D",
+          "cells": [
+            [
+              0,
+              1
+            ],
+            [
+              1,
+              0
+            ],
+            [
+              1,
+              1
+            ],
+            [
+              2,
+              0
+            ],
+            [
+              2,
+              1
+            ]
+          ],
+          "rotatable": true,
+          "initialRotation": 0,
+          "trayOrder": 4
+        }
+      ],
+      "solution": [
+        {
+          "itemId": "L03_A",
+          "row": 0,
+          "col": 0,
+          "rotation": 0
+        },
+        {
+          "itemId": "L03_B",
+          "row": 0,
+          "col": 2,
+          "rotation": 0
+        },
+        {
+          "itemId": "L03_C",
+          "row": 1,
+          "col": 0,
+          "rotation": 0
+        },
+        {
+          "itemId": "L03_D",
+          "row": 2,
+          "col": 1,
+          "rotation": 1
+        }
+      ],
+      "solutionGrid": [
+        "AAAB",
+        "CCBB",
+        "CDDB",
+        "CDDD"
+      ],
+      "verification": {
+        "solvable": true,
+        "solutionsFound": 12,
+        "solutionCountCapped": false,
+        "solvableWithoutRotation": false,
+        "occupiedCells": 16,
+        "blockedCells": 0,
+        "emptyCells": 0
+      }
+    },
+    {
+      "levelId": 4,
+      "title": "刚刚好",
+      "board": {
+        "rows": 5,
+        "cols": 4,
+        "blockedCells": []
+      },
+      "items": [
+        {
+          "id": "L04_A",
+          "itemType": "prop_04_A",
+          "name": "薄外套",
+          "spriteKey": "placeholder/04/A",
+          "cells": [
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              1
+            ],
+            [
+              0,
+              2
+            ],
+            [
+              0,
+              3
+            ],
+            [
+              1,
+              3
+            ]
+          ],
+          "rotatable": true,
+          "initialRotation": 0,
+          "trayOrder": 1
+        },
+        {
+          "id": "L04_B",
+          "itemType": "prop_04_B",
+          "name": "旅行相机",
+          "spriteKey": "placeholder/04/B",
+          "cells": [
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              1
+            ],
+            [
+              1,
+              1
+            ],
+            [
+              2,
+              1
+            ]
+          ],
+          "rotatable": true,
+          "initialRotation": 0,
+          "trayOrder": 2
+        },
+        {
+          "id": "L04_C",
+          "itemType": "prop_04_C",
+          "name": "眼镜盒",
+          "spriteKey": "placeholder/04/C",
+          "cells": [
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              1
+            ],
+            [
+              1,
+              0
+            ]
+          ],
+          "rotatable": true,
+          "initialRotation": 0,
+          "trayOrder": 3
+        },
+        {
+          "id": "L04_D",
+          "itemType": "prop_04_D",
+          "name": "收纳袋",
+          "spriteKey": "placeholder/04/D",
+          "cells": [
+            [
+              0,
+              0
+            ],
+            [
+              1,
+              0
+            ],
+            [
+              1,
+              1
+            ],
+            [
+              1,
+              2
+            ]
+          ],
+          "rotatable": true,
+          "initialRotation": 0,
+          "trayOrder": 4
+        },
+        {
+          "id": "L04_E",
+          "itemType": "prop_04_E",
+          "name": "口红",
+          "spriteKey": "placeholder/04/E",
+          "cells": [
+            [
+              0,
+              0
+            ],
+            [
+              1,
+              0
+            ]
+          ],
+          "rotatable": true,
+          "initialRotation": 0,
+          "trayOrder": 5
+        },
+        {
+          "id": "L04_F",
+          "itemType": "prop_04_F",
+          "name": "护照",
+          "spriteKey": "placeholder/04/F",
+          "cells": [
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              1
+            ]
+          ],
+          "rotatable": true,
+          "initialRotation": 0,
+          "trayOrder": 6
+        }
+      ],
+      "solution": [
+        {
+          "itemId": "L04_A",
+          "row": 0,
+          "col": 0,
+          "rotation": 3
+        },
+        {
+          "itemId": "L04_B",
+          "row": 0,
+          "col": 2,
+          "rotation": 0
+        },
+        {
+          "itemId": "L04_C",
+          "row": 1,
+          "col": 1,
+          "rotation": 1
+        },
+        {
+          "itemId": "L04_D",
+          "row": 2,
+          "col": 1,
+          "rotation": 0
+        },
+        {
+          "itemId": "L04_E",
+          "row": 4,
+          "col": 0,
+          "rotation": 1
+        },
+        {
+          "itemId": "L04_F",
+          "row": 4,
+          "col": 2,
+          "rotation": 0
+        }
+      ],
+      "solutionGrid": [
+        "AABB",
+        "ACCB",
+        "ADCB",
+        "ADDD",
+        "EEFF"
+      ],
+      "verification": {
+        "solvable": true,
+        "solutionsFound": 1001,
+        "solutionCountCapped": true,
+        "solvableWithoutRotation": true,
+        "occupiedCells": 20,
+        "blockedCells": 0,
+        "emptyCells": 0
+      }
+    },
+    {
+      "levelId": 5,
+      "title": "精致出行",
+      "board": {
+        "rows": 5,
+        "cols": 5,
+        "blockedCells": []
+      },
+      "items": [
+        {
+          "id": "L05_A",
+          "itemType": "prop_05_A",
+          "name": "长裙",
+          "spriteKey": "placeholder/05/A",
+          "cells": [
+            [
+              0,
+              2
+            ],
+            [
+              1,
+              2
+            ],
+            [
+              2,
+              0
+            ],
+            [
+              2,
+              1
+            ],
+            [
+              2,
+              2
+            ]
+          ],
+          "rotatable": true,
+          "initialRotation": 0,
+          "trayOrder": 1
+        },
+        {
+          "id": "L05_B",
+          "itemType": "prop_05_B",
+          "name": "旅行手提袋",
+          "spriteKey": "placeholder/05/B",
+          "cells": [
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              1
+            ],
+            [
+              0,
+              2
+            ],
+            [
+              1,
+              0
+            ],
+            [
+              1,
+              1
+            ]
+          ],
+          "rotatable": true,
+          "initialRotation": 0,
+          "trayOrder": 2
+        },
+        {
+          "id": "L05_C",
+          "itemType": "prop_05_C",
+          "name": "高跟鞋",
+          "spriteKey": "placeholder/05/C",
+          "cells": [
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              1
+            ],
+            [
+              0,
+              2
+            ],
+            [
+              1,
+              0
+            ]
+          ],
+          "rotatable": true,
+          "initialRotation": 0,
+          "trayOrder": 3
+        },
+        {
+          "id": "L05_D",
+          "itemType": "prop_05_D",
+          "name": "化妆包",
+          "spriteKey": "placeholder/05/D",
+          "cells": [
+            [
+              0,
+              1
+            ],
+            [
+              1,
+              0
+            ],
+            [
+              1,
+              1
+            ],
+            [
+              1,
+              2
+            ]
+          ],
+          "rotatable": true,
+          "initialRotation": 0,
+          "trayOrder": 4
+        },
+        {
+          "id": "L05_E",
+          "itemType": "prop_05_E",
+          "name": "香水",
+          "spriteKey": "placeholder/05/E",
+          "cells": [
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              1
+            ],
+            [
+              1,
+              0
+            ]
+          ],
+          "rotatable": true,
+          "initialRotation": 0,
+          "trayOrder": 5
+        },
+        {
+          "id": "L05_F",
+          "itemType": "prop_05_F",
+          "name": "发饰",
+          "spriteKey": "placeholder/05/F",
+          "cells": [
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              1
+            ],
+            [
+              1,
+              1
+            ],
+            [
+              2,
+              1
+            ]
+          ],
+          "rotatable": true,
+          "initialRotation": 0,
+          "trayOrder": 6
+        }
+      ],
+      "solution": [
+        {
+          "itemId": "L05_A",
+          "row": 0,
+          "col": 0,
+          "rotation": 2
+        },
+        {
+          "itemId": "L05_B",
+          "row": 0,
+          "col": 2,
+          "rotation": 2
+        },
+        {
+          "itemId": "L05_C",
+          "row": 1,
+          "col": 1,
+          "rotation": 3
+        },
+        {
+          "itemId": "L05_D",
+          "row": 2,
+          "col": 2,
+          "rotation": 2
+        },
+        {
+          "itemId": "L05_E",
+          "row": 3,
+          "col": 0,
+          "rotation": 3
+        },
+        {
+          "itemId": "L05_F",
+          "row": 3,
+          "col": 2,
+          "rotation": 1
+        }
+      ],
+      "solutionGrid": [
+        "AAABB",
+        "ACBBB",
+        "ACDDD",
+        "ECCDF",
+        "EEFFF"
+      ],
+      "verification": {
+        "solvable": true,
+        "solutionsFound": 64,
+        "solutionCountCapped": false,
+        "solvableWithoutRotation": false,
+        "occupiedCells": 25,
+        "blockedCells": 0,
+        "emptyCells": 0
+      }
+    },
+    {
+      "levelId": 6,
+      "title": "秘密夹层",
+      "board": {
+        "rows": 5,
+        "cols": 5,
+        "blockedCells": [
+          [
+            2,
+            2
+          ],
+          [
+            3,
+            3
+          ]
+        ]
+      },
+      "items": [
+        {
+          "id": "L06_A",
+          "itemType": "prop_06_A",
+          "name": "长裙",
+          "spriteKey": "placeholder/06/A",
+          "cells": [
+            [
+              0,
+              0
+            ],
+            [
+              1,
+              0
+            ],
+            [
+              2,
+              0
+            ],
+            [
+              2,
+              1
+            ],
+            [
+              2,
+              2
+            ]
+          ],
+          "rotatable": true,
+          "initialRotation": 0,
+          "trayOrder": 1
+        },
+        {
+          "id": "L06_B",
+          "itemType": "prop_06_B",
+          "name": "手提袋",
+          "spriteKey": "placeholder/06/B",
+          "cells": [
+            [
+              0,
+              0
+            ],
+            [
+              1,
+              0
+            ],
+            [
+              1,
+              1
+            ],
+            [
+              2,
+              0
+            ],
+            [
+              2,
+              1
+            ]
+          ],
+          "rotatable": true,
+          "initialRotation": 0,
+          "trayOrder": 2
+        },
+        {
+          "id": "L06_C",
+          "itemType": "prop_06_C",
+          "name": "高跟鞋",
+          "spriteKey": "placeholder/06/C",
+          "cells": [
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              1
+            ],
+            [
+              0,
+              2
+            ],
+            [
+              1,
+              0
+            ]
+          ],
+          "rotatable": true,
+          "initialRotation": 0,
+          "trayOrder": 3
+        },
+        {
+          "id": "L06_D",
+          "itemType": "prop_06_D",
+          "name": "防晒套装",
+          "spriteKey": "placeholder/06/D",
+          "cells": [
+            [
+              0,
+              0
+            ],
+            [
+              1,
+              0
+            ],
+            [
+              1,
+              1
+            ]
+          ],
+          "rotatable": true,
+          "initialRotation": 0,
+          "trayOrder": 4
+        },
+        {
+          "id": "L06_E",
+          "itemType": "prop_06_E",
+          "name": "香水",
+          "spriteKey": "placeholder/06/E",
+          "cells": [
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              1
+            ],
+            [
+              1,
+              1
+            ]
+          ],
+          "rotatable": true,
+          "initialRotation": 0,
+          "trayOrder": 5
+        },
+        {
+          "id": "L06_F",
+          "itemType": "prop_06_F",
+          "name": "旅行收纳袋",
+          "spriteKey": "placeholder/06/F",
+          "cells": [
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              1
+            ],
+            [
+              0,
+              2
+            ]
+          ],
+          "rotatable": true,
+          "initialRotation": 0,
+          "trayOrder": 6
+        }
+      ],
+      "solution": [
+        {
+          "itemId": "L06_A",
+          "row": 0,
+          "col": 0,
+          "rotation": 1
+        },
+        {
+          "itemId": "L06_B",
+          "row": 0,
+          "col": 2,
+          "rotation": 3
+        },
+        {
+          "itemId": "L06_C",
+          "row": 1,
+          "col": 1,
+          "rotation": 3
+        },
+        {
+          "itemId": "L06_D",
+          "row": 2,
+          "col": 3,
+          "rotation": 2
+        },
+        {
+          "itemId": "L06_E",
+          "row": 3,
+          "col": 0,
+          "rotation": 2
+        },
+        {
+          "itemId": "L06_F",
+          "row": 4,
+          "col": 2,
+          "rotation": 0
+        }
+      ],
+      "solutionGrid": [
+        "AAABB",
+        "ACBBB",
+        "AC#DD",
+        "ECC#D",
+        "EEFFF"
+      ],
+      "verification": {
+        "solvable": true,
+        "solutionsFound": 26,
+        "solutionCountCapped": false,
+        "solvableWithoutRotation": false,
+        "occupiedCells": 23,
+        "blockedCells": 2,
+        "emptyCells": 0
+      }
+    },
+    {
+      "levelId": 7,
+      "title": "长物件优先",
+      "board": {
+        "rows": 5,
+        "cols": 6,
+        "blockedCells": []
+      },
+      "items": [
+        {
+          "id": "L07_A",
+          "itemType": "prop_07_A",
+          "name": "长柄伞",
+          "spriteKey": "placeholder/07/A",
+          "cells": [
+            [
+              0,
+              0
+            ],
+            [
+              1,
+              0
+            ],
+            [
+              2,
+              0
+            ],
+            [
+              3,
+              0
+            ],
+            [
+              4,
+              0
+            ]
+          ],
+          "rotatable": true,
+          "initialRotation": 0,
+          "trayOrder": 1
+        },
+        {
+          "id": "L07_B",
+          "itemType": "prop_07_B",
+          "name": "三脚架",
+          "spriteKey": "placeholder/07/B",
+          "cells": [
+            [
+              0,
+              0
+            ],
+            [
+              1,
+              0
+            ],
+            [
+              2,
+              0
+            ],
+            [
+              3,
+              0
+            ]
+          ],
+          "rotatable": true,
+          "initialRotation": 0,
+          "trayOrder": 2
+        },
+        {
+          "id": "L07_C",
+          "itemType": "prop_07_C",
+          "name": "针织衫",
+          "spriteKey": "placeholder/07/C",
+          "cells": [
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              1
+            ],
+            [
+              0,
+              2
+            ],
+            [
+              1,
+              2
+            ],
+            [
+              2,
+              2
+            ]
+          ],
+          "rotatable": true,
+          "initialRotation": 0,
+          "trayOrder": 3
+        },
+        {
+          "id": "L07_D",
+          "itemType": "prop_07_D",
+          "name": "方形收纳袋",
+          "spriteKey": "placeholder/07/D",
+          "cells": [
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              1
+            ],
+            [
+              1,
+              0
+            ],
+            [
+              1,
+              1
+            ]
+          ],
+          "rotatable": true,
+          "initialRotation": 0,
+          "trayOrder": 4
+        },
+        {
+          "id": "L07_E",
+          "itemType": "prop_07_E",
+          "name": "折叠围巾",
+          "spriteKey": "placeholder/07/E",
+          "cells": [
+            [
+              0,
+              1
+            ],
+            [
+              1,
+              0
+            ],
+            [
+              1,
+              1
+            ]
+          ],
+          "rotatable": true,
+          "initialRotation": 0,
+          "trayOrder": 5
+        },
+        {
+          "id": "L07_F",
+          "itemType": "prop_07_F",
+          "name": "相机",
+          "spriteKey": "placeholder/07/F",
+          "cells": [
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              1
+            ],
+            [
+              1,
+              0
+            ],
+            [
+              1,
+              1
+            ]
+          ],
+          "rotatable": true,
+          "initialRotation": 0,
+          "trayOrder": 6
+        },
+        {
+          "id": "L07_G",
+          "itemType": "prop_07_G",
+          "name": "鞋盒",
+          "spriteKey": "placeholder/07/G",
+          "cells": [
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              1
+            ],
+            [
+              1,
+              0
+            ]
+          ],
+          "rotatable": true,
+          "initialRotation": 0,
+          "trayOrder": 7
+        },
+        {
+          "id": "L07_H",
+          "itemType": "prop_07_H",
+          "name": "护照",
+          "spriteKey": "placeholder/07/H",
+          "cells": [
+            [
+              0,
+              0
+            ],
+            [
+              1,
+              0
+            ]
+          ],
+          "rotatable": true,
+          "initialRotation": 0,
+          "trayOrder": 8
+        }
+      ],
+      "solution": [
+        {
+          "itemId": "L07_A",
+          "row": 0,
+          "col": 0,
+          "rotation": 1
+        },
+        {
+          "itemId": "L07_B",
+          "row": 0,
+          "col": 5,
+          "rotation": 0
+        },
+        {
+          "itemId": "L07_C",
+          "row": 1,
+          "col": 0,
+          "rotation": 3
+        },
+        {
+          "itemId": "L07_D",
+          "row": 1,
+          "col": 3,
+          "rotation": 0
+        },
+        {
+          "itemId": "L07_E",
+          "row": 2,
+          "col": 1,
+          "rotation": 2
+        },
+        {
+          "itemId": "L07_F",
+          "row": 3,
+          "col": 2,
+          "rotation": 0
+        },
+        {
+          "itemId": "L07_G",
+          "row": 3,
+          "col": 4,
+          "rotation": 3
+        },
+        {
+          "itemId": "L07_H",
+          "row": 4,
+          "col": 0,
+          "rotation": 1
+        }
+      ],
+      "solutionGrid": [
+        "AAAAAB",
+        "CCCDDB",
+        "CEEDDB",
+        "CEFFGB",
+        "HHFFGG"
+      ],
+      "verification": {
+        "solvable": true,
+        "solutionsFound": 1001,
+        "solutionCountCapped": true,
+        "solvableWithoutRotation": true,
+        "occupiedCells": 30,
+        "blockedCells": 0,
+        "emptyCells": 0
+      }
+    },
+    {
+      "levelId": 8,
+      "title": "左右分区",
+      "board": {
+        "rows": 5,
+        "cols": 6,
+        "blockedCells": [
+          [
+            0,
+            3
+          ],
+          [
+            1,
+            3
+          ],
+          [
+            2,
+            3
+          ],
+          [
+            3,
+            3
+          ],
+          [
+            4,
+            3
+          ]
+        ]
+      },
+      "items": [
+        {
+          "id": "L08_A",
+          "itemType": "prop_08_A",
+          "name": "旅行外套",
+          "spriteKey": "placeholder/08/A",
+          "cells": [
+            [
+              0,
+              0
+            ],
+            [
+              1,
+              0
+            ],
+            [
+              2,
+              0
+            ]
+          ],
+          "rotatable": true,
+          "initialRotation": 0,
+          "trayOrder": 1
+        },
+        {
+          "id": "L08_B",
+          "itemType": "prop_08_B",
+          "name": "护肤包",
+          "spriteKey": "placeholder/08/B",
+          "cells": [
+            [
+              0,
+              0
+            ],
+            [
+              1,
+              0
+            ],
+            [
+              1,
+              1
+            ]
+          ],
+          "rotatable": true,
+          "initialRotation": 0,
+          "trayOrder": 2
+        },
+        {
+          "id": "L08_C",
+          "itemType": "prop_08_C",
+          "name": "折叠衣物",
+          "spriteKey": "placeholder/08/C",
+          "cells": [
+            [
+              0,
+              2
+            ],
+            [
+              1,
+              0
+            ],
+            [
+              1,
+              1
+            ],
+            [
+              1,
+              2
+            ]
+          ],
+          "rotatable": true,
+          "initialRotation": 0,
+          "trayOrder": 3
+        },
+        {
+          "id": "L08_D",
+          "itemType": "prop_08_D",
+          "name": "针织衫",
+          "spriteKey": "placeholder/08/D",
+          "cells": [
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              1
+            ],
+            [
+              1,
+              0
+            ]
+          ],
+          "rotatable": true,
+          "initialRotation": 0,
+          "trayOrder": 4
+        },
+        {
+          "id": "L08_E",
+          "itemType": "prop_08_E",
+          "name": "收纳盒",
+          "spriteKey": "placeholder/08/E",
+          "cells": [
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              1
+            ],
+            [
+              1,
+              0
+            ]
+          ],
+          "rotatable": true,
+          "initialRotation": 0,
+          "trayOrder": 5
+        },
+        {
+          "id": "L08_F",
+          "itemType": "prop_08_F",
+          "name": "洗漱包",
+          "spriteKey": "placeholder/08/F",
+          "cells": [
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              1
+            ],
+            [
+              1,
+              0
+            ],
+            [
+              1,
+              1
+            ],
+            [
+              1,
+              2
+            ]
+          ],
+          "rotatable": true,
+          "initialRotation": 0,
+          "trayOrder": 6
+        },
+        {
+          "id": "L08_G",
+          "itemType": "prop_08_G",
+          "name": "相机包",
+          "spriteKey": "placeholder/08/G",
+          "cells": [
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              1
+            ],
+            [
+              1,
+              0
+            ],
+            [
+              1,
+              1
+            ]
+          ],
+          "rotatable": true,
+          "initialRotation": 0,
+          "trayOrder": 7
+        }
+      ],
+      "solution": [
+        {
+          "itemId": "L08_A",
+          "row": 0,
+          "col": 0,
+          "rotation": 1
+        },
+        {
+          "itemId": "L08_B",
+          "row": 0,
+          "col": 4,
+          "rotation": 1
+        },
+        {
+          "itemId": "L08_C",
+          "row": 1,
+          "col": 0,
+          "rotation": 2
+        },
+        {
+          "itemId": "L08_D",
+          "row": 1,
+          "col": 4,
+          "rotation": 2
+        },
+        {
+          "itemId": "L08_E",
+          "row": 2,
+          "col": 1,
+          "rotation": 1
+        },
+        {
+          "itemId": "L08_F",
+          "row": 3,
+          "col": 0,
+          "rotation": 0
+        },
+        {
+          "itemId": "L08_G",
+          "row": 3,
+          "col": 4,
+          "rotation": 0
+        }
+      ],
+      "solutionGrid": [
+        "AAA#BB",
+        "CCC#BD",
+        "CEE#DD",
+        "FFE#GG",
+        "FFF#GG"
+      ],
+      "verification": {
+        "solvable": true,
+        "solutionsFound": 1001,
+        "solutionCountCapped": true,
+        "solvableWithoutRotation": false,
+        "occupiedCells": 25,
+        "blockedCells": 5,
+        "emptyCells": 0
+      }
+    },
+    {
+      "levelId": 9,
+      "title": "最后一件",
+      "board": {
+        "rows": 6,
+        "cols": 6,
+        "blockedCells": []
+      },
+      "items": [
+        {
+          "id": "L09_A",
+          "itemType": "prop_09_A",
+          "name": "旅行套装",
+          "spriteKey": "placeholder/09/A",
+          "cells": [
+            [
+              0,
+              0
+            ],
+            [
+              1,
+              0
+            ],
+            [
+              2,
+              0
+            ],
+            [
+              2,
+              1
+            ],
+            [
+              2,
+              2
+            ]
+          ],
+          "rotatable": true,
+          "initialRotation": 0,
+          "trayOrder": 1
+        },
+        {
+          "id": "L09_B",
+          "itemType": "prop_09_B",
+          "name": "化妆包",
+          "spriteKey": "placeholder/09/B",
+          "cells": [
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              1
+            ],
+            [
+              1,
+              0
+            ],
+            [
+              1,
+              1
+            ]
+          ],
+          "rotatable": true,
+          "initialRotation": 0,
+          "trayOrder": 2
+        },
+        {
+          "id": "L09_C",
+          "itemType": "prop_09_C",
+          "name": "衬衫",
+          "spriteKey": "placeholder/09/C",
+          "cells": [
+            [
+              0,
+              0
+            ],
+            [
+              1,
+              0
+            ],
+            [
+              2,
+              0
+            ],
+            [
+              2,
+              1
+            ]
+          ],
+          "rotatable": true,
+          "initialRotation": 0,
+          "trayOrder": 3
+        },
+        {
+          "id": "L09_D",
+          "itemType": "prop_09_D",
+          "name": "连衣裙",
+          "spriteKey": "placeholder/09/D",
+          "cells": [
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              1
+            ],
+            [
+              0,
+              2
+            ],
+            [
+              1,
+              0
+            ]
+          ],
+          "rotatable": true,
+          "initialRotation": 0,
+          "trayOrder": 4
+        },
+        {
+          "id": "L09_E",
+          "itemType": "prop_09_E",
+          "name": "卷发棒",
+          "spriteKey": "placeholder/09/E",
+          "cells": [
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              1
+            ]
+          ],
+          "rotatable": true,
+          "initialRotation": 0,
+          "trayOrder": 5
+        },
+        {
+          "id": "L09_F",
+          "itemType": "prop_09_F",
+          "name": "鞋袋",
+          "spriteKey": "placeholder/09/F",
+          "cells": [
+            [
+              0,
+              1
+            ],
+            [
+              1,
+              1
+            ],
+            [
+              2,
+              0
+            ],
+            [
+              2,
+              1
+            ]
+          ],
+          "rotatable": true,
+          "initialRotation": 0,
+          "trayOrder": 6
+        },
+        {
+          "id": "L09_G",
+          "itemType": "prop_09_G",
+          "name": "护肤包",
+          "spriteKey": "placeholder/09/G",
+          "cells": [
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              1
+            ],
+            [
+              1,
+              1
+            ]
+          ],
+          "rotatable": true,
+          "initialRotation": 0,
+          "trayOrder": 7
+        },
+        {
+          "id": "L09_H",
+          "itemType": "prop_09_H",
+          "name": "相机",
+          "spriteKey": "placeholder/09/H",
+          "cells": [
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              1
+            ],
+            [
+              1,
+              0
+            ],
+            [
+              1,
+              1
+            ]
+          ],
+          "rotatable": true,
+          "initialRotation": 0,
+          "trayOrder": 8
+        },
+        {
+          "id": "L09_I",
+          "itemType": "prop_09_I",
+          "name": "洗漱包",
+          "spriteKey": "placeholder/09/I",
+          "cells": [
+            [
+              0,
+              1
+            ],
+            [
+              1,
+              0
+            ],
+            [
+              1,
+              1
+            ],
+            [
+              1,
+              2
+            ]
+          ],
+          "rotatable": true,
+          "initialRotation": 0,
+          "trayOrder": 9
+        }
+      ],
+      "solution": [
+        {
+          "itemId": "L09_A",
+          "row": 0,
+          "col": 0,
+          "rotation": 1
+        },
+        {
+          "itemId": "L09_B",
+          "row": 0,
+          "col": 4,
+          "rotation": 0
+        },
+        {
+          "itemId": "L09_C",
+          "row": 1,
+          "col": 1,
+          "rotation": 1
+        },
+        {
+          "itemId": "L09_D",
+          "row": 2,
+          "col": 2,
+          "rotation": 0
+        },
+        {
+          "itemId": "L09_E",
+          "row": 2,
+          "col": 5,
+          "rotation": 1
+        },
+        {
+          "itemId": "L09_F",
+          "row": 3,
+          "col": 0,
+          "rotation": 2
+        },
+        {
+          "itemId": "L09_G",
+          "row": 3,
+          "col": 3,
+          "rotation": 3
+        },
+        {
+          "itemId": "L09_H",
+          "row": 4,
+          "col": 1,
+          "rotation": 0
+        },
+        {
+          "itemId": "L09_I",
+          "row": 4,
+          "col": 3,
+          "rotation": 0
+        }
+      ],
+      "solutionGrid": [
+        "AAA.BB",
+        "ACCCBB",
+        "ACDDDE",
+        "FFDGGE",
+        "FHHGI.",
+        "FHHIII"
+      ],
+      "verification": {
+        "solvable": true,
+        "solutionsFound": 1001,
+        "solutionCountCapped": true,
+        "solvableWithoutRotation": true,
+        "occupiedCells": 34,
+        "blockedCells": 0,
+        "emptyCells": 2
+      }
+    },
+    {
+      "levelId": 10,
+      "title": "旅行收纳大师",
+      "board": {
+        "rows": 6,
+        "cols": 6,
+        "blockedCells": [
+          [
+            2,
+            2
+          ],
+          [
+            3,
+            2
+          ],
+          [
+            4,
+            4
+          ]
+        ]
+      },
+      "items": [
+        {
+          "id": "L10_A",
+          "itemType": "prop_10_A",
+          "name": "旅行外套",
+          "spriteKey": "placeholder/10/A",
+          "cells": [
+            [
+              0,
+              0
+            ],
+            [
+              1,
+              0
+            ],
+            [
+              2,
+              0
+            ],
+            [
+              3,
+              0
+            ],
+            [
+              3,
+              1
+            ]
+          ],
+          "rotatable": true,
+          "initialRotation": 0,
+          "trayOrder": 1
+        },
+        {
+          "id": "L10_B",
+          "itemType": "prop_10_B",
+          "name": "相机包",
+          "spriteKey": "placeholder/10/B",
+          "cells": [
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              1
+            ],
+            [
+              1,
+              0
+            ],
+            [
+              1,
+              1
+            ]
+          ],
+          "rotatable": true,
+          "initialRotation": 0,
+          "trayOrder": 2
+        },
+        {
+          "id": "L10_C",
+          "itemType": "prop_10_C",
+          "name": "针织衫",
+          "spriteKey": "placeholder/10/C",
+          "cells": [
+            [
+              0,
+              0
+            ],
+            [
+              1,
+              0
+            ],
+            [
+              1,
+              1
+            ],
+            [
+              1,
+              2
+            ]
+          ],
+          "rotatable": true,
+          "initialRotation": 0,
+          "trayOrder": 3
+        },
+        {
+          "id": "L10_D",
+          "itemType": "prop_10_D",
+          "name": "旅行鞋",
+          "spriteKey": "placeholder/10/D",
+          "cells": [
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              1
+            ],
+            [
+              0,
+              2
+            ],
+            [
+              1,
+              2
+            ]
+          ],
+          "rotatable": true,
+          "initialRotation": 0,
+          "trayOrder": 4
+        },
+        {
+          "id": "L10_E",
+          "itemType": "prop_10_E",
+          "name": "护肤包",
+          "spriteKey": "placeholder/10/E",
+          "cells": [
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              1
+            ],
+            [
+              1,
+              0
+            ],
+            [
+              1,
+              1
+            ]
+          ],
+          "rotatable": true,
+          "initialRotation": 0,
+          "trayOrder": 5
+        },
+        {
+          "id": "L10_F",
+          "itemType": "prop_10_F",
+          "name": "香水盒",
+          "spriteKey": "placeholder/10/F",
+          "cells": [
+            [
+              0,
+              1
+            ],
+            [
+              1,
+              0
+            ],
+            [
+              1,
+              1
+            ]
+          ],
+          "rotatable": true,
+          "initialRotation": 0,
+          "trayOrder": 6
+        },
+        {
+          "id": "L10_G",
+          "itemType": "prop_10_G",
+          "name": "长围巾",
+          "spriteKey": "placeholder/10/G",
+          "cells": [
+            [
+              0,
+              2
+            ],
+            [
+              1,
+              0
+            ],
+            [
+              1,
+              1
+            ],
+            [
+              1,
+              2
+            ]
+          ],
+          "rotatable": true,
+          "initialRotation": 0,
+          "trayOrder": 7
+        },
+        {
+          "id": "L10_H",
+          "itemType": "prop_10_H",
+          "name": "眼镜盒",
+          "spriteKey": "placeholder/10/H",
+          "cells": [
+            [
+              0,
+              0
+            ],
+            [
+              1,
+              0
+            ]
+          ],
+          "rotatable": true,
+          "initialRotation": 0,
+          "trayOrder": 8
+        },
+        {
+          "id": "L10_I",
+          "itemType": "prop_10_I",
+          "name": "登机牌夹",
+          "spriteKey": "placeholder/10/I",
+          "cells": [
+            [
+              0,
+              0
+            ],
+            [
+              1,
+              0
+            ],
+            [
+              2,
+              0
+            ]
+          ],
+          "rotatable": true,
+          "initialRotation": 0,
+          "trayOrder": 9
+        }
+      ],
+      "solution": [
+        {
+          "itemId": "L10_A",
+          "row": 0,
+          "col": 0,
+          "rotation": 1
+        },
+        {
+          "itemId": "L10_B",
+          "row": 0,
+          "col": 4,
+          "rotation": 0
+        },
+        {
+          "itemId": "L10_C",
+          "row": 1,
+          "col": 1,
+          "rotation": 2
+        },
+        {
+          "itemId": "L10_D",
+          "row": 2,
+          "col": 0,
+          "rotation": 3
+        },
+        {
+          "itemId": "L10_E",
+          "row": 2,
+          "col": 4,
+          "rotation": 0
+        },
+        {
+          "itemId": "L10_F",
+          "row": 3,
+          "col": 1,
+          "rotation": 1
+        },
+        {
+          "itemId": "L10_G",
+          "row": 3,
+          "col": 3,
+          "rotation": 1
+        },
+        {
+          "itemId": "L10_H",
+          "row": 4,
+          "col": 5,
+          "rotation": 0
+        },
+        {
+          "itemId": "L10_I",
+          "row": 5,
+          "col": 0,
+          "rotation": 1
+        }
+      ],
+      "solutionGrid": [
+        "AAAABB",
+        "ACCCBB",
+        "DD#CEE",
+        "DF#GEE",
+        "DFFG#H",
+        "IIIGGH"
+      ],
+      "verification": {
+        "solvable": true,
+        "solutionsFound": 1001,
+        "solutionCountCapped": true,
+        "solvableWithoutRotation": false,
+        "occupiedCells": 33,
+        "blockedCells": 3,
+        "emptyCells": 0
+      }
+    }
+  ]
+}
