@@ -22,6 +22,7 @@ const RULES: Record<string, string> = {
   'R-A4': 'platform/ 之外不得出现 wx API',
   'R-A6': 'cellSize 算术只允许出现在 BoardView.ts 与 core/config.ts',
   'R-A9': 'assets/ 下只允许运行时资源：sprites 必须在 assets/resources/ 内',
+  'R-A10': 'assets/ 下禁止展开语法 [...x]（Cocos 构建的 loose 转译会把它降级成 [x]）；一律用 Array.from(x)',
 };
 
 /**
@@ -140,6 +141,24 @@ if (existsSync(join(ROOT, 'assets/sprites'))) {
     line: 0,
     text: 'sprites 需放在 assets/resources/sprites/ 下，否则无法用 resources.load 动态加载',
   });
+}
+
+// ── R-A10：禁止展开语法（引擎侧真实故障点，见架构文档 5 节）────────────────
+//
+// Cocos Creator 3.8.8 构建的转译是 loose 模式：`[...set]` → `[].concat(set)` → `[set]`。
+// 对数组无害（等价浅拷贝），对 Set / Map 迭代器 / 生成器则**静默出错**；
+// 而 Node/Vitest 里展开语法是规范的，于是症状变成"单测全绿、引擎里数据错"。
+// 这一类只能从写法上根除：一律 Array.from(...)。
+for (const dir of ['assets/core', 'assets/view']) {
+  for (const f of listFiles(dir, ['.ts'])) {
+    checkFile(f, [
+      {
+        id: 'R-A10',
+        re: /\[\s*\.\.\.[A-Za-z_$(]/,
+        skip: (line) => line.trim().startsWith('*') || line.trim().startsWith('//'),
+      },
+    ]);
+  }
 }
 
 // ── 输出 ────────────────────────────────────────────────────────────────

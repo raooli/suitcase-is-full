@@ -69,7 +69,7 @@ export class GameSession {
 
   /** 关卡初始状态：托盘按 `trayOrder`、朝向全 0、无选中。障碍由 `level` 承载，不在这里 */
   static initialState(level: LevelSpec): LevelState {
-    const tray = [...level.items]
+    const tray = Array.from(level.items)
       .sort((a, b) => a.trayOrder - b.trayOrder)
       .map((it) => it.id);
     return {
@@ -362,7 +362,7 @@ export class GameSession {
     return {
       phase: this.phase,
       tray: this.state.tray,
-      placed: [...this.state.placements.entries()].map(([itemId, placement]) => ({ itemId, placement })),
+      placed: Array.from(this.state.placements.entries()).map(([itemId, placement]) => ({ itemId, placement })),
       undoDepth: this.history.peekDepth(),
       moves: this.moveCount,
     };

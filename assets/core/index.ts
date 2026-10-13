@@ -28,7 +28,8 @@ export type {
   SaveDataV1,
   Vec2Like,
 } from './model/types';
-export { LevelDataError, parseLevelSpec, validateLevelSpec } from './model/level';
+export { LevelDataError, parseLevelBundle, parseLevelSpec, validateLevelSpec } from './model/level';
+export type { LevelBundle } from './model/level';
 
 // 几何
 export {

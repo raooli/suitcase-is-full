@@ -8,11 +8,13 @@
 
 import { describe, expect, it } from 'vitest';
 
-import { LevelDataError, parseLevelSpec, validateLevelSpec } from '../assets/core/model/level';
+import { LevelDataError, parseLevelBundle, parseLevelSpec, validateLevelSpec } from '../assets/core/model/level';
 import { OccupancyIndex, buildIndex, totalItemCellCount, usableCellCount } from '../assets/core/rules/board';
 import { checkDeadend, occupiedCellsOf, progressOf } from '../assets/core/solver/deadend';
 import type { LevelSpec, RC } from '../assets/core/model/types';
 import { toIndex, toRC, clampAnchor, inBounds } from '../assets/core/geometry/coords';
+// 真实产物（tools/verify-levels.ts 生成），用来守住「包 → 单关」的取数路径
+import levelsBundle from '../assets/data/levels.json';
 
 function baseLevel(over: Partial<LevelSpec> = {}): LevelSpec {
   return {
@@ -278,5 +280,51 @@ describe('调试辅助函数', () => {
       selectedId: null,
     };
     expect(progressOf(level, state)).toEqual({ placed: 1, total: 1 });
+  });
+});
+
+describe('parseLevelBundle：从关卡包里取单关', () => {
+  function bundleOf(levels: unknown): unknown {
+    return { schemaVersion: '1.1', levels };
+  }
+
+  it('取到指定关卡并做校验', () => {
+    const l1 = baseLevel({ levelId: 1 });
+    const l2 = baseLevel({ levelId: 2, title: 'second' });
+    const got = parseLevelBundle(bundleOf([l1, l2]), 2);
+    expect(got.levelId).toBe(2);
+    expect(got.title).toBe('second');
+  });
+
+  it('包里没有这一关 → LevelDataError，并列出包内已有的 levelId', () => {
+    expect(() => parseLevelBundle(bundleOf([baseLevel({ levelId: 1 })]), 7)).toThrow(LevelDataError);
+    try {
+      parseLevelBundle(bundleOf([baseLevel({ levelId: 1 })]), 7);
+    } catch (e) {
+      expect((e as LevelDataError).problems.join()).toContain('1');
+    }
+  });
+
+  it('包结构不对（非对象 / 缺 levels）→ LevelDataError', () => {
+    expect(() => parseLevelBundle(null, 1)).toThrow(LevelDataError);
+    expect(() => parseLevelBundle('nope', 1)).toThrow(LevelDataError);
+    expect(() => parseLevelBundle({ schemaVersion: '1.1' }, 1)).toThrow(LevelDataError);
+  });
+
+  it('关卡本身不合法时，把校验问题原样透出', () => {
+    // 物品面积 9 > 棋盘可用格 4 → 一定装不下
+    const bad = baseLevel({
+      board: { rows: 2, cols: 2, blockedCells: [] },
+      items: [
+        { id: 'A', name: 'a', itemType: 't', spriteKey: 'k', cells: [[0, 0], [0, 1], [0, 2]], rotatable: false, trayOrder: 1 },
+      ],
+    });
+    expect(() => parseLevelBundle(bundleOf([bad]), 1)).toThrow(LevelDataError);
+  });
+
+  it('真实产物 assets/data/levels.json 的第 1 关可取出（守 R-A7 数据一致性）', () => {
+    const got = parseLevelBundle(levelsBundle, 1);
+    expect(got.levelId).toBe(1);
+    expect(got.items.length).toBeGreaterThan(0);
   });
 });

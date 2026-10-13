@@ -132,7 +132,7 @@ export function insertByTrayOrder(
 ): string[] {
   const orderOf = (id: string) => findItem(level, id)?.trayOrder ?? Number.MAX_SAFE_INTEGER;
   const target = orderOf(itemId);
-  const out = [...tray];
+  const out = Array.from(tray);
   let i = 0;
   while (i < out.length && orderOf(out[i]) < target) i++;
   out.splice(i, 0, itemId);

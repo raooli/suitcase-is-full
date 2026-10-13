@@ -142,7 +142,11 @@ function validateItems(board: BoardSpec, items: readonly ItemSpec[]): string[] {
   if (orders.size !== items.length) {
     problems.push('trayOrder 不唯一');
   } else {
-    const sorted = [...orders].sort((a, b) => a - b);
+    // 注意：这里必须用 Array.from，**不能写 [...orders]**。
+    // Cocos Creator 3.8.8 构建的转译是 loose 模式，`[...set]` 会被降级成
+    // `[].concat(set)` → `[set]`（Set 被当成单个元素），而 Node/Vitest 里是正确的。
+    // 症状是"单测全绿、引擎里数据校验莫名失败"。详见 06-架构设计 第 5 节 R-A10。
+    const sorted = Array.from(orders).sort((a, b) => a - b);
     const expected = items.map((_, i) => i + 1);
     if (sorted.join(',') !== expected.join(',')) {
       problems.push(`trayOrder 必须从 1 开始连续，实际为 ${sorted.join(',')}`);
@@ -173,3 +177,51 @@ export function parseLevelSpec(level: LevelSpec): LevelSpec {
   }
   return level;
 }
+
+// ───────────────────────── 关卡包（多关容器） ─────────────────────────
+
+/** `assets/data/levels.json` 的运行时形状。真正的校验在 `parseLevelBundle` 里做 */
+export interface LevelBundle {
+  readonly levels: readonly LevelSpec[];
+}
+
+function looksLikeLevel(value: unknown): value is LevelSpec {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    typeof (value as { levelId?: unknown }).levelId === 'number'
+  );
+}
+
+/**
+ * 从关卡包里取出指定关卡并校验。
+ *
+ * 分这层的原因：`levels.json` 是 `tools/verify-levels.ts` 的产物，运行时拿到的是
+ * 一坨 `unknown`。**「包 → 单关」是取数与校验，属于 core**（执行纪律 #3：
+ * 逻辑进 core，表现进 view）——view 只负责把资产递进来，不自己拆 JSON 结构。
+ *
+ * 三处失败都抛 `LevelDataError`（包结构不对 / 没有这一关 / 这一关本身不合法），
+ * 调用方（view）降级为 UI 提示，构建脚本直接失败退出。
+ */
+export function parseLevelBundle(raw: unknown, levelId: number): LevelSpec {
+  if (typeof raw !== 'object' || raw === null) {
+    throw new LevelDataError('关卡包不是对象', ['期望形如 { schemaVersion, levels: [...] } 的对象']);
+  }
+
+  const levels = (raw as { levels?: unknown }).levels;
+  if (!Array.isArray(levels)) {
+    throw new LevelDataError('关卡包缺少 levels 数组', ['levels 字段必须存在且为数组']);
+  }
+
+  const hit = levels.find((candidate) => looksLikeLevel(candidate) && candidate.levelId === levelId);
+  if (hit === undefined) {
+    const present = levels.filter(looksLikeLevel).map((l) => l.levelId);
+    throw new LevelDataError(
+      `关卡包里没有 L${levelId}`,
+      [`包内已有 levelId：${present.length > 0 ? present.join(', ') : '（无）'}`],
+    );
+  }
+
+  return parseLevelSpec(hit);
+}
+
