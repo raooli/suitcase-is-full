@@ -18,9 +18,12 @@ profiles/
 native/
 .cocos/
 
-# 工具输出（生产态关卡由 tools 生成，不入库）
+# 工具输出
 *.tsbuildinfo
 coverage/
+
+# vitest 运行期产生的临时配置
+vitest.config.ts.timestamp-*.mjs
 
 # 编辑器
 .vscode/

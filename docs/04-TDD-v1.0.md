@@ -75,9 +75,33 @@
 > | L09 | 卷发棒 2 格 → 3 格横条，35/36 | 4.77% → **0.50%** | 293616 |
 > | L10 | 障碍 3 → 4（新增 `[5,5]`），香水盒 3 格 → 2 格，32/32 | 1.87% → **0.37%** | 1464 |
 >
-> 校准后曲线 `73.4 → 66.7 → 59.4 → 10.8 → 2.80 → 1.30 → 0.87 → 0.53 → 0.50 → 0.37`，除 L01/L02 外单调递减。**L09 与 L10 的差距落在 N=3000 的噪声内，真实顺序待试玩确认——在拿到试玩数据前不要再用指标去调这两关。**
+> 校准后曲线 `73.4 → 66.7 → 59.4 → 10.8 → 2.80 → 1.30 → 0.87 → 0.53 → 0.50 → 0.37`。**注意：初稿在这里写的「除 L01/L02 外单调递减」已被推翻。** 用 TS 工具加双比例显著性检验复跑后，L06→L07、L07→L08、L08→L09、L09→L10 四对**全部不可区分**，唯一统计显著的真倒挂是 L01→L02。也就是说「难度单调上升」只有 L02→L05 那段被数据支持，尾段必须靠试玩排序。详见 GDD 2.4。
 >
 > 本表（0.1 节）保留为 V1.0 的历史基线快照，不要再用它指导开发；以 GDD 2.4 为准。
+
+### 0.3 实现状态（2026-10-13 更新）
+
+`assets/core/` 与 `tools/` 的骨架**已落地并跑通**，不是空目录：
+
+| 项 | 状态 |
+| --- | --- |
+| `assets/core/`（第 3 节全部 11 个模块） | ✅ 已实现，零 `cc` 依赖 |
+| `tools/verify-levels.ts` | ✅ 已实现，10/10 关通过，可生成 `assets/data/levels.json` |
+| `tools/difficulty-report.ts` | ✅ 已实现，含显著性检验 |
+| 单测（`test/`，4 个 spec） | ✅ **163 个用例全通过**，含真实 10 关的端到端回归 |
+| `assets/view/`（Cocos 渲染层） | ⬜ 待建，需先创建 Cocos 项目 |
+| 微信小游戏构建与真机适配 | ⬜ 待做 |
+
+**实现过程中修掉的三个真 bug（都是"文档没写清 → 写法自然出错"的类型，已回写进本文件）：**
+
+1. **`handleDrop` 覆盖通关状态**：提交成功后无条件把 phase 改回 `Selected/Idle`，把 `afterCommit` 刚设置的 `WinAnimating` 冲掉了 —— 通关动画永远不会播。修法：改写前先判 `isInputFrozen()`。
+2. **`reset` 漏了冻结判断**：`WinAnimating` 期间允许重置会抹掉通关状态。已补（见 7.1）。
+3. **面积快检把障碍格算成已占用**：`freeCells` 被双重扣减，导致几乎每关一提交就误报「装不下」。修法：只统计 `ownerAt() >= 0` 的格。
+
+**另外两个「校验器比数据更严」的假阳性（这类错误更危险，因为它会逼着人去改本来正确的数据）：**
+
+- **形状包围盒检查没考虑旋转**：L03 那根 1×5 的长柄伞在 5×4 棋盘上横着放不下、转 90° 才放得下，而检查只看初始朝向，于是把**合法关卡判成坏数据**。修法：只要存在任一朝向能放入即通过。
+- **把「解数」当成难度排序指标**：解数与 big% 的排序互相矛盾（L06 仅 18 组解却比 ≥3 万组解的 L09 更好放）。解数只保留「发现解空间异常宽松」这一个用途。见 GDD 2.4 的修正说明。
 
 ### 0.2 规则漏洞：已放置物品无法主动取出
 
@@ -514,7 +538,8 @@ function checkWin(level: LevelSpec, state: LevelState): boolean {
     └──(win)──> WinAnimating ──(anim done)──> Completed
 ```
 
-- `WinAnimating` / `Completed` 期间：**冻结所有物品输入**（GDD 1.2）。
+- `WinAnimating` / `Completed` 期间：**冻结所有物品输入**（GDD 1.2）。实现上 `select` / `grab` / `rotate` / `removeToTray` / `undo` / **`reset`** 全部在入口处直接返回。
+  **`reset` 也必须冻结**（V1.1 实现时补上）：成功浮层盖住了工具栏，此时允许重置会把「已通关」抹掉，玩家会以为游戏丢了进度。最初的实现漏了这一条。
 - 撤回/重置在 `Idle`/`Selected` 可用；`Dragging` 期间禁用（避免状态撕裂）。
 
 ### 7.2 意图接口（view → core 的唯一入口）
@@ -522,8 +547,8 @@ function checkWin(level: LevelSpec, state: LevelState): boolean {
 ```ts
 export type Intent =
   | { type: 'select';    itemId: string | null }
-  | { type: 'grab';      itemId: string; pointer: Vec2Like }
-  | { type: 'move';      pointer: Vec2Like }
+  | { type: 'grab';      itemId: string; anchor: RC }   // 网格锚点，不是像素指针
+  | { type: 'move';      anchor: RC }
   | { type: 'drop' }                              // 以当前预览位置提交
   | { type: 'cancel' }                            // 回退到上次提交
   | { type: 'rotate';    itemId: string }         // 顺时针 90°
@@ -534,11 +559,17 @@ export type Intent =
 export interface SessionResult {
   readonly state: LevelState;
   readonly phase: GamePhase;
+  /** 拖动中的预览（网格锚点 + 合法性判定）；非拖动状态为 null */
+  readonly preview: DragPreview | null;
   readonly events: readonly GameEvent[];
 }
 ```
 
 `GameSession.dispatch(intent): SessionResult` —— **唯一的状态写入口**。view 层永远不直接改 `LevelState`。
+
+> **V1.1 修正（实现时发现的契约自相矛盾）：** 本节初稿把 `grab` / `move` 的载荷写成 `pointer: Vec2Like`（像素坐标），但 6.3 与 8.3 铁律 2 又规定「像素 ↔ 网格的转换**只在** `BoardView.localToGrid()` 里发生，其他文件不许出现 `cellSize` 的算术」。两条合在一起是矛盾的——core 拿到像素坐标却无权换算成网格，只能凭空捏一个 `cellSize` 出来。**已改为传网格锚点 `anchor: RC`：view 负责「指针 + 抓取偏移 → 锚点」，core 只认锚点。** 这样 8.3 铁律 2 才真正成立，`core` 也才能保持零引擎依赖。
+>
+> 相应的，拖动预览（锚点 + 合法性判定结果）是**会话状态**而不是渲染状态，通过 `SessionResult.preview` 暴露——view 不该自己再算一遍 `canPlace`，否则两处判定必然漂移。
 
 ### 7.3 撤回栈：用不可变快照，不用反向操作
 
@@ -599,6 +630,7 @@ export type GameEvent =
   | { type: 'placement-committed'; itemId: string; placement: Placement }
   | { type: 'placement-rejected'; itemId: string; reason: InvalidReason }
   | { type: 'item-rotated'; itemId: string; rotation: Rotation }
+  | { type: 'rotate-blocked'; itemId: string }      // 6.5 的第四条策略：旋转未提交
   | { type: 'item-returned'; itemId: string }
   | { type: 'undo-applied'; steps: number }
   | { type: 'level-reset' }
