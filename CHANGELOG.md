@@ -23,6 +23,29 @@
 
 ## 提交记录（倒序）
 
+### `9572052` · feat: M1-1 棋盘渲染（BoardView + GridCellView）+ 设计分辨率对齐规格
+
+| 项 | 内容 |
+| --- | --- |
+| 日期 | 2026-10-14 00:10 |
+| 完整 hash | `9572052`（见 `git log -1 --format=%H`） |
+| 类型 | 功能（M1-1：可玩内核第 2 步）+ 工程修正 |
+| 文件 | 11 个：`assets/view/{BoardView.ts,GridCellView.ts}(+.meta)`（新增）、`assets/view/GameController.ts`、`assets/core/config.ts`、`assets/scenes/{Boot,Home,Game}.scene`、`settings/v2/packages/project.json`、`tools/scene-build.mjs` |
+
+**要点：**
+
+- **`BoardView` = 全项目唯一的 RC↔像素转换点（R-A6 / ADR A-07）**：`gridToLocal(row,col)`（格左上角，物品锚点用）、`localToGrid(x,y)`（`floor` 命中测试）、`snapToGrid(x,y)`（`round` 拖拽吸附，TDD 6.3 口径）、`cellCenterLocal`（预览与物品节点对齐）。格边长 `= floor(min(可用宽/cols, 可用高/rows))`，按关卡动态算、不写死；棋盘带（顶部信息/底部托盘+工具栏之间）居中。
+- **`GridCellView`**：单格程序绘制（`Graphics`，TDD T5 的占位色块路线），四态 `normal / blocked / valid / invalid`——`valid/invalid` 由 M1-5 `PreviewLayer` 推给它，本组件**不做合法性判定**；障碍格除配色外画叉号（UI Spec 10.6：不依赖颜色单通道）。
+- **`core/config.ts` 增 UI 节**：设计画布 390×844、安全边距、三横带高度、格边长硬下限 `CELL_PX_MIN=44`（P-04）、美术基准 48、圆角与交替背景强度、Design Tokens 色板。core 只存数据，不认识 `cc.Size`/`cc.Color`。
+- **修正 M0 遗留的不一致（规则类口径变更）**：M0 场景沿用 taxi 模板的 **720×1280**，而 TDD 11.3 指定 **390×844 + Fit Width**（对齐 UI Spec 基准画布）。本次把设计分辨率写进 `settings/v2/packages/project.json` 的 `general.designResolution`，三个场景的 Canvas UITransform 一并重生成（Boot/Home 保持空 Canvas，仅 Game 加 `SafeAreaRoot → BoardRoot`）。
+- **`tools/scene-build.mjs`**：新增**组件引用**支持（`refTo('BoardRoot','BoardView')` → 序列化成 `{"__id__": N}`），使"场景里两个脚本组件互相引用"也能声明式表达。
+- **验收证据（`npm run check` 全绿 + `npm run preview:game` 无 Console 错误）**：
+  - 坐标往返自检 **9 格 × 4 项全部无偏移**（格角点→`localToGrid`、格中心→`localToGrid`、格角点→`snapToGrid`、与 core `toIndex`→`toRC` 交叉核对）——即 M1-1 验收的"与 `toRC`/`rcKey` 双向转换无偏移"。
+  - **P-04 体检表**（Fit Width 折算到 320px 屏，下限 44px）：L1 3×3=114(93.5px)、L2 4×3=114、L3/L4 5×4=85(69.7px)、L5/L6 5×5=68(55.8px)、L7/L8 5×6=57(46.8px)、**L9/L10 6×6=57(46.8px ✅)**。UI Spec 要求的六种尺寸全覆盖，10/10 关达标。
+  - 预览截图：3×3 棋盘正确渲染（正方形格、交替底色、圆角描边），60fps / 11 draw call。
+- **自检踩到的坑（记录以免重犯）**：第一版自检拿**格中心**去测 `snapToGrid`，必然偏到下一格（中心距相邻两格角点都是半格）——`round` 语义的对象是**物品包围盒左上角**，不是格中心。已修正断言。
+- **已知未覆盖**：`localToGrid`/`snapToGrid` 目前只有引擎内自检（view 不进 Vitest，A-05），没有真机触控输入验证；M1-4 接线后才有真实触摸流。
+
 ### `24bca8d` · feat: M1-0 会话引导（GameController）+ 无 GUI 预览工具链
 
 | 项 | 内容 |
