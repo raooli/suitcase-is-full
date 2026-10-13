@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""《行李箱装不下啦！》GDD V1.0 关卡数据离线验证器。
+"""《行李箱装不下啦！》GDD 关卡数据离线验证器（适配 schemaVersion 1.1）。
 用法：python 02-GDD-validator-v1.0.py [02-GDD-levels-v1.0.json]
 只依赖 Python 3 标准库。验证静态数据、标准解、旋转性质与是否可解。
 """
@@ -144,7 +144,7 @@ def verify_level(level):
 
 def main(path):
     data = json.loads(Path(path).read_text(encoding='utf-8'))
-    assert data['schemaVersion'] == '1.0'
+    assert data['schemaVersion'] == '1.1', 'schemaVersion 应为 1.1（V1.1 难度校准后的关卡数据）'
     levels = data['levels']
     assert len(levels) == 10, 'MVP 应有 10 关'
     assert [lv['levelId'] for lv in levels] == list(range(1,11))
@@ -154,6 +154,16 @@ def main(path):
               f'棋盘={lv["board"]["rows"]}x{lv["board"]["cols"]} '
               f'物品={count} 障碍={blocked} 余格={cells-used} 标准解=有效 可解=是')
     print('PASS: 10/10 关通过校验；第 3 关要求至少一次旋转。')
+    print()
+    print('难度代理指标（参考值，非玩家实测；big = 大件优先随机落位一次放完的成功率，N=1500）：')
+    for lv in levels:
+        b = lv['board']
+        tot = sum(len(it['cells']) for it in lv['items'])
+        free = b['rows'] * b['cols'] - len(b['blockedCells'])
+        v = lv['verification']
+        n = v['solutionsFound']
+        print(f'  L{lv["levelId"]:02d} 填充={tot}/{free} 留白={free - tot} '
+              f'解数={"≥" if v["solutionCountCapped"] else ""}{n}')
 
 
 if __name__ == '__main__':

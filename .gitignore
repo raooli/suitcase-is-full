@@ -1,0 +1,30 @@
+# macOS
+.DS_Store
+._*
+
+# Node
+node_modules/
+npm-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# 构建产物
+dist/
+temp/
+library/
+local/
+build/
+profiles/
+native/
+.cocos/
+
+# 工具输出（生产态关卡由 tools 生成，不入库）
+*.tsbuildinfo
+coverage/
+
+# 编辑器
+.vscode/
+.idea/
+
+# 临时验证脚本
+.workbuddy/tmp/

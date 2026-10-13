@@ -1,5 +1,5 @@
 {
-  "schemaVersion": "1.0",
+  "schemaVersion": "1.1",
   "gameId": "suitcase-packing",
   "levels": [
     {
@@ -273,14 +273,14 @@
       "levelId": 3,
       "title": "换个方向",
       "board": {
-        "rows": 4,
+        "rows": 5,
         "cols": 4,
         "blockedCells": []
       },
       "items": [
         {
           "id": "L03_A",
-          "itemType": "prop_03_A",
+          "itemType": "prop_scarf",
           "name": "长围巾",
           "spriteKey": "placeholder/03/A",
           "cells": [
@@ -303,13 +303,13 @@
         },
         {
           "id": "L03_B",
-          "itemType": "prop_03_B",
-          "name": "香水礼盒",
+          "itemType": "prop_jacket",
+          "name": "折叠外套",
           "spriteKey": "placeholder/03/B",
           "cells": [
             [
               0,
-              1
+              0
             ],
             [
               1,
@@ -320,8 +320,8 @@
               1
             ],
             [
-              2,
-              1
+              1,
+              2
             ]
           ],
           "rotatable": true,
@@ -330,8 +330,8 @@
         },
         {
           "id": "L03_C",
-          "itemType": "prop_03_C",
-          "name": "化妆袋",
+          "itemType": "prop_pouch",
+          "name": "收纳袋",
           "spriteKey": "placeholder/03/C",
           "cells": [
             [
@@ -344,11 +344,11 @@
             ],
             [
               1,
-              0
+              1
             ],
             [
-              2,
-              0
+              1,
+              2
             ]
           ],
           "rotatable": true,
@@ -357,29 +357,29 @@
         },
         {
           "id": "L03_D",
-          "itemType": "prop_03_D",
-          "name": "外套",
+          "itemType": "prop_umbrella",
+          "name": "长柄伞",
           "spriteKey": "placeholder/03/D",
           "cells": [
+            [
+              0,
+              0
+            ],
             [
               0,
               1
             ],
             [
-              1,
-              0
+              0,
+              2
             ],
             [
-              1,
-              1
+              0,
+              3
             ],
             [
-              2,
-              0
-            ],
-            [
-              2,
-              1
+              0,
+              4
             ]
           ],
           "rotatable": true,
@@ -390,43 +390,44 @@
       "solution": [
         {
           "itemId": "L03_A",
-          "row": 0,
-          "col": 0,
+          "row": 2,
+          "col": 1,
           "rotation": 0
         },
         {
           "itemId": "L03_B",
-          "row": 0,
-          "col": 2,
+          "row": 3,
+          "col": 1,
           "rotation": 0
         },
         {
           "itemId": "L03_C",
-          "row": 1,
-          "col": 0,
+          "row": 0,
+          "col": 1,
           "rotation": 0
         },
         {
           "itemId": "L03_D",
-          "row": 2,
-          "col": 1,
+          "row": 0,
+          "col": 0,
           "rotation": 1
         }
       ],
       "solutionGrid": [
-        "AAAB",
-        "CCBB",
-        "CDDB",
-        "CDDD"
+        "DCC.",
+        "D.CC",
+        "DAAA",
+        "DB..",
+        "DBBB"
       ],
       "verification": {
         "solvable": true,
-        "solutionsFound": 12,
+        "solutionsFound": 184,
         "solutionCountCapped": false,
         "solvableWithoutRotation": false,
         "occupiedCells": 16,
         "blockedCells": 0,
-        "emptyCells": 0
+        "emptyCells": 4
       }
     },
     {
@@ -722,16 +723,12 @@
               0
             ],
             [
-              0,
-              1
-            ],
-            [
-              0,
-              2
+              1,
+              0
             ],
             [
               1,
-              0
+              1
             ]
           ],
           "rotatable": true,
@@ -821,31 +818,31 @@
           "itemId": "L05_A",
           "row": 0,
           "col": 0,
-          "rotation": 2
+          "rotation": 0
         },
         {
           "itemId": "L05_B",
-          "row": 0,
-          "col": 2,
-          "rotation": 2
+          "row": 3,
+          "col": 0,
+          "rotation": 0
         },
         {
           "itemId": "L05_C",
-          "row": 1,
-          "col": 1,
-          "rotation": 3
+          "row": 0,
+          "col": 0,
+          "rotation": 0
         },
         {
           "itemId": "L05_D",
-          "row": 2,
-          "col": 2,
-          "rotation": 2
+          "row": 1,
+          "col": 3,
+          "rotation": 1
         },
         {
           "itemId": "L05_E",
-          "row": 3,
-          "col": 0,
-          "rotation": 3
+          "row": 0,
+          "col": 3,
+          "rotation": 1
         },
         {
           "itemId": "L05_F",
@@ -855,20 +852,20 @@
         }
       ],
       "solutionGrid": [
-        "AAABB",
-        "ACBBB",
-        "ACDDD",
-        "ECCDF",
-        "EEFFF"
+        "C.AEE",
+        "CCADE",
+        "AAADD",
+        "BBBDF",
+        "BBFFF"
       ],
       "verification": {
         "solvable": true,
-        "solutionsFound": 64,
+        "solutionsFound": 1488,
         "solutionCountCapped": false,
         "solvableWithoutRotation": false,
-        "occupiedCells": 25,
+        "occupiedCells": 24,
         "blockedCells": 0,
-        "emptyCells": 0
+        "emptyCells": 1
       }
     },
     {
@@ -1791,6 +1788,10 @@
             [
               0,
               1
+            ],
+            [
+              0,
+              2
             ]
           ],
           "rotatable": true,
@@ -1905,75 +1906,75 @@
       "solution": [
         {
           "itemId": "L09_A",
-          "row": 0,
-          "col": 0,
-          "rotation": 1
+          "row": 2,
+          "col": 3,
+          "rotation": 0
         },
         {
           "itemId": "L09_B",
           "row": 0,
-          "col": 4,
+          "col": 0,
           "rotation": 0
         },
         {
           "itemId": "L09_C",
           "row": 1,
-          "col": 1,
-          "rotation": 1
+          "col": 4,
+          "rotation": 0
         },
         {
           "itemId": "L09_D",
-          "row": 2,
-          "col": 2,
-          "rotation": 0
+          "row": 0,
+          "col": 4,
+          "rotation": 1
         },
         {
           "itemId": "L09_E",
           "row": 2,
-          "col": 5,
-          "rotation": 1
+          "col": 0,
+          "rotation": 0
         },
         {
           "itemId": "L09_F",
-          "row": 3,
+          "row": 4,
+          "col": 2,
+          "rotation": 1
+        },
+        {
+          "itemId": "L09_G",
+          "row": 4,
           "col": 0,
           "rotation": 2
         },
         {
-          "itemId": "L09_G",
-          "row": 3,
-          "col": 3,
-          "rotation": 3
-        },
-        {
           "itemId": "L09_H",
-          "row": 4,
-          "col": 1,
+          "row": 0,
+          "col": 2,
           "rotation": 0
         },
         {
           "itemId": "L09_I",
-          "row": 4,
-          "col": 3,
-          "rotation": 0
+          "row": 3,
+          "col": 0,
+          "rotation": 2
         }
       ],
       "solutionGrid": [
-        "AAA.BB",
-        "ACCCBB",
-        "ACDDDE",
-        "FFDGGE",
-        "FHHGI.",
-        "FHHIII"
+        "BBHHDD",
+        "BBHHCD",
+        "EEEACD",
+        "IIIACC",
+        "GIFAAA",
+        "GGFFF."
       ],
       "verification": {
         "solvable": true,
-        "solutionsFound": 1001,
-        "solutionCountCapped": true,
+        "solutionsFound": 293616,
+        "solutionCountCapped": false,
         "solvableWithoutRotation": true,
-        "occupiedCells": 34,
+        "occupiedCells": 35,
         "blockedCells": 0,
-        "emptyCells": 2
+        "emptyCells": 1
       }
     },
     {
@@ -1994,6 +1995,10 @@
           [
             4,
             4
+          ],
+          [
+            5,
+            5
           ]
         ]
       },
@@ -2145,14 +2150,10 @@
           "cells": [
             [
               0,
-              1
-            ],
-            [
-              1,
               0
             ],
             [
-              1,
+              0,
               1
             ]
           ],
@@ -2233,74 +2234,74 @@
       "solution": [
         {
           "itemId": "L10_A",
-          "row": 0,
-          "col": 0,
-          "rotation": 1
+          "row": 2,
+          "col": 3,
+          "rotation": 0
         },
         {
           "itemId": "L10_B",
           "row": 0,
-          "col": 4,
+          "col": 0,
           "rotation": 0
         },
         {
           "itemId": "L10_C",
-          "row": 1,
-          "col": 1,
-          "rotation": 2
+          "row": 4,
+          "col": 0,
+          "rotation": 0
         },
         {
           "itemId": "L10_D",
-          "row": 2,
-          "col": 0,
+          "row": 1,
+          "col": 4,
           "rotation": 3
         },
         {
           "itemId": "L10_E",
-          "row": 2,
-          "col": 4,
+          "row": 0,
+          "col": 2,
           "rotation": 0
         },
         {
           "itemId": "L10_F",
-          "row": 3,
+          "row": 0,
+          "col": 4,
+          "rotation": 0
+        },
+        {
+          "itemId": "L10_G",
+          "row": 2,
           "col": 1,
           "rotation": 1
         },
         {
-          "itemId": "L10_G",
-          "row": 3,
-          "col": 3,
-          "rotation": 1
-        },
-        {
           "itemId": "L10_H",
-          "row": 4,
-          "col": 5,
+          "row": 2,
+          "col": 0,
           "rotation": 0
         },
         {
           "itemId": "L10_I",
-          "row": 5,
-          "col": 0,
-          "rotation": 1
+          "row": 2,
+          "col": 5,
+          "rotation": 0
         }
       ],
       "solutionGrid": [
-        "AAAABB",
-        "ACCCBB",
-        "DD#CEE",
-        "DF#GEE",
-        "DFFG#H",
-        "IIIGGH"
+        "BBEEFF",
+        "BBEEDD",
+        "HG#ADI",
+        "HG#ADI",
+        "CGGA#I",
+        "CCCAA#"
       ],
       "verification": {
         "solvable": true,
-        "solutionsFound": 1001,
-        "solutionCountCapped": true,
-        "solvableWithoutRotation": false,
-        "occupiedCells": 33,
-        "blockedCells": 3,
+        "solutionsFound": 1464,
+        "solutionCountCapped": false,
+        "solvableWithoutRotation": true,
+        "occupiedCells": 32,
+        "blockedCells": 4,
         "emptyCells": 0
       }
     }
