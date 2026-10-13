@@ -24,15 +24,18 @@ import {
   UI_DESIGN_HEIGHT,
   UI_DESIGN_WIDTH,
   UI_HEADER_HEIGHT,
+  UI_LAYOUT_BANDS,
   UI_SAFE_MARGIN,
   UI_TOOLBAR_HEIGHT,
   UI_TRAY_HEIGHT,
+  bboxOf,
   rcKey,
   toIndex,
   toRC,
 } from '../core';
 import type { BoardSpec, RC } from '../core';
 import { GridCellView } from './GridCellView';
+import type { ShapeMetrics } from './ItemView';
 
 const { ccclass } = _decorator;
 
@@ -84,6 +87,11 @@ export class BoardView extends Component {
     }
 
     if (DEBUG) this.logDiagnostics(area);
+    // 不放在 DEBUG 里：短屏跌破 P-04 是**真机会发生**的问题（实施计划 M3-5），
+    // 预览时也必须看得见，静默掉就会一路带到提审才被发现。
+    if (this.cellPx < CELL_PX_MIN || BoardView.physicalCellPx(this.cellPx, 320) < CELL_PX_MIN) {
+      this.warnCompressionLadder(area);
+    }
   }
 
   /** 按格坐标取格子视觉态（M1-5 预览高亮用；找不到返回 null） */
@@ -142,6 +150,36 @@ export class BoardView extends Component {
     return this.cellPx;
   }
 
+  // ───────── 形状 → 像素出口（R-A6：格算术只出现在本文件） ─────────
+
+  /**
+   * 形状的像素指标：包围盒尺寸 + 逐格中心偏移（相对包围盒左上角，y 向下为负，
+   * 与 `gridToLocal` 的左上角口径配套）。
+   *
+   * 为什么要从本文件出而不是让 `ItemView` 自己算：一旦有两处各写一遍
+   * `row * cellPx`，取整或锚点口径不一致时的症状就是"看着对齐、落下差一格"。
+   * `ItemView` 只消费结果，自己不做任何格算术（R-A6 守卫的就是这个）。
+   *
+   * 尺寸按 TDD 17.4「占位图必须按最终规格的包围盒绘制」给——从一开始就和
+   * 真图同尺寸，M4-5 换 SpriteFrame 时布局不会跳。
+   */
+  shapeMetrics(cells: readonly RC[]): ShapeMetrics {
+    const box = bboxOf(cells);
+    return {
+      size: { width: box.width * this.cellPx, height: box.height * this.cellPx },
+      centers: cells.map(
+        ([row, col]) =>
+          new Vec3(
+            col * this.cellPx + this.cellPx / 2,
+            -(row * this.cellPx + this.cellPx / 2),
+            0,
+          ),
+      ),
+      rows: box.height,
+      cols: box.width,
+    };
+  }
+
   private boardWidth(): number {
     return (this.board?.cols ?? 0) * this.cellPx;
   }
@@ -152,7 +190,13 @@ export class BoardView extends Component {
 
   // ───────────────────────── 尺寸推算 ─────────────────────────
 
-  /** 棋盘可用区域：父节点（SafeAreaRoot）的实际尺寸，取不到时退回设计画布 */
+  /**
+   * 棋盘可用区域：父节点（SafeAreaRoot）的实际尺寸，取不到时退回设计画布。
+   *
+   * 三条横带目前**固定取 L0 基准档**；短屏（320×568 类）会因此把格边长压到
+   * P-04 下限之下——`warnCompressionLadder()` 会在那种情况下把各档推算值打出来，
+   * 真正的按档自适应留给 M3-5（见 `core/config.ts` 的 `UI_LAYOUT_BANDS`）。
+   */
   private availableArea(): BoardArea {
     const parentSize = this.node.parent?.getComponent(UITransform)?.contentSize;
     const width = parentSize?.width ?? UI_DESIGN_WIDTH;
@@ -212,6 +256,40 @@ export class BoardView extends Component {
     console.log(
       `[BoardView] P-04 体检（设计 ${UI_DESIGN_WIDTH}×${UI_DESIGN_HEIGHT}，可用 ${area.width}×${area.height}，` +
         `Fit Width 折算到 320px 屏，下限 ${CELL_PX_MIN}px）：${entries.join('  ')}`,
+    );
+  }
+
+  /**
+   * M3-5 检测点：格边长跌破 P-04 下限时，把**纵向压缩阶梯各档的推算值**一次打全。
+   *
+   * 触发口径取两个：设计单位下就已小于 `CELL_PX_MIN`（布局彻底不合理），
+   * 或 320px 屏折算后小于 `CELL_PX_MIN`（P-04 的真实验收口径，Fit Width 下更严）。
+   *
+   * 这里**只报告不做自适应**——短屏适配是 M3-5 的活，现在先确保问题在
+   * 第一次预览就能被看见，而不是等到真机/提审才暴露。
+   */
+  private warnCompressionLadder(area: BoardArea): void {
+    const board = this.board;
+    if (board === null) return;
+
+    // 从当前可用高反推屏幕可见高（设计单位）：可用高 = 可见高 − 三条横带
+    const visibleHeight = area.height + UI_HEADER_HEIGHT + UI_TRAY_HEIGHT + UI_TOOLBAR_HEIGHT;
+    const at320 = BoardView.physicalCellPx(this.cellPx, 320);
+    const steps = UI_LAYOUT_BANDS.map(({ name, band }) => {
+      const stepPx = BoardView.cellPxFor(board, {
+        width: UI_DESIGN_WIDTH - band.margin * 2,
+        height: visibleHeight - band.header - band.tray - band.toolbar,
+      });
+      const step320 = BoardView.physicalCellPx(stepPx, 320);
+      const ok = step320 >= band.cellMin && stepPx >= band.cellMin;
+      return `${name}：${stepPx}（320px 屏 ${step320.toFixed(1)}px${ok ? ' ✅' : ' ❌'}）`;
+    });
+
+    console.warn(
+      `[BoardView] ⚠️ P-04 告警：${board.rows}×${board.cols} 格边长=${this.cellPx}` +
+        `（320px 屏折算 ${at320.toFixed(1)}px，下限 ${CELL_PX_MIN}）` +
+        ` 可见高 ${visibleHeight}（设计 ${UI_DESIGN_HEIGHT}）——压缩阶梯推算：${steps.join(' ｜ ')}` +
+        ` ｜前三档只压非棋盘区域；启用 L4 前须真机复测点击命中率并单独记 ADR（M3-5）`,
     );
   }
 

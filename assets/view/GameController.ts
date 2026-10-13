@@ -9,12 +9,13 @@
  * 同一形状；Scene 根节点上不带组件，这是引擎示例的既有惯例）。
  */
 
-import { _decorator, Component, JsonAsset } from 'cc';
+import { _decorator, Component, JsonAsset, Node } from 'cc';
 import { DEBUG } from 'cc/env';
 
-import { GameSession, LevelDataError, parseLevelBundle } from '../core';
+import { GameSession, LevelDataError, parseLevelBundle, rotateBy, solve } from '../core';
 import type { BoardSpec, LevelSpec } from '../core';
 import { BoardView } from './BoardView';
+import { ItemView } from './ItemView';
 
 const { ccclass, property } = _decorator;
 
@@ -59,7 +60,49 @@ export class GameController extends Component {
       );
       console.log('[GameController] debugSnapshot() =', JSON.stringify(snapshot));
       BoardView.logSizingTable(this.bundleLevels());
+      // M1-2 的可视化脚手架：把物品按一个解摆上棋盘，好让两条视觉验收能真看到
+      this.debugLayoutSolved(level);
     }
+  }
+
+  /**
+   * **M1-2 临时脚手架**（M1-6 接线后删除，届时由 `state.placements` 驱动重绘）。
+   *
+   * 为什么现在就要画出物品：M1-2 的两条验收——「1 格物品看起来是 1 格」和
+   * 「相邻物品明度可区分」——都是**视觉验收**，不把物品真的摆进格子里，
+   * 就只能靠单测的数字猜。所以这里向求解器要一个解，直接摆上去看。
+   */
+  private debugLayoutSolved(level: LevelSpec): void {
+    const board = this.boardView;
+    if (board === null) return;
+
+    const result = solve(level);
+    if (result.outcome !== 'solved' || result.solution === null) {
+      console.warn(`[GameController] 求解器未给出解（${result.outcome}），跳过摆盘预览`);
+      return;
+    }
+
+    const specs = new Map(level.items.map((item) => [item.id, item]));
+    const placed: string[] = [];
+    for (const slot of result.solution) {
+      const item = specs.get(slot.itemId);
+      if (item === undefined) continue;
+
+      const cells = rotateBy(item.cells, slot.rotation);
+      const node = new Node(`Item_${item.id}`);
+      node.layer = board.node.layer;
+      // 挂在棋盘节点下：位置直接用 `BoardView` 的局部坐标，不做二次换算
+      board.node.addChild(node);
+      node.setPosition(board.gridToLocal(slot.row, slot.col));
+
+      const view = node.addComponent(ItemView);
+      view.init(item, board.getCellPx(), board.shapeMetrics(cells));
+      placed.push(view.describe());
+    }
+    console.log(
+      `[GameController] M1-2 摆盘预览（${placed.length}/${level.items.length} 件，节点 ${result.nodes}）：` +
+        placed.join(' ｜ '),
+    );
   }
 
   /**

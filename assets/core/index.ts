@@ -31,6 +31,23 @@ export type {
 export { LevelDataError, parseLevelBundle, parseLevelSpec, validateLevelSpec } from './model/level';
 export type { LevelBundle } from './model/level';
 
+// 色板与明度阶梯（纯函数，view 与单测共用）
+export {
+  contrastRatio,
+  itemFillHex,
+  relativeLuminance,
+  rgbOf,
+  shadeHex,
+  toHex,
+  toneBaseHex,
+  toneBaseIndexFor,
+  toneFactorFor,
+  toneLevelFor,
+  TONE_DEEP_CELLS,
+  TONE_MID_CELLS,
+} from './palette';
+export type { ToneLevel } from './palette';
+
 // 几何
 export {
   bboxOf,
