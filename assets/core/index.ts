@@ -1,0 +1,100 @@
+/**
+ * `assets/core` 的公开入口。
+ *
+ * 约定：**`view/` 与 `tools/` 只从本文件导入 core**。
+ * 这样 core 内部怎么拆文件都不会波及调用方，也便于静态检查"谁越界 import 了内部路径"。
+ *
+ * 本模块整体零 `cc` 依赖——这是本项目最值钱的工程属性，别丢。
+ */
+
+// 配置
+export * from './config';
+
+// 数据模型
+export type {
+  BoardSpec,
+  DragPreview,
+  GamePhase,
+  Intent,
+  InvalidReason,
+  ItemSpec,
+  LevelSpec,
+  LevelState,
+  PlaceCheck,
+  PlaceIntent,
+  Placement,
+  RC,
+  Rotation,
+  SaveDataV1,
+  Vec2Like,
+} from './model/types';
+export { LevelDataError, parseLevelSpec, validateLevelSpec } from './model/level';
+
+// 几何
+export {
+  bboxOf,
+  cellsToKey,
+  cloneCells,
+  hasDuplicates,
+  isConnected,
+  normalize,
+  rotateBy,
+  rotateCCW,
+  rotateCW,
+  rotationVariants,
+} from './geometry/shape';
+export type { BBox } from './geometry/shape';
+export { clampAnchor, inBounds, rcKey, toIndex, toRC } from './geometry/coords';
+
+// 规则
+export {
+  buildIndex,
+  OccupancyIndex,
+  OWNER_BLOCKED,
+  OWNER_EMPTY,
+  totalItemCellCount,
+  usableCellCount,
+} from './rules/board';
+export {
+  applyPlacement,
+  canPlace,
+  findItem,
+  insertByTrayOrder,
+  isPlacementLegal,
+  removeToTray,
+  rotateInPlace,
+  trayRotationOf,
+} from './rules/placement';
+export type { RotateResult } from './rules/placement';
+
+// 会话
+export { GameSession } from './session/GameSession';
+export type { GameSessionOptions } from './session/GameSession';
+export { History } from './session/History';
+export { eventName } from './session/events';
+export type { GameEvent, SessionResult } from './session/events';
+
+// 求解与快检
+export {
+  countSolutions,
+  requiresRotation,
+  solve,
+  validateSolution,
+} from './solver/packer';
+export type {
+  CountOptions,
+  CountResult,
+  SolutionPlacement,
+  SolutionValidation,
+  SolveOptions,
+  SolveOutcome,
+  SolveResult,
+} from './solver/packer';
+export {
+  areaIsNotObviouslyInsufficientForDebugOnly,
+  checkDeadend,
+  isDefinitelyStuck,
+  occupiedCellsOf,
+  progressOf,
+} from './solver/deadend';
+export type { DeadendReport } from './solver/deadend';
