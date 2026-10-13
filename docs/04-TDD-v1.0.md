@@ -251,7 +251,7 @@ suitcase-is-full/
 │   ├── data/
 │   │   └── levels.json             # 生产态关卡（由 tools 从 GDD JSON 剥离生成）
 │   ├── view/                       # ★ Cocos 渲染层，唯一允许 import 'cc' 的地方
-│   │   ├── GameScene.ts
+│   │   ├── GameController.ts
 │   │   ├── BoardView.ts            # 网格渲染 + 坐标转换（唯一转换点）
 │   │   ├── GridCellView.ts
 │   │   ├── ItemView.ts             # 单个物品的显示节点
@@ -674,7 +674,7 @@ export class History {
              ↓ Intent
           GameSession（core）
              ↓ SessionResult { state, phase, events }
-          GameScene 订阅 → 分发给 BoardView / TrayView / ItemView / AudioAdapter
+          GameController 订阅 → 分发给 BoardView / TrayView / ItemView / AudioAdapter
 ```
 
 ### 8.2 事件清单

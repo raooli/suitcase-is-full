@@ -20,7 +20,7 @@ const RULES: Record<string, string> = {
   'R-A1': "core/** 不得 import 'cc'（零引擎依赖）",
   'R-A3': 'view/ 与 tools/ 只从 core/index.ts 导入，不得深引 core 内部路径',
   'R-A4': 'platform/ 之外不得出现 wx API',
-  'R-A6': 'cellSize 算术只允许出现在 BoardView.ts 与 core/config.ts',
+  'R-A6': 'cellSize / cellPx 算术只允许出现在 BoardView.ts 与 core/config.ts',
   'R-A9': 'assets/ 下只允许运行时资源：sprites 必须在 assets/resources/ 内',
   'R-A10': 'assets/ 下禁止展开语法 [...x]（Cocos 构建的 loose 转译会把它降级成 [x]）；一律用 Array.from(x)',
 };
@@ -114,7 +114,7 @@ for (const dir of ['assets/core', 'assets/view']) {
     checkFile(f, [
       {
         id: 'R-A6',
-        re: /cellSize\s*[*\/+\-]|[*\/+\-]\s*cellSize/,
+        re: /cell(?:Size|Px)\s*[*\/+\-]|[*\/+\-]\s*cell(?:Size|Px)/,
         skip: (line) => line.trim().startsWith('*') || line.trim().startsWith('//'),
       },
     ]);
