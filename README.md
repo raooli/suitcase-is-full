@@ -10,8 +10,9 @@
 | 关卡数据（10 关，含标准解） | ✅ 已交付并通过可解性与难度校准 |
 | `assets/core/`（纯 TS 游戏逻辑） | ✅ 骨架已就绪，163 个单测全通过 |
 | **引擎版本锁定** | ✅ **Creator 3.8.8** 已装并锁定（`package.json` 的 `engineVersion`） |
+| **Cocos 工程落地（M0）** | ✅ 已合并：`.creator/`、`settings/`、`assets/scenes/` 三空场景、CLI 构建通过 |
 | **美术风格锚点与资源规格** | ⬜ **待办**，未完成前不批量出图，见 TDD 第 17 节 |
-| `assets/view/`（Cocos 渲染层） | ⬜ 待建（需先创建 Cocos 项目） |
+| `assets/view/`（Cocos 渲染层） | ⬜ 待建（M1，工程已就绪） |
 | 微信小游戏构建与真机适配 | ⬜ 待做 |
 
 **下一步：见 [`docs/05-实施计划-v1.0.md`](./docs/05-实施计划-v1.0.md)**（阶段划分 M0–M5、任务表、工作量级别、Go/No-Go 检查点、Cocos 与 VSCode 分工）。

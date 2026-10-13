@@ -2,14 +2,18 @@
   "name": "suitcase-is-full",
   "version": "0.1.0",
   "private": true,
-  "description": "《行李箱装不下啦！》微信休闲小游戏 —— 数据驱动、游戏逻辑与渲染层分离",
-  "type": "module",
+  "description": "\u300a\u884c\u674e\u7bb1\u88c5\u4e0d\u4e0b\u5566\uff01\u300b\u5fae\u4fe1\u4f11\u95f2\u5c0f\u6e38\u620f \u2014\u2014 \u6570\u636e\u9a71\u52a8\u3001\u6e38\u620f\u903b\u8f91\u4e0e\u6e32\u67d3\u5c42\u5206\u79bb",
+  "type": "2d",
+  "creator": {
+    "version": "3.8.8"
+  },
+  "uuid": "9375810b-358c-42fb-8e1e-b4761a666c75",
   "engineVersion": "3.8.8",
   "engineLockedAt": "2026-10-13",
   "scripts": {
     "test": "vitest run",
     "test:watch": "vitest",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc -p tsconfig.node.json --noEmit",
     "check:arch": "tsx tools/check-arch.ts",
     "check:art": "tsx tools/check-art.ts",
     "check:art:strict": "tsx tools/check-art.ts --strict",
