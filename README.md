@@ -9,10 +9,23 @@
 | PRD / GDD / UI Spec / TDD | ✅ V1.2 已完成，见 `docs/` |
 | 关卡数据（10 关，含标准解） | ✅ 已交付并通过可解性与难度校准 |
 | `assets/core/`（纯 TS 游戏逻辑） | ✅ 骨架已就绪，163 个单测全通过 |
-| **引擎版本锁定** | ✅ 版本号已定 **Creator 3.8.8**；⬜ 待装编辑器本体，见下 |
+| **引擎版本锁定** | ✅ **Creator 3.8.8** 已装并锁定（`package.json` 的 `engineVersion`） |
 | **美术风格锚点与资源规格** | ⬜ **待办**，未完成前不批量出图，见 TDD 第 17 节 |
 | `assets/view/`（Cocos 渲染层） | ⬜ 待建（需先创建 Cocos 项目） |
 | 微信小游戏构建与真机适配 | ⬜ 待做 |
+
+**下一步：见 [`docs/05-实施计划-v1.0.md`](./docs/05-实施计划-v1.0.md)**（阶段划分 M0–M5、任务表、工作量级别、Go/No-Go 检查点、Cocos 与 VSCode 分工）。
+
+## 文档导航
+
+| 文档 | 回答什么 |
+| --- | --- |
+| `docs/01-PRD-v1.0.md` | 做什么、验收标准 AC01–AC18 |
+| `docs/02-GDD-v1.0.md` + `02-GDD-levels-v1.0.json` | 玩法规则、10 关数据与标准解 |
+| `docs/03-UI-Spec.md` | 视觉与交互规格 |
+| `docs/04-TDD-v1.0.md` | **怎么做**：算法、接口、参数、微信适配 |
+| `docs/05-实施计划-v1.0.md` | **什么时候做**：阶段、排期、检查点 |
+| `docs/06-架构设计-v1.0.md` | **不能怎么改**：分层、依赖规则 7 条、目录格式、命名规范、ADR |
 
 ## 引擎版本锁定
 
@@ -21,12 +34,28 @@
 | 引擎 | Cocos Creator **3.8.8**（LTS 收尾线），2026-10-13 核验 |
 | 核验来源 | 官网下载页最新条目为 3.8.8；本机 Dashboard `~/.Cocos/profiles/products.json` → `latest_version: "3.8.8"` |
 | 安装包 | `https://download.cocos.com/CocosCreator/v3.8.8/CocosCreator-v3.8.8-mac-121518.zip` |
-| 安装状态 | ⬜ **本体未装**（本机仅有 Dashboard v2.2.2，`~/.Cocos/Creator/` 为空） |
-| 下载日期 | ⬜ 待填（装完回填） |
+| 安装状态 | ✅ **已装**：`/Applications/Cocos/Creator/3.8.8/CocosCreator.app`（`CFBundleShortVersionString = 3.8.8`） |
+| 下载日期 | 2026-10-13 |
 | 微信基础库 | 构建后手动改 `project.config.json` 的 `libVersion` 为 `widelyUsed` |
 | 升级策略 | 锁定后 MVP 周期内不升级；仅阻断性 bug 才升，且须重跑全部单测 + 真机回归 |
 
 > 选 3.8.x 而非 COCOS 4 的理由：COCOS 4 已于 2026-01 开源（MIT），但其**微信小游戏适配为「逐步发布」**，本项目唯一目标平台就是微信小游戏，不宜做首发验证者。详见 `docs/04-TDD-v1.0.md` 第 1.1 节。
+
+## 美术资产
+
+| 目录 | 内容 | 进包 |
+| --- | --- | --- |
+| `art/art-source/props/` | SVG 矢量源（可编辑，允许语义后缀） | ❌ |
+| `art/previews/props/` | PNG 评审图 | ❌ |
+| `assets/resources/sprites/props/` | **Cocos 实际用的透明 PNG，文件名严格 = itemType** | ✅ |
+
+| 命令 | 作用 |
+| --- | --- |
+| `npm run check:art` | 覆盖率 / 缺失 / 尺寸朝向不符（当前 0/63 合格） |
+| `npm run art:missing` | 导出缺失清单，可直接交美术 |
+| `npm run check:arch` | 架构守卫：7 条依赖规则静态检查 |
+
+状态与出图规格见 [`art/ASSET-STATUS.md`](./art/ASSET-STATUS.md)。
 
 ## 变更记录
 
