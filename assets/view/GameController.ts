@@ -13,7 +13,8 @@ import { _decorator, Component, JsonAsset } from 'cc';
 import { DEBUG } from 'cc/env';
 
 import { GameSession, LevelDataError, parseLevelBundle } from '../core';
-import type { LevelSpec } from '../core';
+import type { BoardSpec, LevelSpec } from '../core';
+import { BoardView } from './BoardView';
 
 const { ccclass, property } = _decorator;
 
@@ -32,6 +33,10 @@ export class GameController extends Component {
   @property
   levelId = 1;
 
+  /** 棋盘渲染器。装配成功后由本组件把棋盘规格推给它（M1-6 起改为事件驱动） */
+  @property(BoardView)
+  boardView: BoardView | null = null;
+
   private gameSession: GameSession | null = null;
 
   /** 会话句柄。装配失败（关卡数据有问题）时为 `null`，调用方必须判空 */
@@ -43,15 +48,29 @@ export class GameController extends Component {
     this.gameSession = this.createSession();
     if (this.gameSession === null) return;
 
+    const level = this.gameSession.level;
+    this.boardView?.renderBoard(level.board);
+
     if (DEBUG) {
       const snapshot = this.gameSession.debugSnapshot();
-      const level = this.gameSession.level;
       console.log(
         `[GameController] 会话就绪：L${level.levelId}《${level.title}》` +
           ` ${level.board.rows}×${level.board.cols} / ${level.items.length} 件物品`,
       );
       console.log('[GameController] debugSnapshot() =', JSON.stringify(snapshot));
+      BoardView.logSizingTable(this.bundleLevels());
     }
+  }
+
+  /**
+   * 关卡包里的全部关卡（**仅供 DEBUG 体检用**）。
+   *
+   * 这里只做一次结构读取：解析与校验的真相源始终是 core 的 `parseLevelBundle`，
+   * 本方法不承担任何校验职责，取不到就返回空数组。
+   */
+  private bundleLevels(): readonly { levelId: number; board: BoardSpec }[] {
+    const raw = this.levelJson?.json as { levels?: unknown } | undefined;
+    return Array.isArray(raw?.levels) ? (raw.levels as { levelId: number; board: BoardSpec }[]) : [];
   }
 
   /**

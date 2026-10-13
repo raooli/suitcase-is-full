@@ -143,9 +143,9 @@ const GLOBALS = { globals: hello[173], ambient: hello[174], shadows: hello[175],
 
 const clone = (o) => JSON.parse(JSON.stringify(o));
 
-/** 引擎内置组件：拿模板对象改 node / _id */
-function builtin(kind) {
-  return { kind, template: clone(T[kind]) };
+/** 引擎内置组件：拿模板对象改 node / _id；`size` 覆盖 UITransform 的初始尺寸 */
+function builtin(kind, size) {
+  return { kind, template: clone(T[kind]), size };
 }
 
 /** 自定义脚本组件 */
@@ -153,9 +153,17 @@ function script(className, props = {}) {
   return { script: className, props };
 }
 
+/** 组件引用（如 BoardView 属性指向同一场景里另一个脚本组件），构建末尾统一解析 */
+function refTo(nodeName, className) {
+  return { __ref__: `${nodeName}/${className}` };
+}
+
 // ───────────────────────── 场景装配 ─────────────────────────
 
-const DESIGN = { width: 720, height: 1280 };
+/** 设计分辨率 = UI Spec 基准画布 390×844（TDD 11.3 指定，Fit Width） */
+const DESIGN = { width: 390, height: 844 };
+/** 与 core/config.ts 的 UI 布局常量保持一致（这里只用来定初始尺寸，运行时由脚本改） */
+const LAYOUT = { safeMargin: 24, header: 120, tray: 160, toolbar: 96 };
 
 function buildScene(sceneName, rootNodes) {
   const objs = [];
@@ -182,12 +190,19 @@ function buildScene(sceneName, rootNodes) {
     _id: deterministicUuid(`scene:${sceneName}`),
   });
 
-  const pushComponent = (spec, nodeIndex, seed) => {
+  const scriptRegistry = new Map();
+  const pendingRefs = [];
+
+  const pushComponent = (spec, nodeIndex, seed, nodeName) => {
     let comp;
     if (spec.kind) {
       comp = clone(spec.template);
       if (spec.kind === 'uiTransform') {
-        comp._contentSize = { __type__: 'cc.Size', width: DESIGN.width, height: DESIGN.height };
+        comp._contentSize = {
+          __type__: 'cc.Size',
+          width: spec.size?.[0] ?? DESIGN.width,
+          height: spec.size?.[1] ?? DESIGN.height,
+        };
       }
       comp.node = { __id__: nodeIndex };
       comp._id = cocosId(`${seed}.${spec.kind}`);
@@ -202,6 +217,12 @@ function buildScene(sceneName, rootNodes) {
         ...spec.props,
         _id: cocosId(`${seed}.${spec.script}`),
       };
+      scriptRegistry.set(`${nodeName}/${spec.script}`, objs.length);
+      for (const [key, value] of Object.entries(spec.props ?? {})) {
+        if (value !== null && typeof value === 'object' && '__ref__' in value) {
+          pendingRefs.push({ comp, key, target: value.__ref__ });
+        }
+      }
     }
     objs.push(comp);
     return objs.length - 1;
@@ -229,7 +250,7 @@ function buildScene(sceneName, rootNodes) {
 
     const canvasIndexes = [];
     for (const comp of spec.components ?? []) {
-      const ci = pushComponent(comp, nodeIndex, `${seed}/${spec.name}`);
+      const ci = pushComponent(comp, nodeIndex, `${seed}/${spec.name}`, spec.name);
       objs[nodeIndex]._components.push({ __id__: ci });
       if (comp.kind === 'canvas') canvasIndexes.push(ci);
     }
@@ -251,6 +272,13 @@ function buildScene(sceneName, rootNodes) {
 
   for (const node of rootNodes) pushNode(node, 1, `scene:${sceneName}`);
 
+  // 解析组件引用（必须等整棵树都建完）
+  for (const { comp, key, target } of pendingRefs) {
+    const index = scriptRegistry.get(target);
+    if (index === undefined) throw new Error(`组件引用找不到目标：${target}`);
+    comp[key] = { __id__: index };
+  }
+
   // SceneGlobals 放最后，回填 _globals 引用
   const start = objs.length;
   objs.push(clone(GLOBALS.globals), clone(GLOBALS.ambient), clone(GLOBALS.shadows), clone(GLOBALS.skybox), clone(GLOBALS.fog));
@@ -269,13 +297,27 @@ function buildScene(sceneName, rootNodes) {
 
 // ───────────────────────── 场景规格 ─────────────────────────
 
+const BOARD_AREA = {
+  width: DESIGN.width - LAYOUT.safeMargin * 2,
+  height: DESIGN.height - LAYOUT.header - LAYOUT.tray - LAYOUT.toolbar,
+};
+
 const cameraNode = () => ({
   name: 'Camera',
   pos: [0, 0, 1000],
   components: [builtin('camera')],
 });
 
-const canvasNode = () => ({
+/** 内容根：UI Spec 9 节要求 Canvas → SafeAreaRoot → Header/Board/Tray/Toolbar/Overlay */
+const safeAreaRootNode = (children = []) => ({
+  name: 'SafeAreaRoot',
+  layer: LAYER.UI_2D,
+  components: [builtin('uiTransform'), builtin('widget')],
+  children,
+});
+
+/** Canvas 下的内容挂载点；不同场景给不同的子树（Boot/Home 目前还没有内容） */
+const canvasNode = (contentRoots = []) => ({
   name: 'Canvas',
   layer: LAYER.UI_2D,
   pos: [DESIGN.width / 2, DESIGN.height / 2, 0],
@@ -286,7 +328,15 @@ const canvasNode = () => ({
       pos: [0, 0, 1000],
       components: [builtin('uiCamera')],
     },
+    ...contentRoots,
   ],
+});
+
+const boardRootNode = () => ({
+  // M1-1：棋盘。初始尺寸只是编辑器里的占位，运行时由 BoardView 按关卡动态算
+  name: 'BoardRoot',
+  layer: LAYER.UI_2D,
+  components: [builtin('uiTransform', [BOARD_AREA.width, BOARD_AREA.height]), script('BoardView')],
 });
 
 const SCENES = {
@@ -302,7 +352,7 @@ const SCENES = {
     sceneName: 'Game',
     nodes: [
       cameraNode(),
-      canvasNode(),
+      canvasNode([safeAreaRootNode([boardRootNode()])]),
       {
         // M1-0：会话引导。与官方 taxi 模板的 GameRoot 同形状（Scene 根节点不带组件）
         name: 'GameRoot',
@@ -310,6 +360,7 @@ const SCENES = {
           script('GameController', {
             levelId: 1,
             levelJson: assetRef('assets/data/levels.json', 'cc.JsonAsset'),
+            boardView: refTo('BoardRoot', 'BoardView'),
           }),
         ],
       },
