@@ -23,6 +23,28 @@
 
 ## 提交记录（倒序）
 
+### `24bca8d` · feat: M1-0 会话引导（GameController）+ 无 GUI 预览工具链
+
+| 项 | 内容 |
+| --- | --- |
+| 日期 | 2026-10-13 23:54 |
+| 完整 hash | `24bca8d`（见 `git log -1 --format=%H`） |
+| 类型 | 功能（M1-0：可玩内核第 1 步）+ 工具链 + 修 bug |
+| 文件 | 13 个：`assets/view/GameController.ts(+.meta)`（新增）、`assets/scenes/Game.scene`、`assets/core/{index.ts,model/level.ts,rules/placement.ts,session/GameSession.ts}`、`test/model.spec.ts`、`tools/{check-arch.ts,preview-check.mjs,scene-build.mjs}`、`package.json`、`docs/06-架构设计-v1.0.md` |
+
+**要点：**
+
+- **M1-0 会话引导**：新增 `GameController`，挂在 `Game.scene` 的 **`GameRoot` 节点**上（不是 Scene 根节点——查遍官方模板，11/11 个脚本组件都挂在子节点上，Scene 根节点 0 个组件）。`onLoad` 里 `parseLevelBundle(levelJson.json, levelId)` → `new GameSession(level)`；`DEBUG` 构建下打印 `debugSnapshot()`。装配失败**不抛到引擎层**（降级 Console 报错，避免坏数据白屏），UI 提示留到 M2-4。
+- **关卡数据不内联**：直接以场景依赖引用 `assets/data/levels.json`（`cc.JsonAsset` 属性），而非实施计划 M1.B 写的「内联 JSON 副本」——副本会形成第二份真相源（A-04/R-A7）。实测该引用在构建产物中正确解析。
+- **修一个只有引擎才暴露的 bug（规则类变更，务必记住）**：Cocos 3.8.8 构建的转译是 loose 模式，`[...set]` 被降级为 `[].concat(set)` → `[set]`，而 Node/Vitest 里展开语法是规范的 → 症状是**单测全绿、引擎里数据校验莫名失败**。实测症状：`trayOrder 必须从 1 开始连续，实际为 [object Set]`（L1 直接加载失败）。修法：4 处展开改 `Array.from`（`level.ts` 的 Set、`GameSession.ts` 的 Map 迭代器与 items、`placement.ts` 的 tray）；新增 **R-A10** 机械拦截（`assets/**` 禁 `[...x]`）；本文档 §1.3/§5 同步。
+- **core 新增 `parseLevelBundle(raw, levelId)`**：「关卡包 → 单关」的取数与校验属逻辑，按执行纪律 #3 归 core（view 只负责递资产；M2-1 换成 `resources.load` 时这层不动）。`test/model.spec.ts` 补 5 条，含真实产物 `assets/data/levels.json` 的取数回归。
+- **工具链（本环境无 GUI 编辑器，把「预览」从手点变成可复现的一条命令）**：
+  - `tools/preview-check.mjs`：CDP 驱动本机 Chrome 无头加载构建产物（SwiftShader 软件 WebGL），捕获全量 Console + 页面异常 + 截图，**有 error 即 exit 1**；`--scene <Name>` 会先调 Cocos CLI 构建（自动把该场景设为 `startScene`）。本次那个 bug 就是它抓出来的。
+  - `tools/scene-build.mjs`：声明式场景作者（只写结构节点 + 脚本组件；动态内容留给代码创建）。脚本组件的 `__type__` = 资源压缩 UUID（算法用 taxi 模板 11/11 反验通过），节点 id 按「场景+路径」确定性派生 → 幂等可重跑、diff 只反映真实结构改动。
+  - `package.json` 新增 `preview` / `preview:game` / `scene:build`。
+- **验收证据**：`npm run check` 全绿（typecheck + check:arch + verify-levels + **168/168**）；`npm run preview:game` 绿——引擎 60fps 加载 `Game.scene`，`GameController.onLoad` 执行，Console 无 error，`debugSnapshot()` 打印 `{"phase":"Idle","tray":["L01_A","L01_B","L01_C","L01_D"],"placed":[],"undoDepth":0,"moves":0}`。
+- **遗留**：`Game.scene` 当前无任何可见节点（M1-0 只装配会话），预览截图为白屏 + 引擎统计浮层，属预期；`assets/view/` 的 `GameScene.ts`（架构文档 4.3）与实施计划写的 `GameController` 命名不一致，本次按实施计划 M1-0/M1.B 取 `GameController`。
+
 ### `7317041` · build: M0 工程落地 —— Cocos 3.8.8 工程合并 + 场景骨架
 
 | 项 | 内容 |
