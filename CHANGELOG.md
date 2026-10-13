@@ -23,6 +23,34 @@
 
 ## 提交记录（倒序）
 
+### `7317041` · build: M0 工程落地 —— Cocos 3.8.8 工程合并 + 场景骨架
+
+| 项 | 内容 |
+| --- | --- |
+| 日期 | 2026-10-13 22:56 |
+| 完整 hash | `7317041f094c43ea88cf67ae5f1a9606b6ad5db5` |
+| 类型 | 工程（M0：环境与工程落地，05-实施计划第 2 节方案 A） |
+| 文件 | 55 个：`.creator/default-meta.json`、`settings/v2/packages/*`（7 个）、`assets/scenes/{Boot,Home,Game}.scene(+.meta)`、40 个 `assets/**/*.meta`、`package.json`、`tsconfig.json`（新建）、`tsconfig.node.json`（原名迁）、`vitest.config.ts`、`README.md`、`.workbuddy/memory/2026-10-13.md` |
+
+**要点：**
+
+- **Cocos 工程合并（同目录，方案 A）**：仓库从普通目录变为 Cocos Creator 3.8.8 可识别工程。`.creator/` 与 `settings/` 以本机 3.8.8 官方模板 `templates/empty-2d` 为蓝本；`package.json` 增加 Cocos 字段（`creator.version=3.8.8`、`type="2d"`、`uuid=9375810b-…`），npm 侧 `version`/`devDependencies`/`scripts` 不变。
+- **`type` 字段冲突裁决**：npm 的 `"type":"module"` 与 Cocos 的工程类型字段同名，取 `"2d"`——仓库无 `.js` 文件，实测 tsx 在该设置下 `import.meta.url`（`tools/verify-levels.ts` 等 3 处使用）正常工作；编辑器 `openProject` 只读 `creator?.version || version`，不读 npm `version`。
+- **tsconfig 拆分**：原 `tsconfig.json` → `tsconfig.node.json`（`typecheck`/vitest 用，include 不变）；新建 Cocos 版 `tsconfig.json`（`extends ./temp/tsconfig.cocos.json`，由编辑器首次打开生成，`strict:true` 不降级）。`typecheck` 脚本改指 `tsconfig.node.json`。
+- **三个空 2D 场景**：`assets/scenes/{Boot,Home,Game}.scene`，结构 = Camera + Canvas(UITransform 720×1280 + Canvas + Widget 满屏) + UICamera + SceneGlobals（ambient/shadows/skybox/fog）。序列化格式以官方模板实证：节点/组件结构抄 `templates/taxi` 真实场景，SceneGlobals 取 `templates/hello-3d-world`（3.8.8 编辑器亲写，无 octree 字段）；**SkyboxInfo 的 `_envmap` 置 null**（模板原值引用其自有 HDR 贴图，照抄会产生悬空引用告警）。
+- **39 个 `.meta` 入库**：由 Cocos CLI 首次资源扫描生成并提交（资源 UUID，架构文档 2.2 节要求）。`.gitignore` 复核无需改动（`.creator/`、`settings/`、`*.meta` 均不被忽略；`temp/ library/ build/ profiles/` 已忽略）。
+- **README**：进度表补「Cocos 工程落地（M0）」行，修正 `assets/view/` 过时描述（「需先创建 Cocos 项目」→「M1，工程已就绪」）；引擎版本锁定栏（M0-2）经 PlistBuddy 核验 `CFBundleShortVersionString=3.8.8` 早已回填完整，未改动。
+
+**验证证据：**
+
+- Cocos CLI 构建 `platform=web-mobile` **成功**：编辑器完整初始化 → 全量资源导入（0 缺失告警）→ 打包完成；`launchScene=db://assets/scenes/Boot.scene`，3 个场景 JSON 全部进入 `build/web-mobile/assets/main/import/`。
+- `npm run check` **全绿**：typecheck（tsconfig.node.json）+ check:arch + verify:levels + **163/163** 单测。
+- M0-4 架构守卫复核：正向 `npm run check:arch` 通过；负向探针（`from 'cc'` / 深引 `../core/rules/board` / `wx.setStorageSync` / `3 * cellSize`）4 条规则全部拦截后已删除。
+
+> ⚠️ **遗留未验证项**：「空场景能出画面」仅验证到构建产物层级（导入 0 告警 + 场景入包 + 启动场景正确），**未经 Cocos 编辑器 GUI 预览/真机渲染确认**。建议用户首次打开工程时点一次预览确认（场景结构抄自官方实证模板，风险低）。另：编辑器进程退出码恒为 36（关闭期 worker 收到 SIGTERM），非构建失败，属本机 CLI 环境的固有行为。
+
+---
+
 ### `ab589c1` · docs: UI设计文件更新
 
 | 项 | 内容 |
