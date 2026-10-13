@@ -6,11 +6,31 @@
 
 | 阶段 | 状态 |
 | --- | --- |
-| PRD / GDD / UI Spec / TDD | ✅ 已完成，见 `docs/` |
+| PRD / GDD / UI Spec / TDD | ✅ V1.2 已完成，见 `docs/` |
 | 关卡数据（10 关，含标准解） | ✅ 已交付并通过可解性与难度校准 |
-| `assets/core/`（纯 TS 游戏逻辑） | ✅ 骨架已就绪，有单测覆盖 |
+| `assets/core/`（纯 TS 游戏逻辑） | ✅ 骨架已就绪，163 个单测全通过 |
+| **引擎版本锁定** | ✅ 版本号已定 **Creator 3.8.8**；⬜ 待装编辑器本体，见下 |
+| **美术风格锚点与资源规格** | ⬜ **待办**，未完成前不批量出图，见 TDD 第 17 节 |
 | `assets/view/`（Cocos 渲染层） | ⬜ 待建（需先创建 Cocos 项目） |
 | 微信小游戏构建与真机适配 | ⬜ 待做 |
+
+## 引擎版本锁定
+
+| 项 | 值 |
+| --- | --- |
+| 引擎 | Cocos Creator **3.8.8**（LTS 收尾线），2026-10-13 核验 |
+| 核验来源 | 官网下载页最新条目为 3.8.8；本机 Dashboard `~/.Cocos/profiles/products.json` → `latest_version: "3.8.8"` |
+| 安装包 | `https://download.cocos.com/CocosCreator/v3.8.8/CocosCreator-v3.8.8-mac-121518.zip` |
+| 安装状态 | ⬜ **本体未装**（本机仅有 Dashboard v2.2.2，`~/.Cocos/Creator/` 为空） |
+| 下载日期 | ⬜ 待填（装完回填） |
+| 微信基础库 | 构建后手动改 `project.config.json` 的 `libVersion` 为 `widelyUsed` |
+| 升级策略 | 锁定后 MVP 周期内不升级；仅阻断性 bug 才升，且须重跑全部单测 + 真机回归 |
+
+> 选 3.8.x 而非 COCOS 4 的理由：COCOS 4 已于 2026-01 开源（MIT），但其**微信小游戏适配为「逐步发布」**，本项目唯一目标平台就是微信小游戏，不宜做首发验证者。详见 `docs/04-TDD-v1.0.md` 第 1.1 节。
+
+## 变更记录
+
+每次 commit 更新了哪些代码与文件内容，见 [`CHANGELOG.md`](./CHANGELOG.md)。**每次提交后必须追加一条**，格式见该文件顶部。
 
 ## 目录结构
 

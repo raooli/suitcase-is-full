@@ -4,6 +4,8 @@
   "private": true,
   "description": "《行李箱装不下啦！》微信休闲小游戏 —— 数据驱动、游戏逻辑与渲染层分离",
   "type": "module",
+  "engineVersion": "3.8.8",
+  "engineLockedAt": "2026-10-13",
   "scripts": {
     "test": "vitest run",
     "test:watch": "vitest",
