@@ -70,8 +70,8 @@
 
 | 基准物品 | Figma 节点 | 校准重点 |
 |---|---|---|
-| `prop_01_A` 手机（2 格横条） | [打开基准图](https://www.figma.com/design/Wh2Cg8yFw7ph1yUxy1COe4?node-id=15-2) | 小尺寸轮廓、圆角、最小细节密度 |
-| `prop_03_D` 长柄伞（1×5） | [打开基准图](https://www.figma.com/design/Wh2Cg8yFw7ph1yUxy1COe4?node-id=15-23) | 细长轮廓、跨格可读性、装饰性出血 |
+| `prop_01_A` 手机（1×2 横条） | [打开基准图](https://www.figma.com/design/Wh2Cg8yFw7ph1yUxy1COe4?node-id=15-2) | 小尺寸轮廓、圆角、最小细节密度。**注意：数据是横向 1×2 且不可旋转，必须横着画** |
+| `prop_umbrella` 长柄伞（1×5 横条） | [打开基准图](https://www.figma.com/design/Wh2Cg8yFw7ph1yUxy1COe4?node-id=15-23) | 细长轮廓、跨格可读性、装饰性出血。**V1.3 修正：原写 `prop_03_D`，该 itemType 不存在；同款竖向件为 `prop_07_A`（5×1），两件都要出图** |
 
 **绘制约束：**
 
@@ -86,13 +86,15 @@
 
 | 交付物 | 规格 | 仓库路径 |
 |---|---|---|
-| 可编辑源稿 | SVG，图层和路径可继续编辑 | `assets/art-source/props/<itemType>.svg` |
-| 游戏贴图 | PNG-24 透明底，@2x；单格 96×96px，画布为包围盒列/行数 × 96px | `assets/sprites/props/<itemType>.png` |
-| 风格参考图 | 含背景、网格与说明，仅供 AI/人工评审，不进入游戏 | `assets/previews/props/<itemType>_reference.png` |
+| 可编辑源稿 | SVG，图层和路径可继续编辑 | `art/art-source/props/<itemType>_<语义>.svg`（不进包） |
+| 游戏贴图 | PNG-24 透明底，@2x；单格 96×96px，画布为包围盒列/行数 × 96px | `assets/resources/sprites/props/<itemType>.png` |
+| 风格参考图 | 含背景、网格与说明，仅供 AI/人工评审，不进入游戏 | `art/previews/props/<itemType>_reference.png` |
 
-运行时资源键仍使用 `items/<itemType>` 并与 GDD `spriteKey` 严格对齐。禁止纯白底假透明、白边、裁切主体或用参考画板 PNG 充当游戏贴图。
+运行时资源键使用 `itemType`（`spriteKey` 与 `itemType` 63/63 不同，已降级为历史字段，见架构文档 ADR A-11）。禁止纯白底假透明、白边、裁切主体或用参考画板 PNG 充当游戏贴图。
 
-**批量生产与验收：** 先用上述两张基准图校准，单件通过后再继续下一件，不一次性盲目放量。每件须通过：① 缩到 25% 仍能读出占格数；② 与相邻物品有清晰明度差；③ 主体不越出逻辑包围盒；④ 旋转 90° 后风格与光照仍一致；⑤ 透明底、无白边、尺寸和命名正确。AI 生成结果必须经过人工精修与商业使用合规确认后才能作为最终素材。
+**批量生产与验收：** 先用上述两张基准图校准，单件通过后再继续下一件，不一次性盲目放量。每件须通过：① 缩到 25% 仍能读出占格数；② 与相邻物品有清晰明度差；③ 主体不越出逻辑包围盒；④ 旋转 90° 后风格与光照仍一致；⑤ 透明底、无白边、尺寸和命名正确。尺寸与朝向由 `npm run check:art` 自动校验（不肉眼量）。AI 生成结果必须经过人工精修与商业使用合规确认后才能作为最终素材。
+
+**逐件出图提示词（Style Block / Object Block / Spec Block / Output Block + 63 件清单 + 批次计划）见 [`docs/07-AI-Prompts.md`](./07-AI-Prompts.md) 第 5 节。**
 
 ## 5. 界面详细规范
 
