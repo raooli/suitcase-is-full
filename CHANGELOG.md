@@ -23,6 +23,30 @@
 
 ## 提交记录（倒序）
 
+### `0f4d69d` · feat: M1-2 物品占位色块（ItemView）+ 明度阶梯（core/palette）+ P-04 压缩阶梯告警
+
+| 项 | 内容 |
+| --- | --- |
+| 日期 | 2026-10-14 00:55 |
+| 完整 hash | `0f4d69d`（见 `git log -1 --format=%H`） |
+| 类型 | 功能（M1-2：可玩内核第 3 步）+ 检测点补齐 |
+| 文件 | 10 个：`assets/core/palette.ts(+.meta)`、`assets/view/ItemView.ts(+.meta)`、`test/palette.spec.ts`（新增）；`assets/core/{config.ts,index.ts}`、`assets/view/{BoardView.ts,GameController.ts}`、`docs/06-架构设计-v1.0.md` |
+
+**要点：**
+
+- **`core/palette.ts`（新增，纯函数、零 cc）**：占位取色 + 明度阶梯。基色按 `trayOrder` 轮换 `mint → blue → rose`（**直接取 UI Spec 令牌色，不另造色**），明度按**占格数**分档（2 格亮 / 3 格中 / 4+ 格深，实施计划 M1.B；倍率 `UI_TONE_FACTOR` 只等比压暗 RGB，**不动色相**——色号是已确认的设计令牌）。附 WCAG `relativeLuminance` / `contrastRatio`，使 TDD 17.6 A-02「相邻物品明度差 ≥ 1 阶梯」**可被算出来**而非靠肉眼。
+- **`view/ItemView.ts`（新增）**：单物品节点。按 TDD 17.4 以**包围盒尺寸**逐格画圆角色块（换真图时布局不跳）、每格内缩 6% 让多格物品**数得出格数**（A-01 缩略图测试）、2px `color.brown` 描边（TDD 17.4 口径）、锚点固定**左上角**与 `gridToLocal` 同口径。`setSpriteFrame()` 是 M4-5 换图**接口桩**：签名定死、方法体后换，调用方不动。
+- **`BoardView.shapeMetrics(cells)`（新增出口）**：给出包围盒像素尺寸 + 逐格中心偏移。`ItemView` 由此拿到**全部像素**，自己一行 `row * cellPx` 都不写——R-A6 唯一转换点因此没被 M1-2 打开第二个口子（这正是架构文档 §0 点名要防的"在 ItemView 里自己算"）。
+- **P-04 压缩阶梯告警（M3-5 检测点，按评审建议补）**：`renderBoard` 时若格边长跌破下限（设计口径或 320px 屏折算口径任一命中），报出 `UI_LAYOUT_BANDS` 各档推算值：`① tray 160→128 → ② toolbar 96→72 / header 120→96 → ③ margin 24→16 → ④ 下限 44→40（须真机复测 + 单独 ADR）`。**只报告、不自适应**，短屏适配留给 M3-5。刻意放在 `DEBUG` 之外——短屏破限是**真机会发生**的问题，静默掉会一路带到提审。
+- **`GameController` 增 M1-2 可视化脚手架**：`DEBUG` 下调 `solve(level)` 取一个解，把物品摆上棋盘（`gridToLocal` 定位 + `ItemView` 上色）。M1-2 的两条验收是**视觉验收**，不摆上去就只能靠数字猜；**M1-6 接线后删除**（届时由 `state.placements` 驱动）。
+- **文档同步**：`docs/06` 的 R-A6 口径补上 `cellPx` 与 `shapeMetrics`（守卫正则已扩为 `cell(?:Size|Px)`，配套写明正/反向用例）、目录树加 `core/palette.ts`、§4.3 职责表把 `ItemView` 的"占位外观 + 不做坐标转换/不加载资源"与 `BoardView` 的"形状像素出口"写实。
+- **验收证据（`npm run check` 177/177 全绿 + `npm run preview:game` 无 Console 错误）**：
+  - 摆盘预览日志：`L01_D 1×3格=342×114px @114px #A5CEBB ｜ L01_B 2×1格=114×228px ｜ L01_A 1×2格=228×114px #BCEAD5 ｜ L01_C 1×2格=228×114px #FFE0E7`——格数、像素、色值三者自洽。
+  - **像素探针核对落位**：截图水平扫描线上三行色块中心 = 149.5 / 359.5 / 569.5，格中心 = 150 / 360 / 570，**逐格吻合**（这是"1 格物品看起来是 1 格"的机械证据，不靠目测）。
+  - **负向验证告警分支**：临时把 `CELL_PX_MIN` 抬到 500 后告警如期出现（各档推算 114/114/114/119/119 单调递增），验证完已回退到 44。
+- **已知取舍（留给美术评审裁决）**：三基色里 `mint` 与 `blue` 的**相对亮度几乎相同**（0.743 / 0.730），所以"同档但不同基色"的相邻物品主要靠**色相 + 2px 描边**区分，而非明度差。若要严格满足 A-02 的字面口径，需给三基色加**明度偏置**（会让 `#FFE0E7` 派生色偏离令牌观感）——这属于改观感，按红线必须过美术确认，故本轮**不动**。
+- **已知未覆盖**：`ItemView` 与 `shapeMetrics` 不进 Vitest（view 层无引擎跑不了，A-05），正确性由预览的摆盘日志 + 像素探针守；`setSpriteFrame()` 桩目前无调用方，真图路径 M4-5 才验。
+
 ### `9572052` · feat: M1-1 棋盘渲染（BoardView + GridCellView）+ 设计分辨率对齐规格
 
 | 项 | 内容 |
