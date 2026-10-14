@@ -23,6 +23,30 @@
 
 ## 提交记录（倒序）
 
+### `bff0abe` · feat: M1-4 拖拽手势 → 意图流（DragController）+ 抓取偏移纯函数
+
+| 项 | 内容 |
+| --- | --- |
+| 日期 | 2026-10-14 11:02 |
+| 完整 hash | `bff0abe`（见 `git log -1 --format=%H`） |
+| 类型 | 功能（M1-4：可玩内核第 5 步 · 拖拽放置）+ 手势仲裁归位 |
+| 文件 | 14 个：新增 `assets/core/geometry/drag.ts(+.meta)`、`assets/view/DragController.ts(+.meta)`、`test/drag.spec.ts`；改 `assets/core/{config.ts,index.ts,rules/placement.ts}`、`assets/view/{TraySlot.ts,TrayView.ts,GameController.ts}`、`assets/scenes/Game.scene`、`tools/{preview-check.mjs,scene-build.mjs}` |
+
+**要点：**
+
+- **`core/geometry/drag.ts`（新增，纯函数、零 cc，14 条单测）**：`grabOffsetForBoardCell` / `anchorForPointerCell`（互逆）/ `grabOffsetFromRatio`（托盘按 `u,v` 比例取格，含 `Number.isFinite` 守卫与边界 clamp，退化输入不产 NaN）/ `sameRC`（move 节流）。**grabOffset 语义 = 手指格 − 物品锚点，move 全程保持**，等价于「被手指压住的那一格始终跟着手指」——这是验收 T1/T2 的本质，写成"物品中心对准手指"会让抓边角的物品整体跳半格。文件只做格索引整数算术，像素换算不在这里（R-A6）。
+- **`core/rules/placement.ts` 新增 `itemAtCell`**：查「这一格属于哪件已放置物品」并返回其锚点。占用关系一律走 `buildIndex`，**不另建索引**——另建一份就是第二个真相源，撤销/取出后会分叉。
+- **`view/DragController.ts`（新增）**：touch 生命周期 → `grab → move* → drop|cancel|removeToTray` 的 Intent 流，只打到 `onIntent`（**M1-4 阶段是 Console 挂具**，M1-6 接线时把 `GameController` 里那一行换成 `session.dispatch` 即可，其余不动）。move 按 `sameRC` 节流到**逐格变化**才发；松手落在托盘带内 → 原本在盘上的发 `removeToTray`、原本就在托盘的发 `cancel`，否则 `drop`。不读 `LevelState`、不做合法性判定——「能不能放」是 core 的事。
+- **触摸监听整体上移到覆盖整屏的 `SafeAreaRoot`（`gestureRoot`），`TraySlot`/`TrayView` 都不再注册监听**（关键修复）：Cocos 由**按下时命中的最深节点**认领整次触摸，松手点不在该节点内时派发的是 **TOUCH_CANCEL 而非 TOUCH_END**（`NodeEventProcessor._handleTouchEnd`）。槽位只有 76×76，从托盘拖到棋盘松手必然在它外面 → 拖拽永远收不到「松手」（实测：浏览器侧是干净的 `touchend`，是引擎侧转换的）。改挂整屏节点后实测收到 `TOUCH_END` 且 `drop` 正常。`onTouchCancel` 保留但**不猜落点**——猜出来的落点会让"放不下"变成"放错位置"，比取消更难查。
+- **点 vs 拖的仲裁收在一处**：位移未过 `UI_DRAG_THRESHOLD_PX = 8`（设计单位，≈320px 屏 6.6 物理像素）一律不算拖拽、一个意图都不发，松手时改走新增的 `onTap` 出口（`itemId === null` = 点托盘空白 → 取消选中）。理由：点选与起拖共用同一次 touchstart，仲裁若拆到两个组件各判一次，拖完松手必然顺带选中一下。相应地 `TrayView.onSelect`/`isDragGesture`、`TraySlot.onSelect`/`letBubble` 全部移除（M1-3 那套"槽位监听 + 反向查询"的写法让位）。`onTap` 只认托盘带内的点击，点棋盘不会顺手取消选中。
+- **`tools/scene-build.mjs`**：新增 `nodeRef()` + 节点注册表，支持组件属性引用**节点**（`gestureRoot` → `SafeAreaRoot`），此前只能引用组件。
+- **`tools/preview-check.mjs`**：新增 `--drag x1,y1,x2,y2`（按下 → 8 段**插值** move → 松手；跳变式输入验不出节流与跟手）；navigate 后注入 `touch-action:none`（否则浏览器接管 pan 手势会派发 `touchcancel`）。坐标口径：`--tap`/`--drag` 收的是 **CSS 页面坐标**，与引擎 `getUILocation()`（= 世界坐标，y 轴自下而上）相差 844 的翻转，与设计坐标（原点在画布中心）相差 (195, 422)。
+- **验收证据（`npm run check` 199/199 全绿 + `npm run preview:game` 无 Console 错误）**：
+  - **T1/T2 机械确认**：同一落点（棋盘中心，手指格均为 (2,2)）下，抓物品**左半** `grabOffset=(0,0)` → 末锚点 `[2,2]`；抓**右半** `grabOffset=(0,1)` → 末锚点 `[2,1]`。两者差值恰为 grabOffset 差值 `(0,1)`，即「被手指压住的那一格始终跟着手指」。
+  - 四种手势：点槽位 → `select(L01_A) → phase=Selected`；点托盘空白 → `select(null) → phase=Idle`；**4px 微动仍判点击**（无 grab/move 意图）；真拖 → `grab → move×4 → drop` 且不再发点击。
+  - 坐标自洽核对：末次锚点 `[2,1]` 看起来"偏了"，实为 `snapToGrid` 是 **round** 语义（TDD 6.3），棋盘正中心 `(0,0)` 四舍五入进位到格 (2,2)，减 offset 后正是 `[2,1]`——不是 bug，此前按 floor 口算才对不上。
+- **已知未覆盖**：`DragController` 本体不进 Vitest（view 层无引擎跑不了，A-05），正确性由 `core/geometry/drag.ts` 单测 + 预览意图序列守；拖起时的**视觉跟手**（物品跟着手指动）要等 M1-5 `PreviewLayer` 才有画面可验。
+
 ### `89d0371` · feat: M1-3 托盘列表（TrayView + TraySlot）+ 缩略图居中纯函数 + 预览夹具手势/视口改造
 
 | 项 | 内容 |

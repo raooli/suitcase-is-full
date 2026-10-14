@@ -24,6 +24,17 @@
 - **Chrome 必须 `--no-sandbox --no-zygote`**：本环境外层（WorkBuddy）沙箱会拦截 Chrome 启动期系统调用，使其 **SIGTRAP 崩溃**、调试端口起了即死、`Runtime.enable` 超时（实测）。关掉 Chrome 内部沙箱后正常。注意 `dangerouslyDisableSandbox` 在本环境被拒、且一次性 escalation 过期后也会失效，**别依赖它兜预览**；`--no-sandbox` 才是稳的。`HOME` 重定向对 RLZ 拦截无效（macOS Chrome 硬编码真实 Application Support）。
 - **像素级核对**（比目测可靠）：写个纯 stdlib PNG 解码 + 扫描线找色块中心，比对格中心（例：色块中心 149.5/359.5/569.5 ↔ 格中心 150/360/570）。
 - **负向验证**：改阈值（如 `CELL_PX_MIN`）故意触发告警分支，确认它真的会报，然后回退。
+- **手势取证**：`--drag x1,y1,x2,y2`（按下 → 8 段**插值** move → 松手；跳变式输入验不出节流与跟手）。
+- **三套坐标别混**：`--tap/--drag` 收 **CSS 页面坐标**；引擎 `event.getUILocation()` = **世界坐标**（y 自下而上，`uiY = 844 − pageY`）；**设计坐标**原点在画布中心（`= world − (195,422)`）。`getLocation()` 是设备像素（dsf=2 时 2×），别拿它对设计值。
+- **取真实退出码**：用 `cmd > log 2>&1; echo $?`。`cmd | tail` 拿到的是 tail 的码。后台任务状态可能因沙箱拦截 Cocos 编辑器临时文件清理而显示 failed，但脚本自身 EXIT=0——以日志里的「✅ 预览无 Console 错误」+ 退出码为准。
+
+## Cocos 3.8.8 触摸事件的三条实测事实
+
+1. **全局 `input.on(Input.EventType.TOUCH_START)` 在 web-mobile 构建里收不到事件**（onEnable 正常、枚举值正确、refs 都 ok，回调一次都没进）。一律用**节点级** `node.on(Node.EventType.TOUCH_*)`。
+2. **整个触摸由「按下时命中的最深节点」认领**；松手点不在该节点内时，引擎把事件类型改成 **TOUCH_CANCEL 而非 TOUCH_END**（`NodeEventProcessor._handleTouchEnd`）。所以**手势监听必须挂在覆盖整屏的节点**（本项目是 `SafeAreaRoot`），子节点（槽位、托盘、棋盘）一概不挂——否则跨区域拖拽永远收不到"松手"。浏览器侧其实是干净的 `touchend`，是引擎侧转换的。
+3. **必须 `touch-action: none`**（预览夹具注入；真机/发布模板也要有），否则浏览器接管 pan 手势会派发 `touchcancel`。
+
+推论：**点 vs 拖的仲裁只能有一处**。点选与起拖共用同一次 touchstart，拆到两个组件各判一次必然"拖完松手顺带选中一下"。本项目由 `DragController` 独占（`UI_DRAG_THRESHOLD_PX` 阈值 + `onTap` 出口）。
 
 ## 已确认、不得擅自改的规格
 
