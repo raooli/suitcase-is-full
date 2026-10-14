@@ -245,3 +245,13 @@ export const UI_OVERLAY_PANEL_RADIUS = 24;
 /** 「再来一次」按钮尺寸（UI Spec 4 节交互热区下限 44 之上留余量） */
 export const UI_OVERLAY_BUTTON_WIDTH = 200;
 export const UI_OVERLAY_BUTTON_HEIGHT = 48;
+
+/**
+ * 负反馈抖动（「放不下」「转不动」共用）：横向位移幅度与总时长。
+ *
+ * 时长取 UI Spec P-05 回弹区间的中段（160ms）——短到不打断操作节奏，
+ * 长到看得清。改这两个值要复核 `SuccessOverlay` 的 `SETTLE_MS` 之类
+ * 依赖动画时长的门控。
+ */
+export const UI_SHAKE_OFFSET_PX = 8;
+export const UI_SHAKE_DURATION_MS = 160;

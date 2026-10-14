@@ -30,15 +30,22 @@
  * - **不持有玩法状态副本**：只读 dispatch 返回的 `state`。
  */
 
-import { Component, Node, _decorator } from 'cc';
+import { Component, Node, Tween, Vec3, _decorator } from 'cc';
 import { DEBUG } from 'cc/env';
 
 import { findItem, rotateBy } from '../core';
 import type { ItemSpec, LevelSpec, LevelState, Placement } from '../core';
 import { BoardView } from './BoardView';
 import { ItemView } from './ItemView';
+import { shakeX } from './shake';
 
 const { ccclass, property } = _decorator;
+
+/** 渲染出来的一个物品：节点 + 它的**基准位**（抖完要回到这里，见 `shake.ts`） */
+interface ItemNode {
+  node: Node;
+  base: Vec3;
+}
 
 @ccclass('ItemLayer')
 export class ItemLayer extends Component {
@@ -49,8 +56,8 @@ export class ItemLayer extends Component {
   private level: LevelSpec | null = null;
   /** 拖拽中要排除的物品（board 起拖时它还在 placements 里，见文件头） */
   private hiddenItem: string | null = null;
-  /** itemId → 节点。只装当前渲染出来的，`clear()` 时整体销毁 */
-  private nodes: Map<string, Node> = new Map();
+  /** itemId → 节点 + 基准位。只装当前渲染出来的，`clear()` 时整体销毁 */
+  private nodes: Map<string, ItemNode> = new Map();
 
   /** 由 `GameController` 装配时调一次。`level` 只读（查物品形状） */
   init(level: LevelSpec): void {
@@ -72,8 +79,23 @@ export class ItemLayer extends Component {
       if (itemId === this.hiddenItem) continue;
       const item = findItem(level, itemId);
       if (item === undefined) continue;
-      this.nodes.set(itemId, this.buildNode(item, placement, board));
+      const node = this.buildNode(item, placement, board);
+      this.nodes.set(itemId, { node, base: node.position.clone() });
     }
+  }
+
+  /**
+   * 「转不动」的抖动（`rotate-blocked`，UI Spec 6 节 / G1-3 要的负反馈）。
+   *
+   * 只可能发生在**已放物品**上：core 里托盘物品的旋转要么成功（`trayRotations`
+   * 只是记朝向，永远放得下），要么物品 `rotatable === false` 被静默拒收——
+   * 两条都不发 `rotate-blocked`。
+   */
+  shakeItem(itemId: string): void {
+    const entry = this.nodes.get(itemId);
+    if (entry === undefined) return;
+    if (DEBUG) console.log(`[ItemLayer] 抖动 ${itemId}（转不动）`);
+    shakeX(entry.node, entry.base);
   }
 
   /**
@@ -83,8 +105,8 @@ export class ItemLayer extends Component {
   setHiddenItem(itemId: string | null): void {
     if (this.hiddenItem === itemId) return;
     this.hiddenItem = itemId;
-    for (const [id, node] of this.nodes) {
-      node.active = id !== this.hiddenItem;
+    for (const [id, entry] of this.nodes) {
+      entry.node.active = id !== this.hiddenItem;
     }
     if (DEBUG && itemId !== null) {
       console.log(`[ItemLayer] 拖拽中排除 ${itemId}（原位不再画，防幽灵）`);
@@ -94,8 +116,8 @@ export class ItemLayer extends Component {
   /** 当前显示中的节点数（DEBUG 对账 / 压力用例断言用） */
   get visibleCount(): number {
     let count = 0;
-    for (const [, node] of this.nodes) {
-      if (node.active) count++;
+    for (const [, entry] of this.nodes) {
+      if (entry.node.active) count++;
     }
     return count;
   }
@@ -114,9 +136,11 @@ export class ItemLayer extends Component {
   }
 
   private clear(): void {
-    for (const node of this.nodes.values()) {
-      node.removeFromParent();
-      node.destroy();
+    for (const entry of this.nodes.values()) {
+      // 抖动可能被重建打断：先停掉，避免 tween 指向已销毁的节点
+      Tween.stopAllByTarget(entry.node);
+      entry.node.removeFromParent();
+      entry.node.destroy();
     }
     this.nodes.clear();
   }

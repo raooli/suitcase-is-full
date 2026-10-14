@@ -33,7 +33,7 @@
  * 话节点会留在 ±8px 上，ghost 整场跟着偏（M1-7 实测复现并修复）。
  */
 
-import { Color, Component, Graphics, Node, Tween, tween, UITransform, Vec3, _decorator } from 'cc';
+import { Color, Component, Graphics, Node, UITransform, Vec3, _decorator } from 'cc';
 import { DEBUG } from 'cc/env';
 
 import {
@@ -45,13 +45,10 @@ import {
 } from '../core';
 import type { DragPreview, LevelSpec } from '../core';
 import { BoardView } from './BoardView';
+import { shakeX, stopShake } from './shake';
 
 const { ccclass, property } = _decorator;
 
-/** 非法松手时 ghost 抖动的位移（设计单位） */
-const SHAKE_OFFSET = 8;
-/** 抖动总时长（P-05 区间 120–180ms 取中） */
-const SHAKE_DURATION = 0.16;
 /** 合法态填充透明度（0–1） */
 const VALID_FILL_ALPHA = 0.4;
 /** 非法态描边透明度 */
@@ -134,8 +131,8 @@ export class PreviewLayer extends Component {
    * M1-7 期实测复现：抖动开始后 91ms 起下一次拖拽，节点被留在 +2.78px。
    */
   private stopShake(): void {
-    Tween.stopAllByTarget(this.node);
-    this.node.position = this.basePosition.clone();
+    // 与 ItemLayer 共用一份实现：只停不归位会让节点留在 ±8px 上
+    stopShake(this.node, this.basePosition);
   }
 
   // ───────────────────────── 绘制 ─────────────────────────
@@ -240,22 +237,15 @@ export class PreviewLayer extends Component {
     // 基准位取 onLoad 存的，**不取当前 position**：当前可能已被上一次被打断的
     // 抖动带偏（见 stopShake），拿它当基准会把偏移继承下去
     const base = this.basePosition;
-    const right = new Vec3(base.x + SHAKE_OFFSET, base.y, base.z);
-    const left = new Vec3(base.x - SHAKE_OFFSET, base.y, base.z);
     if (DEBUG) {
       console.log(
         `[PreviewLayer] 抖动开始 t=${Math.round(performance.now())}` +
           ` base=(${base.x},${base.y})`,
       );
     }
-    tween(this.node)
-      .to(SHAKE_DURATION / 4, { position: right })
-      .to(SHAKE_DURATION / 2, { position: left })
-      .to(SHAKE_DURATION / 4, { position: base })
-      .call(() => {
-        if (DEBUG) console.log(`[PreviewLayer] 抖动播完 t=${Math.round(performance.now())}`);
-        this.clear();
-      })
-      .start();
+    shakeX(this.node, base, () => {
+      if (DEBUG) console.log(`[PreviewLayer] 抖动播完 t=${Math.round(performance.now())}`);
+      this.clear();
+    });
   }
 }

@@ -197,9 +197,9 @@ export class GameController extends Component {
     drag.onPreview = (preview, overTray) => this.previewLayer?.show(preview, overTray);
     drag.onPreviewEnd = (invalid) => this.previewLayer?.endPreview(invalid);
 
-    // 点击出口：托盘的点选也由 DragController 判（点 vs 拖共用手势，
-    // 仲裁必须只此一处），本组件把它并进同一入口
-    drag.onTap = (itemId) => this.handleIntent({ type: 'select', itemId });
+    // 点击出口：点 vs 拖共用手势、仲裁必须只此一处（DragController 判），
+    // 本组件只决定"点到物品"意味着 select 还是 rotate
+    drag.onTap = (itemId) => this.handleTap(itemId);
   }
 
   // ───────────────────────── 单向数据流总闸（M1-6） ─────────────────────────
@@ -216,6 +216,29 @@ export class GameController extends Component {
 
     const result = session.dispatch(intent);
     this.afterDispatch(intent, result);
+  }
+
+  /**
+   * 点击（「点还是拖」已由 `DragController` 仲裁完才到这里，本组件不重判）。
+   *
+   * **再次点击已选中的物品 = 旋转**：UI Spec 6 节「Selected（托盘或已放物品）
+   * → 点击旋转」+ GDD 1.2「点击物品选中，再点击旋转按钮」。M1 没有工具栏
+   * （M2-2 才有旋转按钮），于是把**第二次点击**当那个按钮——也正是实施计划
+   * M1.A 表里写的「`rotate` = 旋转按钮或双击」。
+   *
+   * 用"已选中"判定而**不是**双击计时器：计时器有时间阈值竞态（慢一点就变成
+   * 两次选中），而"点已选中的东西"语义稳定、可解释。
+   */
+  private handleTap(itemId: string | null): void {
+    const session = this.gameSession;
+    if (session === null) return;
+
+    const selected = session.getState().selectedId;
+    if (itemId !== null && itemId === selected) {
+      this.handleIntent({ type: 'rotate', itemId });
+      return;
+    }
+    this.handleIntent({ type: 'select', itemId });
   }
 
   /**
@@ -246,7 +269,22 @@ export class GameController extends Component {
       this.trayView?.applyState(result.state);
     }
 
-    // ③ 事件 → 表现
+    // ③ 「点了旋转但什么都没发生」= 该物品 `rotatable === false`（core 静默
+    //    拒收，不发事件）。GDD 1.2 的做法是「不可旋转时按钮禁用」，M1 没有
+    //    按钮，所以只留一条 DEBUG 线——真机手感验收（G1）要能把它和
+    //    "转不动（四策略全失败）"区分开
+    if (intent.type === 'rotate') {
+      const happened = result.events.some(
+        (event) => event.type === 'item-rotated' || event.type === 'rotate-blocked',
+      );
+      if (!happened && DEBUG) {
+        console.log(
+          `[GameController] 旋转无变化：${intent.itemId}（该物品 rotatable=false，按规格不可旋转）`,
+        );
+      }
+    }
+
+    // ④ 事件 → 表现
     let refresh = false;
     for (const event of result.events) {
       switch (event.type) {
@@ -275,10 +313,22 @@ export class GameController extends Component {
           break;
         case 'item-rotated':
           refresh = true;
+          if (DEBUG) {
+            // 位置也要打：原位旋转可能被 nudge 挪锚点（四策略之一），
+            // 只看朝向对不上"我点的那格怎么没反应"
+            const at = result.state.placements.get(event.itemId);
+            console.log(
+              `[GameController] 旋转 ${event.itemId} → 朝向 ${event.rotation}` +
+                (at === undefined ? '' : ` 现位于 (${at.row},${at.col})`),
+            );
+          }
           break;
         case 'rotate-blocked':
-          refresh = true;
+          // **不重绘**：core 策略 4 保证「要么提交合法、要么根本没变」，状态没
+          // 变就重绘等于把刚要抖的节点重建掉（抖动会无声消失）。这次的唯一
+          // 反馈就是抖一下（UI Spec 6 / G1-3）
           console.warn(`[GameController] 旋转失败：${event.itemId}（四策略全失败，未提交）`);
+          this.itemLayer?.shakeItem(event.itemId);
           break;
         case 'deadlock-warning':
           // M1 仅 Console.warn（实施计划原文）；M2-4 换 Toast

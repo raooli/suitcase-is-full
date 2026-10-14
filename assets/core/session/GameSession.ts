@@ -225,8 +225,18 @@ export class GameSession {
     const item = findItem(this.level, itemId);
     if (item === undefined) return;
 
+    // `rotatable === false` 的物品**任何情况下**都不能转（GDD 1.2「可旋转物品
+    // 每次顺时针 90°……不可旋转时按钮禁用」）。
+    //
+    // 原来这条检查只在"物品还在托盘里"的分支里，已放物品会漏下去走
+    // `rotateInPlace` 四策略——于是不可旋转的物品"转"了一下，失败时还发
+    // `rotate-blocked`（view 抖一下）。那个反馈是**误导**：抖动的意思是
+    // "周围挡住了、换个地方再试"，而真相是"这东西根本不能转"。
+    // M1-8 接旋转入口时实测：L1 四件物品 rotatable 全 false，点已放物品
+    // 得到的是「四策略全失败」而非「不可旋转」。
+    if (!item.rotatable) return;
+
     if (!this.state.placements.has(itemId)) {
-      if (!item.rotatable) return;
       const next = (((trayRotationOf(this.state, itemId) + 1) % 4) as Rotation);
       const trayRotations = new Map(this.state.trayRotations);
       trayRotations.set(itemId, next);

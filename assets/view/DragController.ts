@@ -302,12 +302,26 @@ export class DragController extends Component {
     this.reset();
   }
 
-  /** 点击 → `onTap`。只认托盘带内的点击，避免点棋盘顺手取消了选中 */
+  /**
+   * 点击 → `onTap`。命中范围：**托盘优先、其次棋盘上的已放物品**（M1-8）。
+   *
+   * 复用 `pickAt`（与起拖同一套命中逻辑），这样"点已放物品选中它"和
+   * "从棋盘抓起它"用的是同一个判定，不会出现"点得到却抓不起来"。
+   *
+   * 没点到任何物品时，只有**托盘带内**才算「取消选中」；点棋盘空白 / 页头 /
+   * 工具栏一律不响应——沿用 M1-4 的决定：避免点棋盘顺手把选中弄丢
+   * （UI Spec 允许点空白取消，但真机上"手滑点空白丢选中"比"选中退不掉"更烦）。
+   */
   private emitTap(uiX: number, uiY: number): void {
+    const pending = this.pickAt(uiX, uiY);
+    if (pending !== null) {
+      if (DEBUG) console.log(`[DragController] 点击 → 命中 ${pending.itemId}（${pending.from}）`);
+      this.onTap?.(pending.itemId);
+      return;
+    }
     if (!this.overTray(uiX, uiY)) return;
-    const hit = this.trayView?.hitTest(new Vec3(uiX, uiY, 0)) ?? null;
-    if (DEBUG) console.log(`[DragController] 点击托盘 → ${hit?.itemId ?? '空白处'}`);
-    this.onTap?.(hit === null ? null : hit.itemId);
+    if (DEBUG) console.log('[DragController] 点击托盘空白 → 取消选中');
+    this.onTap?.(null);
   }
 
   // ───────────────────────── 抓取与落点 ─────────────────────────

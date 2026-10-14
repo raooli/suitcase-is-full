@@ -475,6 +475,24 @@ describe('GameSession：旋转', () => {
     expect(findEvent(result.events, 'item-rotated')).toBeUndefined();
   });
 
+  it('不可旋转物品**放到棋盘上**旋转也被忽略（M1-8 回归，不发 rotate-blocked）', () => {
+    // 原来的 `rotatable` 检查只在"物品还在托盘里"的分支里，已放物品会漏下去
+    // 走 `rotateInPlace` 四策略。L1 四件物品 rotatable 全 false，于是点已放的
+    // 物品得到的是「四策略全失败」→ view 抖一下，反馈的意思是"周围挡住了"，
+    // 而真相是"这东西根本不能转"——误导。GDD 1.2「不可旋转时按钮禁用」。
+    const session = new GameSession(roomyLevel); // C 的 rotatable = false
+    session.dispatch({ type: 'grab', itemId: 'C', anchor: [0, 0] });
+    session.dispatch({ type: 'drop' });
+    expect(session.getState().placements.get('C')?.rotation).toBe(0);
+
+    const before = session.getState();
+    const result = session.dispatch({ type: 'rotate', itemId: 'C' });
+
+    // 静默拒收：除了每次都带的 state-changed，什么事件都没有
+    expect(types(result.events)).toEqual(['state-changed']);
+    expect(result.state).toBe(before);
+  });
+
   it('原位旋转失败时发出 rotate-blocked 且状态完全不变', () => {
     const session = new GameSession(tightLevel);
     session.dispatch({ type: 'grab', itemId: 'P', anchor: [0, 0] });
