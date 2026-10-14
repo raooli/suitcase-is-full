@@ -15,7 +15,13 @@
 2. `npm run preview:game`（= CLI 构建 Game 场景 + 无头预览，有 error 即失败）；
 3. 双绿才提交；CHANGELOG 追加一条（一 commit 一条，倒序，文件用 `git show --stat` 核对）。
 
-> 注意：`typecheck`（tsconfig.node.json）**不含 `assets/view/`**——view 的类型错误只有"构建"这一关能抓，所以预览不可省。
+> 注意：`typecheck`（tsconfig.node.json）**不含 `assets/view/`**——view 的类型错误只有"构建"这一关能抓，所以预览不可省。**且 Cocos 构建也不做类型检查**（M1-7 实测：view 里引用一个不存在的常量，构建照过、运行时才炸 ReferenceError）——view 的变量名/签名错误**只有运行能抓**，改完 view 必须跑预览，别以为构建绿了就没事。
+
+## 引擎限制与状态机不变式（实测）
+
+- **一个节点只能有一个 renderable 组件**（Graphics/Label/Sprite…）：给已有 Graphics 的节点再 `addComponent(Graphics)` 会被引擎**静默拒绝**（Console 一条 `Can't add renderable component…` warning，绘制内容一个不出现）。同节点要多组绘制就复用同一 Graphics（`fill()` 消费 path，可反复 `circle()+fill()`），或建子节点。
+- **冻结门必须覆盖所有 intent handler，含清理路径**（M1-7 补缺）：`GameSession` 的 `handleSelect/Grab/Rotate/RemoveToTray/Undo/Reset` 都有 `isInputFrozen()` 门，但 `handleDrop`/`handleCancel` 的"无预览清理分支"会改写 phase（回 Idle/Selected）——通关动画期间（WinAnimating/Completed）任何残留的 drop/cancel 意图都会把"已通关"抹掉、输入提前解冻。新增 intent 类型时先问：它在冻结期被放进来的话，哪条路径会写 phase/state？
+- **L1 通关拖拽校准配方**（无头测试直接抄）：L1 = 3×3 / cellPx=114；解法 `A@(1,1) B@(1,0) C@(2,1) D@(0,0)`。在 0 号槽按 **(47,658)** 四件物品 `grabOffset` 全为 (0,0)；松手点取**格中心 x−10、y+10**（格中心处 `round(r+0.5)` 会进位到右下斜邻格）。页面坐标格中心：(81,240)(195,240)(309,240)/(81,354)(195,354)(309,354)/(81,468)(195,468)(309,468)。SuccessOverlay「再来一次」按钮 = 页面 **(195,520)**。
 
 ## 无 GUI 预览与取证手法
 

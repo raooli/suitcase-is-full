@@ -23,6 +23,18 @@
 
 ## 提交记录（倒序）
 
+### `742ce39` · feat: M1-7 通关判定接线 + SuccessOverlay 通关浮层（WinAnimating 输入冻结）
+
+| 项 | 内容 |
+| --- | --- |
+| 日期 | 2026-10-14 22:47 |
+| 完整 hash | `742ce39`（见 `git log -1 --format=%H`） |
+| 类型 | 新功能（实施计划 M1-7：通关判定 + `SuccessOverlay`）+ 缺陷修复（core 冻结门漏洞） |
+| 文件 | `assets/view/SuccessOverlay.ts`（新，331 行）、`assets/view/SuccessOverlay.ts.meta`（新）、`assets/view/GameController.ts`、`assets/core/session/GameSession.ts`、`assets/core/config.ts`、`assets/scenes/Game.scene`、`tools/scene-build.mjs`、`test/session.spec.ts`（8 文件，+563/−14） |
+| 要点 | ① **SuccessOverlay（新组件）**：`level-cleared` 事件 → 懒加载构建（节点初始 `active=false`）遮罩 + 白圆角面板 + 「整理完成！」/「第 N 关」/「N 步 · N.Ns」战绩 + 装饰星光 + 「再来一次」按钮；入场动画 = UIOpacity 淡入 200ms + 面板 scale 0.8→1.06→1 弹跳（220+80ms），360ms 收敛后经 `onSettled` 回调调 `session.completeWinAnimation()` 把 phase 推到 `Completed`——**冻结的解除时机在 view 手里**（core 不自己数时间）；`settled` 之前按钮不响应。**「下一关」不建按钮**：M1 没有关卡推进机制（M2-1 才做关卡加载），建不做事的按钮 = UI Spec 明令禁止的空按钮；留 `onNextLevel` 扩展点。全项目第一处 `Label` 文本，默认系统字体中文可渲染已实证 ② **GameController 接线**：`afterDispatch` case `level-cleared` → `show()`；`onReplay` → `replayLevel()` 换同关新 `GameSession` + 重画棋盘 + init 三层 + `refreshAll` + 隐藏浮层——**不走 `dispatch({type:'reset'})`**（reset 在 WinAnimating/Completed 被 `isInputFrozen` 故意冻结，防浮层盖住工具栏时误重置抹掉通关态；浮层自身按钮是明确意图，另走换会话），并重挂 `wireDrag`（其 `boardItemAt` 闭包捕获旧 `level`，换关卡时不重挂会用旧关物品表查命中）③ **core 缺陷修复**：`handleDrop`/`handleCancel` 补冻结门。两者的"无预览清理分支"本来就会改写 phase（回 Idle/Selected）——`handleSelect`/`handleGrab`/`handleRotate`/`handleRemoveToTray`/`handleUndo`/`handleReset` 六处都有门，唯独漏了这两条**清理路径**（提交路径 196-198 行有防护，清理路径没有）。后果：通关动画期间任何残留的 drop/cancel 意图都会把 phase 从 WinAnimating 打回 Idle/Selected，"已通关"状态被抹掉、输入提前解冻 ④ `tools/scene-build.mjs`：`SuccessRoot`（UITransform 390×844 + SuccessOverlay）作 SafeAreaRoot **最后一个**子节点（渲染序最上 = 盖住棋盘/托盘/预览层），GameController 接 `successOverlay` 引用；`config.ts` 追加 6 项浮层布局常量（遮罩 alpha 0.55 / 面板 280×300 圆角 24 / 按钮 200×48） |
+| 验收 | 无头预览合并用例一次通过：L1 四拖通关（`L01_A→(1,1)`、`L01_B→(1,0)`、`L01_C→(2,1)`、`L01_D→(0,0)` 铺满 3×3，`grabOffset=(0,0)`）→ `🎉 通关！L1 4 步 15.5s → SuccessOverlay` + 浮层截图（遮罩/面板/中文/战绩/星光/按钮俱全）→ **WinAnimating 冻结期拖拽零意图**（只有原生触摸事件，无 `→ intent`）→ 点「再来一次」→ `再来一次：L1 新会话` + `重绘：tray=[L01_A..D] 已放 0 件 phase=Idle` + 截图（空棋盘满托盘）→ 复活后再拖 A 仍精确落 (1,1)。回归测试：`WinAnimating 期间残留的 drop / cancel 不得改写 phase`（负向验证——拆掉 `handleDrop` 冻结门后该用例以 `expected 'Selected' to be 'WinAnimating'` 失败，与线上事故症状一致）。`npm run check` **200/200**，`npm run preview:game` 无 Console 错误 |
+| 推翻 | 推翻 `6cefd4a` 之后无——但本提交揭示了 core 的一处既有缺口：M1-0 起 `dispatch()` 的冻结覆盖从来不全（六处有门、两处清理路径没有），此前未暴露只因没有"通关后仍有意图打进 core"的路径。M1-7 补全并加回归测试钉死 |
+
 ### `6cefd4a` · fix: PreviewLayer 停抖动后归位节点（非法松手 160ms 内连抓会留下 8px 偏移）
 
 | 项 | 内容 |
