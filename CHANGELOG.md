@@ -23,6 +23,34 @@
 
 ## 提交记录（倒序）
 
+### `3c5448f` · feat: M1-5 拖拽预览层（PreviewLayer）三态 ghost + 非法回弹
+
+| 项 | 内容 |
+| --- | --- |
+| 日期 | 2026-10-14 12:25 |
+| 完整 hash | `3c5448f`（见 `git log -1 --format=%H`） |
+| 类型 | 功能（M1-5：可玩内核第 6 步 · 拖拽预览层）+ DragController 锚点抖动修复 |
+| 文件 | 7 个：新增 `assets/view/PreviewLayer.ts(+.meta)`；改 `assets/view/{DragController.ts,GameController.ts}`、`assets/scenes/Game.scene`、`tools/{preview-check.mjs,scene-build.mjs}` |
+
+**要点：**
+
+- **`view/PreviewLayer.ts`（新增）**：拖拽预览层，三态 ghost。
+  - **合法**（`preview.check.ok === true`）→ 半透明绿色实心块 + 实线描边（`UI_PALETTE.valid`，填充 alpha 0.4）。
+  - **非法**（`ok === false`）→ 红色**虚线**轮廓、无填充（`UI_PALETTE.invalid`）。**不单靠颜色**：合法是实心块、非法是空心虚线，形状本身就能区分（TDD 17.5 无障碍要求）；且不自动纠偏（TDD 6.3 裁决 D-04）——只提示不代劳。
+  - **取出**（手指在托盘带内）→ ghost 隐藏。这一态由 `DragController.overTray` 几何判定（不是碰撞），本层只据此决定画不画。
+  - **view 不自查碰撞**（M1-5 验收口径）：合法性 100% 来自 `preview.check`，本组件从不调 `canPlace`。M1-5 阶段 `preview` 由 `GameController` 的挂具构造（用 `canPlace` 算 check），**M1-6 一接线就换成 `session.getPreview()`，本组件一行不动**——因为 `DragPreview` 形状不变。
+  - **不做格→像素算术**（R-A6）：`gridToLocal` / `shapeMetrics` / `getCellPx` 全从 `BoardView` 拿（唯一出口），本文件只做"以单格为尺子的绘制细节"（内缩/圆角/虚线），与 `ItemView` 同构。
+  - **非法松手抖动回弹**（P-05 区间 120–180ms 取 160ms）：ghost 左右抖 ±8px 再消失，作为"放不下"的负反馈。合法/取出/主动取消都不抖（抖动专属"放不下"）。完整的"物品飞回原位"动画要等 M1-6 的 `ItemLayer`（那时才有节点可飞）。
+- **`view/DragController.ts`（改）**：接预览——新增 `onPreview` 回调（拖拽中喂预览）+ `buildPreview` 回调（构造 `DragPreview`，M1-5 由 GameController 挂具用 `canPlace` 算 check，M1-6 换 `session.getPreview()`）；`grab`/`move` 后喂预览，松手按语义调 `endPreview`（`drop`→合法则清/非法则抖，`cancel`→清，`removeToTray`→清）。
+- **修复 `beginDrag` 锚点抖动**：grab 锚点改用**按下点**算（与 offset 同源），而非过阈值时的 move 点。之前格中心附近 `snapToGrid`（round）不稳定，会让 grab 锚点跳到 `[0,-1]` 而 ghost 一开始就画错位。**board 抓取改用 `localToGrid`（floor）**，避免 `snapToGrid`（round）把格中心的点命中到右下斜邻格（按物品中心根本抓不起来）；**move 锚点仍用 `snapToGrid`（TDD 6.3 裁决不变）**。
+- **`view/GameController.ts`（改）**：加 `previewLayer` @property；`buildPreview` 挂具用 `canPlace` 算 check 构造 `DragPreview`；接三路预览回调（`onPreview`/松手合法/松手非法）。
+- **`tools/scene-build.mjs`**：新增 `PreviewRoot` 节点 + `PreviewLayer` 组件（`boardView` 引 `BoardRoot`），`GameController` 接 `previewLayer`。
+- **`tools/preview-check.mjs`**：`--drag` 第 5 段可选截图路径（`x1,y1,x2,y2,out.png`，在 touchEnd 前拍），用于验 ghost 中途态。
+- **验收证据（`npm run check` 199/199 全绿 + `npm run preview:game` 无 Console 错误）**：
+  - **三态**：合法拖拽 → ghost 显示 `ok`（截图见半透明绿实心块）；非法拖拽 → ghost 显示 `out-of-bounds`（截图见红虚线轮廓）；拖回托盘 → ghost 隐藏（取出态）。
+  - **非法回弹**：非法位置松手 → `endPreview invalid=true → 抖动后清`。
+  - **T1/T2 角点不变量复验通过**（确保 beginDrag 改动没回退 M1-4）：同一落点 (195,354)，抓左半 `offset=(0,0)` → 末锚 `[2,2]`；抓右半 `offset=(0,1)` → 末锚 `[2,1]`，差值恰为 offset 差值。
+
 ### `bff0abe` · feat: M1-4 拖拽手势 → 意图流（DragController）+ 抓取偏移纯函数
 
 | 项 | 内容 |
