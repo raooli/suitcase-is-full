@@ -136,6 +136,15 @@ export class DragController extends Component {
   private startY = 0;
   /** 本次触摸是否已被判成拖拽（点/拖互斥的唯一依据） */
   private consumedByDrag = false;
+  /**
+   * 本次手势是否起始于输入冻结期。
+   *
+   * 冻结判定**只在按下这一刻**做一次，之后整段手势（move/end/cancel）都据此
+   * 作废——即便中途解冻也按"这次按下不作数"处理。通关动画只有 360ms，一个
+   * 慢手势完全可能按下时冻结、松手时已解冻：那时补发意图等于在玩家刚看到的
+   * 结算画面上偷偷改状态。
+   */
+  private gestureFrozen = false;
   /** 最近一次喂给 `onPreview` 的预览（松手时据此判要不要抖） */
   private lastPreview: DragPreview | null = null;
 
@@ -149,7 +158,7 @@ export class DragController extends Component {
    *
    * 所以取"覆盖整屏的节点 + 节点级监听"：手指出不去，就不会被 cancel 打断。
    */
-  onEnable(): void {
+  override onEnable(): void {
     for (const node of this.listenerNodes()) {
       node.on(Node.EventType.TOUCH_START, this.onTouchStart, this);
       node.on(Node.EventType.TOUCH_MOVE, this.onTouchMove, this);
@@ -169,7 +178,7 @@ export class DragController extends Component {
     }
   }
 
-  onDisable(): void {
+  override onDisable(): void {
     for (const node of this.listenerNodes()) {
       node.off(Node.EventType.TOUCH_START, this.onTouchStart, this);
       node.off(Node.EventType.TOUCH_MOVE, this.onTouchMove, this);
@@ -199,14 +208,14 @@ export class DragController extends Component {
   // ───────────────────────── 触摸生命周期 ─────────────────────────
 
   private onTouchStart(event: EventTouch): void {
-    // 通关动画期间冻结一切输入（M1-7 的 SuccessOverlay 播出时）
-    if (this.inputFrozen?.() === true) return;
+    // 归零先行：这些标志跨手势存活，不清就让本次手势拿上一次的结论做判断。
+    // 冻结分支也必须走这里——不能靠"上一次拖拽留下的 consumedByDrag=true"
+    // 去挡冻结期 touchend 的 select tap（那是碰巧正确，不是设计）
+    this.beginGesture();
 
-    this.consumedByDrag = false;
-    this.pending = null;
-    this.dragging = false;
-    this.lastAnchor = null;
-    this.lastPreview = null;
+    // 通关动画期间冻结一切输入（M1-7 的 SuccessOverlay 播出时）
+    this.gestureFrozen = this.inputFrozen?.() === true;
+    if (this.gestureFrozen) return;
 
     const ui = event.getUILocation();
     this.startX = ui.x;
@@ -222,7 +231,17 @@ export class DragController extends Component {
     }
   }
 
+  private beginGesture(): void {
+    this.consumedByDrag = false;
+    this.pending = null;
+    this.dragging = false;
+    this.lastAnchor = null;
+    this.lastPreview = null;
+    this.gestureFrozen = false;
+  }
+
   private onTouchMove(event: EventTouch): void {
+    if (this.gestureFrozen) return;
     if (this.pending === null && !this.dragging) return;
 
     const ui = event.getUILocation();
@@ -240,6 +259,12 @@ export class DragController extends Component {
   }
 
   private onTouchEnd(event: EventTouch): void {
+    // 冻结期起的手势：一个意图都不发（见 `gestureFrozen` 的说明）
+    if (this.gestureFrozen) {
+      this.reset();
+      return;
+    }
+
     const ui = event.getUILocation();
     let overTray = false;
     if (this.dragging && this.pending !== null) {
@@ -270,6 +295,7 @@ export class DragController extends Component {
    * **不猜测落点**（猜出来的落点会让"放不下"变成"放错位置"，比取消更难查）。
    */
   private onTouchCancel(): void {
+    if (this.gestureFrozen) return;
     if (DEBUG) console.warn('[DragController] 收到 TOUCH_CANCEL：本次拖拽按取消处理');
     if (this.dragging) this.emit({ type: 'cancel' });
     this.onPreviewEnd?.(false);

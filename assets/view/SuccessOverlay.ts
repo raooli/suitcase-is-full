@@ -102,9 +102,10 @@ export class SuccessOverlay extends Component {
 
   private panelNode: Node | null = null;
   private panelOpacity: UIOpacity | null = null;
+  private levelLabel: Label | null = null;
   private statsLabel: Label | null = null;
 
-  onLoad(): void {
+  override onLoad(): void {
     const transform = this.node.getComponent(UITransform) ?? this.node.addComponent(UITransform);
     // 覆盖整屏：遮罩必须挡住整个设计画布，尺寸给满 390×844（由场景建）
     transform.setAnchorPoint(0.5, 0.5);
@@ -115,11 +116,19 @@ export class SuccessOverlay extends Component {
   /**
    * 显示通关浮层。`event` = `level-cleared` 的一次性数据。
    *
-   * 重复调用是安全的（同一关只会发一次 `level-cleared`——`WinAnimating`
-   * 冻结期内没有 intent 能改状态，AC12「只触发一次」由 phase 保证）。
+   * **可重复调用，且每次都必须重刷文案**：`replayLevel()` 换新会话后，同一关
+   * 会再发一次 `level-cleared`，战绩（步数/用时）是**新的**。所以节点结构留给
+   * `buildOnce()`，随事件变化的部分走 `applyEvent()`——后者无条件执行。
+   *
+   * （一次通关内只发一次 `level-cleared` 是 phase 保证的：`WinAnimating`
+   * 冻结期内没有 intent 能改状态，AC12「只触发一次」指的是**这个**。）
    */
   show(event: LevelClearedEvent): void {
-    this.buildOnce(event);
+    // 上一次入场遗留的 settle 回调作废：360ms 内二次 show() 不该叠两个回调
+    this.unscheduleAllCallbacks();
+
+    this.buildOnce();
+    this.applyEvent(event);
     this.settled = false;
     this.node.active = true;
 
@@ -149,7 +158,12 @@ export class SuccessOverlay extends Component {
 
   // ───────────────────────── 懒加载构建 ─────────────────────────
 
-  private buildOnce(event: LevelClearedEvent): void {
+  /**
+   * 只建一次的结构（遮罩/面板/装饰/按钮）。**不写任何随事件变化的文案**——
+   * 那是 `applyEvent()` 的活；混在这里会变成"复玩后战绩还停在第一次"
+   * （M1-7 实测：第二次通关 6.1s，面板显示首次的 15.1s）。
+   */
+  private buildOnce(): void {
     if (this.built) return;
     this.built = true;
 
@@ -199,19 +213,11 @@ export class SuccessOverlay extends Component {
 
     // 标题「整理完成！」（UI Spec 5.3 原文文案）
     this.addLabel(panel, 'Title', '整理完成！', TITLE_Y, 34, UI_PALETTE.textPrimary);
-    // 副标题：第几关
-    this.addLabel(panel, 'Level', `第 ${event.levelId} 关`, LEVEL_Y, 20, UI_PALETTE.textSecondary);
+    // 副标题：第几关（文案由 applyEvent 每次写入，这里只占位）
+    this.levelLabel = this.addLabel(panel, 'Level', '', LEVEL_Y, 20, UI_PALETTE.textSecondary);
 
-    // 战绩行：步数 + 用时。数据只来自事件，不反查 session
-    const stats = this.addLabel(
-      panel,
-      'Stats',
-      `${event.moves} 步 · ${(event.elapsedMs / 1000).toFixed(1)}s`,
-      STATS_Y,
-      22,
-      UI_PALETTE.brown,
-    );
-    this.statsLabel = stats;
+    // 战绩行：步数 + 用时（同上）。数据只来自事件，不反查 session
+    this.statsLabel = this.addLabel(panel, 'Stats', '', STATS_Y, 22, UI_PALETTE.brown);
 
     // 装饰星光：纯装饰小圆（UI Spec 5.3：无星级规则不得暗示星级）。
     // 画在面板已有的 Graphics 上——**不能给 panel 再加一个 Graphics**：
@@ -252,6 +258,20 @@ export class SuccessOverlay extends Component {
     // 且引擎会把"松手点在节点外"转成 TOUCH_CANCEL——按钮尺寸就是热区，在热区内
     // 松手才算数，天然不会误触）
     button.on(Node.EventType.TOUCH_END, this.onReplayTouch, this);
+  }
+
+  /**
+   * 写入随事件变化的文案。**每次 `show()` 都要跑**，不能留在 `buildOnce()` 里。
+   *
+   * 同类结构（`GuideOverlay` / `ConfirmDialog`，M2）照此预防：懒加载的
+   * `built` 提前 return 会静默吞掉"第二次调用"的差异，症状是**界面停在
+   * 第一次的数据上**，而日志/状态都是对的——只能靠肉眼对比发现。
+   */
+  private applyEvent(event: LevelClearedEvent): void {
+    if (this.levelLabel !== null) this.levelLabel.string = `第 ${event.levelId} 关`;
+    if (this.statsLabel !== null) {
+      this.statsLabel.string = `${event.moves} 步 · ${(event.elapsedMs / 1000).toFixed(1)}s`;
+    }
   }
 
   private addLabel(parent: Node, name: string, text: string, y: number, fontSize: number, hex: string): Label {
