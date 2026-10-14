@@ -48,6 +48,13 @@ function parseArgs(argv) {
     grep: null,
     scene: null,
     viewport: '390x844@2',
+    // 每次拖拽结束后等待多久再执行下一个动作（ms）。默认 600 够让回弹抖动
+    // （160ms）播完；调小到 0 可复现「非法松手还没抖完就起下一次拖拽」。
+    gap: 600,
+    // touchStart 之后、第一个 move 之前等待多久（ms）。默认 120 是给引擎
+    // 注册按下点的时间；调小可把「下一次拖拽的首个 ghost」往抖动窗口里推
+    // （复现时序类 bug 用，正常回归不要动）。
+    dragWait: 120,
     // `--shot` / `--tap` / `--tap-mouse` 是**按命令行顺序执行的动作序列**，
     // 所以 `--shot a.png --tap 62,668 --shot b.png` 能一次采到改前/改后两张对照图。
     steps: [],
@@ -59,6 +66,8 @@ function parseArgs(argv) {
     else if (a === '--grep') out.grep = argv[++i];
     else if (a === '--scene') out.scene = argv[++i];
     else if (a === '--viewport') out.viewport = argv[++i];
+    else if (a === '--gap') out.gap = Number(argv[++i]);
+    else if (a === '--drag-wait') out.dragWait = Number(argv[++i]);
     else if (a === '--shot') out.steps.push({ kind: 'shot', path: argv[++i] });
     else if (a === '--tap') out.steps.push({ kind: 'tap', spec: argv[++i], mouse: false });
     else if (a === '--tap-mouse') out.steps.push({ kind: 'tap', spec: argv[++i], mouse: true });
@@ -410,9 +419,16 @@ async function main() {
         document.head.appendChild(st);
         out.push('touch-action:none 已注入');
       } catch (e) { out.push('touch-action 注入失败: ' + e.message); }
-      // 记录原生触摸事件，用来分辨"浏览器取消了"还是"引擎取消了"
+      // 记录原生触摸事件，用来分辨"浏览器取消了"还是"引擎取消了"。
+      // 带 performance.now() 时间戳：与引擎侧日志对比可量出 CDP 合成输入的投递延迟
+      // （复现"回弹抖动没播完就连抓"这类时序 bug 时要用）。
+      // 注意：本段整体在 evaluate 的模板字符串里，注释中不能出现反引号。
       for (const t of ['touchstart', 'touchend', 'touchcancel']) {
-        document.addEventListener(t, () => console.log('[native] ' + t), true);
+        document.addEventListener(
+          t,
+          () => console.log('[native] ' + t + ' t=' + Math.round(performance.now())),
+          true,
+        );
       }
       try {
         const p = globalThis.cc && globalThis.cc.profiler;
@@ -482,7 +498,7 @@ async function main() {
         const shot = parts.length >= 5 ? parts[4] : null;
         const point = (x, y) => ({ x, y, radiusX: 1, radiusY: 1, force: 1, id: 1 });
         await session.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [point(x1, y1)] });
-        await sleep(120);
+        await sleep(args.dragWait);
         const segments = 8;
         for (let i = 1; i <= segments; i++) {
           const t = i / segments;
@@ -496,7 +512,7 @@ async function main() {
         if (shot !== null) await shoot(shot);
         await session.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
         console.log(`👆 拖拽 (${x1}, ${y1}) → (${x2}, ${y2})${shot === null ? '' : ` 📸 ${shot}`}`);
-        await sleep(600);
+        await sleep(args.gap);
       }
     }
   } catch (e) {

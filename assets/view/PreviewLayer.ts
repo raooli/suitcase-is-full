@@ -27,6 +27,10 @@
  * 非法松手时 ghost 抖一下再消失（`tween` 位移 ±8px、160ms），作为"放不下"的
  * 视觉反馈。**这是 M1-5 的最小回弹**：完整的"物品飞回原位"动画要等 M1-6 的
  * `ItemLayer`（被拖物品本体那时才有节点可飞）。
+ *
+ * 抖动**允许被打断**（非法松手后 160ms 内又抓了一次）：`show()`/`endPreview()`
+ * 一律走 `stopShake()`——停 tween 并把节点放回 `basePosition`。只停不归位的
+ * 话节点会留在 ±8px 上，ghost 整场跟着偏（M1-7 实测复现并修复）。
  */
 
 import { Color, Component, Graphics, Node, Tween, tween, UITransform, Vec3, _decorator } from 'cc';
@@ -62,12 +66,18 @@ export class PreviewLayer extends Component {
   private graphics: Graphics | null = null;
   /** 当前显示的预览（`endPreview` 据此判断要不要抖一下） */
   private current: DragPreview | null = null;
+  /**
+   * 本节点的**基准位**（onLoad 时场景给的位置：与 BoardRoot 同位，ghost 才能用
+   * board 局部坐标画）。停抖动时必须回到它——见 `stopShake`。
+   */
+  private basePosition: Vec3 = new Vec3();
 
   onLoad(): void {
     const transform = this.node.getComponent(UITransform) ?? this.node.addComponent(UITransform);
     // 尺寸只是占位：Graphics 不被 UITransform 裁剪，越界 ghost（非法出界）照样画得出来
     transform.setAnchorPoint(0.5, 0.5);
     this.graphics = this.node.getComponent(Graphics) ?? this.node.addComponent(Graphics);
+    this.basePosition = this.node.position.clone();
   }
 
   /** 由 `GameController` 在装配时调一次，告诉它要查哪一关的物品形状 */
@@ -82,7 +92,7 @@ export class PreviewLayer extends Component {
    * 本组件不碰 `TrayView` 的命中，只据此决定画不画。
    */
   show(preview: DragPreview | null, overTray: boolean): void {
-    Tween.stopAllByTarget(this.node);
+    this.stopShake();
     if (preview === null || overTray) {
       if (DEBUG) {
         console.log(`[PreviewLayer] ghost 隐藏（${overTray ? '取出态：手指在托盘带内' : '无预览'}）`);
@@ -102,7 +112,7 @@ export class PreviewLayer extends Component {
    * 抖动专属"放不下"的负反馈，别滥用。
    */
   endPreview(invalid: boolean): void {
-    Tween.stopAllByTarget(this.node);
+    this.stopShake();
     if (DEBUG) console.log(`[PreviewLayer] endPreview invalid=${invalid} → ${invalid ? '抖动后清' : '直接清'}`);
     if (invalid && this.current !== null) {
       this.shakeAndClear();
@@ -110,6 +120,22 @@ export class PreviewLayer extends Component {
       this.clear();
     }
     this.current = null;
+  }
+
+  /**
+   * 停掉进行中的抖动，并把节点放回基准位。
+   *
+   * 为什么必须归位：抖动是**位移 tween**，`Tween.stopAllByTarget` 只停动画，
+   * 节点会留在被打断那一帧的 ±8px 偏移上——而 ghost 是按本节点局部坐标画的，
+   * 偏移会整场跟着偏。更糟的是 `shakeAndClear` 若以**当前**位置为基准，偏移
+   * 会被下一次抖动"继承"、越叠越偏。
+   *
+   * 触发条件苛刻（非法松手后约 160ms 内连抓），但一旦触发就是持久视觉偏移。
+   * M1-7 期实测复现：抖动开始后 91ms 起下一次拖拽，节点被留在 +2.78px。
+   */
+  private stopShake(): void {
+    Tween.stopAllByTarget(this.node);
+    this.node.position = this.basePosition.clone();
   }
 
   // ───────────────────────── 绘制 ─────────────────────────
@@ -169,9 +195,12 @@ export class PreviewLayer extends Component {
 
     if (DEBUG) {
       const reason = preview.check.ok ? 'ok' : preview.check.reason;
+      const p = this.node.position;
       console.log(
         `[PreviewLayer] ghost ${preview.itemId}@(${preview.anchor[0]},${preview.anchor[1]})` +
-          ` rot=${preview.rotation} → ${reason}`,
+          ` rot=${preview.rotation} → ${reason}` +
+          ` nodePos=(${Math.round(p.x * 100) / 100},${Math.round(p.y * 100) / 100})` +
+          ` t=${Math.round(performance.now())}`,
       );
     }
   }
@@ -208,14 +237,25 @@ export class PreviewLayer extends Component {
 
   /** 非法松手：左右抖一下再清空（P-05 回弹区间） */
   private shakeAndClear(): void {
-    const base = this.node.position.clone();
+    // 基准位取 onLoad 存的，**不取当前 position**：当前可能已被上一次被打断的
+    // 抖动带偏（见 stopShake），拿它当基准会把偏移继承下去
+    const base = this.basePosition;
     const right = new Vec3(base.x + SHAKE_OFFSET, base.y, base.z);
     const left = new Vec3(base.x - SHAKE_OFFSET, base.y, base.z);
+    if (DEBUG) {
+      console.log(
+        `[PreviewLayer] 抖动开始 t=${Math.round(performance.now())}` +
+          ` base=(${base.x},${base.y})`,
+      );
+    }
     tween(this.node)
       .to(SHAKE_DURATION / 4, { position: right })
       .to(SHAKE_DURATION / 2, { position: left })
       .to(SHAKE_DURATION / 4, { position: base })
-      .call(() => this.clear())
+      .call(() => {
+        if (DEBUG) console.log(`[PreviewLayer] 抖动播完 t=${Math.round(performance.now())}`);
+        this.clear();
+      })
       .start();
   }
 }
