@@ -40,7 +40,7 @@ import {
   grabOffsetFromRatio,
   sameRC,
 } from '../core';
-import type { Intent, RC } from '../core';
+import type { DragPreview, Intent, RC } from '../core';
 import { BoardView } from './BoardView';
 import type { TrayHit } from './TrayView';
 import { TrayView } from './TrayView';
@@ -98,6 +98,29 @@ export class DragController extends Component {
    */
   onTap: ((itemId: string | null) => void) | null = null;
 
+  /**
+   * **预览构造（M1-5 挂具）**。grab/move 时由本组件调，把锚点与来源交给它，
+   * 换回一个 `DragPreview`（含 `check`）。M1-5 阶段由 `GameController` 用
+   * `canPlace` 实现（不碰 session）；M1-6 接线后这一路改由 `session.getPreview()`
+   * 直接给，本组件调用的形状不变。
+   *
+   * 之所以是回调而不是直接读 session：本组件因此不持有 `GameSession`，
+   * 换数据源（挂具 → session）是调用方一行的事。
+   */
+  previewProvider: ((itemId: string, anchor: RC, from: 'tray' | 'board') => DragPreview | null) | null = null;
+
+  /**
+   * 预览显示出口：锚点变化时调，把 `DragPreview` 与「手指是否在托盘带内」
+   * 一起交给 `PreviewLayer`。`overTray === true` 对应**取出态**（ghost 隐藏）。
+   */
+  onPreview: ((preview: DragPreview | null, overTray: boolean) => void) | null = null;
+
+  /**
+   * 松手收尾出口。`invalid === true` = 非法松手（放不下），`PreviewLayer` 据此
+   * 抖一下 ghost 再清；其余情况（合法 / 取出 / 取消）直接清。
+   */
+  onPreviewEnd: ((invalid: boolean) => void) | null = null;
+
   private pending: PendingGrab | null = null;
   private dragging = false;
   private lastAnchor: RC | null = null;
@@ -105,6 +128,8 @@ export class DragController extends Component {
   private startY = 0;
   /** 本次触摸是否已被判成拖拽（点/拖互斥的唯一依据） */
   private consumedByDrag = false;
+  /** 最近一次喂给 `onPreview` 的预览（松手时据此判要不要抖） */
+  private lastPreview: DragPreview | null = null;
 
   /**
    * 监听挂在 `gestureRoot`（覆盖整屏的 SafeAreaRoot）上。
@@ -170,6 +195,7 @@ export class DragController extends Component {
     this.pending = null;
     this.dragging = false;
     this.lastAnchor = null;
+    this.lastPreview = null;
 
     const ui = event.getUILocation();
     this.startX = ui.x;
@@ -204,9 +230,11 @@ export class DragController extends Component {
 
   private onTouchEnd(event: EventTouch): void {
     const ui = event.getUILocation();
+    let overTray = false;
     if (this.dragging && this.pending !== null) {
       // 松手位置决定语义：拖回托盘 → 取出（原本在盘上的）/ 放弃（原本就在托盘）
-      if (this.overTray(ui.x, ui.y)) {
+      overTray = this.overTray(ui.x, ui.y);
+      if (overTray) {
         this.emit(
           this.pending.from === 'board'
             ? { type: 'removeToTray', itemId: this.pending.itemId }
@@ -219,6 +247,9 @@ export class DragController extends Component {
       // 没过阈值 → 这是一次点击，不是拖拽
       this.emitTap(ui.x, ui.y);
     }
+    // 预览收尾：非法松手（放不下）才抖一下；合法 / 取出 / 取消 / 纯点击都直接清
+    const invalid = !overTray && this.lastPreview !== null && !this.lastPreview.check.ok;
+    this.onPreviewEnd?.(invalid);
     this.reset();
   }
 
@@ -230,6 +261,7 @@ export class DragController extends Component {
   private onTouchCancel(): void {
     if (DEBUG) console.warn('[DragController] 收到 TOUCH_CANCEL：本次拖拽按取消处理');
     if (this.dragging) this.emit({ type: 'cancel' });
+    this.onPreviewEnd?.(false);
     this.reset();
   }
 
@@ -264,13 +296,19 @@ export class DragController extends Component {
     const size = transform.contentSize;
     if (Math.abs(local.x) > size.width / 2 || Math.abs(local.y) > size.height / 2) return null;
 
-    const cell = board.snapToGrid(local.x, local.y);
+    const cell = board.localToGrid(local.x, local.y);
     const hit = this.boardItemAt?.(cell[0], cell[1]) ?? null;
     if (hit === null) return null;
 
+    // offset 用 snapToGrid（round）而不是命中格：两者在格中心会差出一格，
+    // 若用命中格算 offset，grab 后锚点 = snap(手指) - offset ≠ 原锚点，
+    // 物品还没动 ghost 就先跳一格。用 snap 格则 grab 那一刻锚点恰好 = 原锚点，
+    // "点哪抓哪、原地不跳"；命中判定用 floor 是 TDD 8.3 铁律 2 的本意
+    //（"这一格有什么"是命中语义，snap 是锚点语义，两个口径各管各的）。
+    const snapCell = board.snapToGrid(local.x, local.y);
     return {
       itemId: hit.itemId,
-      offset: grabOffsetForBoardCell(hit.anchor, cell),
+      offset: grabOffsetForBoardCell(hit.anchor, snapCell),
       from: 'board',
     };
   }
@@ -301,9 +339,15 @@ export class DragController extends Component {
     this.dragging = true;
     this.consumedByDrag = true;
 
-    const anchor = this.anchorAt(uiX, uiY, pending.offset);
+    // grab 锚点用**按下点**算，与 pickAt 算 offset 的位置同源：
+    // offset = snap(按下) − A，故 anchor = snap(按下) − offset = A（物品原位），
+    // 不跳。若改用阈值跨越那一刻的 move 点，按下与跨越两个 snap 在格中心附近
+    // 会因 round(0.5) 抖动差出一格，于是 ghost 一开始就错位（实测：抓 L01_D
+    // 中心，grab 锚点跑到 [0,−1] 而非原位 [0,0]）。
+    const anchor = this.anchorAt(this.startX, this.startY, pending.offset);
     this.lastAnchor = anchor;
     this.emit({ type: 'grab', itemId: pending.itemId, anchor });
+    this.emitPreview(uiX, uiY);
 
     if (DEBUG) {
       console.log(
@@ -323,6 +367,7 @@ export class DragController extends Component {
 
     this.lastAnchor = anchor;
     this.emit({ type: 'move', anchor });
+    this.emitPreview(uiX, uiY);
   }
 
   /** 手指位置 → 物品锚点。棋盘外的手指也会算出界外锚点（交给 core 判非法） */
@@ -350,9 +395,24 @@ export class DragController extends Component {
     this.onIntent?.(intent);
   }
 
+  /**
+   * 喂预览给 `PreviewLayer`：用 `previewProvider` 把当前锚点换成 `DragPreview`，
+   * 连同「手指是否在托盘带内」一起发出。grab/move 各调一次，锚点没变时不调
+   * （`emitMoveIfChanged` 已节流）。
+   */
+  private emitPreview(uiX: number, uiY: number): void {
+    const pending = this.pending;
+    const anchor = this.lastAnchor;
+    if (pending === null || anchor === null) return;
+    const preview = this.previewProvider?.(pending.itemId, anchor, pending.from) ?? null;
+    this.lastPreview = preview;
+    this.onPreview?.(preview, this.overTray(uiX, uiY));
+  }
+
   private reset(): void {
     this.pending = null;
     this.dragging = false;
     this.lastAnchor = null;
+    this.lastPreview = null;
   }
 }

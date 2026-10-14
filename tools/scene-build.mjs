@@ -364,6 +364,24 @@ const trayRootNode = () => ({
   ],
 });
 
+/** 棋盘带中心 y（设计坐标，与 core/config 的 UI_BOARD_BAND_CENTER_Y 同口径） */
+const BOARD_BAND_CENTER_Y = (LAYOUT.tray + LAYOUT.toolbar - LAYOUT.header) / 2;
+
+/**
+ * M1-5：预览层。挂在棋盘带中心（与 BoardRoot 同位置），Graphics 直接画在 board-local
+ * 坐标系里（gridToLocal 给的就是 board-local）。作为 SafeAreaRoot 的子节点、排在
+ * BoardRoot 之后，渲染在棋盘格之上。
+ */
+const previewRootNode = () => ({
+  name: 'PreviewRoot',
+  layer: LAYER.UI_2D,
+  pos: [0, BOARD_BAND_CENTER_Y, 0],
+  components: [
+    builtin('uiTransform', [BOARD_AREA.width, BOARD_AREA.height]),
+    script('PreviewLayer', { boardView: refTo('BoardRoot', 'BoardView') }),
+  ],
+});
+
 const SCENES = {
   'Boot.scene': {
     sceneName: 'Boot',
@@ -377,7 +395,7 @@ const SCENES = {
     sceneName: 'Game',
     nodes: [
       cameraNode(),
-      canvasNode([safeAreaRootNode([boardRootNode(), trayRootNode()])]),
+      canvasNode([safeAreaRootNode([boardRootNode(), trayRootNode(), previewRootNode()])]),
       {
         // M1-0：会话引导。与官方 taxi 模板的 GameRoot 同形状（Scene 根节点不带组件）
         // M1-4：拖拽手势也挂在这里——它只用全局 input，不需要自己的节点位置，
@@ -397,6 +415,7 @@ const SCENES = {
             boardView: refTo('BoardRoot', 'BoardView'),
             trayView: refTo('TrayRoot', 'TrayView'),
             dragController: refTo('GameRoot', 'DragController'),
+            previewLayer: refTo('PreviewRoot', 'PreviewLayer'),
           }),
         ],
       },

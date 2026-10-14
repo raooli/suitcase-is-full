@@ -472,10 +472,14 @@ async function main() {
         // 真实拖拽手势：按下 → 若干插值 touchMove → 松手。
         // 必须真的插值移动（而不是只发起点和终点）：引擎靠 move 序列判定
         // 「过了拖拽阈值」并逐格更新锚点，跳变式输入验不出节流与跟手。
-        const [x1, y1, x2, y2] = step.spec.split(',').map(Number);
+        // 可选第 5 段 = 截图路径：在 touchEnd 前拍一张，用来目测拖拽中的 ghost
+        // （松手后 ghost 就清了，事后拍不到）。
+        const parts = step.spec.split(',');
+        const [x1, y1, x2, y2] = parts.slice(0, 4).map(Number);
         if (![x1, y1, x2, y2].every((n) => Number.isFinite(n))) {
-          throw new Error(`--drag 格式应为 x1,y1,x2,y2：${step.spec}`);
+          throw new Error(`--drag 格式应为 x1,y1,x2,y2[,shot.png]：${step.spec}`);
         }
+        const shot = parts.length >= 5 ? parts[4] : null;
         const point = (x, y) => ({ x, y, radiusX: 1, radiusY: 1, force: 1, id: 1 });
         await session.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [point(x1, y1)] });
         await sleep(120);
@@ -489,8 +493,9 @@ async function main() {
           await sleep(40);
         }
         await sleep(80);
+        if (shot !== null) await shoot(shot);
         await session.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
-        console.log(`👆 拖拽 (${x1}, ${y1}) → (${x2}, ${y2})`);
+        console.log(`👆 拖拽 (${x1}, ${y1}) → (${x2}, ${y2})${shot === null ? '' : ` 📸 ${shot}`}`);
         await sleep(600);
       }
     }

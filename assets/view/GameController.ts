@@ -15,6 +15,7 @@ import { DEBUG } from 'cc/env';
 import {
   GameSession,
   LevelDataError,
+  canPlace,
   eventName,
   findItem,
   itemAtCell,
@@ -22,10 +23,11 @@ import {
   rotateBy,
   solve,
 } from '../core';
-import type { BoardSpec, LevelSpec } from '../core';
+import type { BoardSpec, DragPreview, LevelSpec, RC } from '../core';
 import { BoardView } from './BoardView';
 import { DragController } from './DragController';
 import { ItemView } from './ItemView';
+import { PreviewLayer } from './PreviewLayer';
 import { TrayView } from './TrayView';
 
 const { ccclass, property } = _decorator;
@@ -57,6 +59,10 @@ export class GameController extends Component {
   @property(DragController)
   dragController: DragController | null = null;
 
+  /** 拖拽预览层（M1-5）：合法/非法/取出 三态 ghost */
+  @property(PreviewLayer)
+  previewLayer: PreviewLayer | null = null;
+
   private gameSession: GameSession | null = null;
 
   /** 会话句柄。装配失败（关卡数据有问题）时为 `null`，调用方必须判空 */
@@ -70,6 +76,9 @@ export class GameController extends Component {
 
     const level = this.gameSession.level;
     this.boardView?.renderBoard(level.board);
+
+    // 预览层（M1-5）需要查物品形状，给它同一关的 level（只读）
+    this.previewLayer?.init(level);
 
     if (DEBUG) {
       const snapshot = this.gameSession.debugSnapshot();
@@ -97,6 +106,19 @@ export class GameController extends Component {
    * 棋盘命中由 `core.itemAtCell` 从 `state.placements` 现算，
    * 本组件不缓存"哪格是谁的"。
    */
+  /**
+   * 拖拽接线（M1-4 + M1-5）。
+   *
+   * **意图出口现在是 Console 挂具**，不是 `dispatch`——实施计划 M1-4 注：
+   * M1-6 未完成前先人工比对意图序列是否正确，接线时把下面这一行换成
+   * `session.dispatch(intent)` 即可（本方法其余部分不动）。
+   *
+   * **预览挂具（M1-5）**：`previewProvider` 用 `canPlace` 现算 `DragPreview.check`，
+   * 不碰 session。M1-6 接线后改由 `session.getPreview()` 直接提供，挂具这行删掉即可。
+   *
+   * 棋盘命中由 `core.itemAtCell` 从 `state.placements` 现算，
+   * 本组件不缓存"哪格是谁的"。
+   */
   private wireDrag(level: LevelSpec): void {
     const drag = this.dragController;
     if (drag === null) return;
@@ -111,9 +133,36 @@ export class GameController extends Component {
       return itemAtCell(level, session.getState().placements, row, col);
     };
 
+    // M1-5 挂具：构造 DragPreview（check 由 canPlace 算，不查碰撞在 view）
+    drag.previewProvider = (itemId, anchor, from) => this.buildPreview(itemId, anchor, from);
+    drag.onPreview = (preview, overTray) => this.previewLayer?.show(preview, overTray);
+    drag.onPreviewEnd = (invalid) => this.previewLayer?.endPreview(invalid);
+
     // 点击出口：托盘的点选现在也由 DragController 判（点 vs 拖共用手势，
     // 仲裁必须只此一处），本组件只负责把它接到 select 意图上
     drag.onTap = (itemId) => this.selectItem(itemId);
+  }
+
+  /**
+   * 构造 `DragPreview`（M1-5 挂具，M1-6 接线后由 `session.getPreview()` 取代）。
+   *
+   * 复刻 `GameSession.buildPreview` 的口径：朝向来自 `trayRotations`（托盘起拖）
+   * 或 `placements`（棋盘起拖），`check` 走 `canPlace`。**不存任何状态**——
+   * 每次 move 都用当前 `state` 现算，避免与 session 的真相分叉。
+   */
+  private buildPreview(itemId: string, anchor: RC, from: 'tray' | 'board'): DragPreview | null {
+    const session = this.gameSession;
+    if (session === null) return null;
+    const state = session.getState();
+    const item = findItem(session.level, itemId);
+    if (item === undefined) return null;
+
+    const rotation =
+      from === 'board'
+        ? (state.placements.get(itemId)?.rotation ?? 0)
+        : (state.trayRotations.get(itemId) ?? 0);
+    const check = canPlace(session.level, state, { itemId, row: anchor[0], col: anchor[1], rotation });
+    return { itemId, anchor, rotation, check, from };
   }
 
   /**
