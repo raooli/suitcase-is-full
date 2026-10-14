@@ -23,6 +23,18 @@
 
 ## 提交记录（倒序）
 
+### `6cefd4a` · fix: PreviewLayer 停抖动后归位节点（非法松手 160ms 内连抓会留下 8px 偏移）
+
+| 项 | 内容 |
+| --- | --- |
+| 日期 | 2026-10-14 17:43 |
+| 完整 hash | `6cefd4a`（见 `git log -1 --format=%H`） |
+| 类型 | 缺陷修复（M1-6 交付时记录的潜在小 bug：PreviewLayer 抖动被打断后的节点残留偏移） |
+| 文件 | `assets/view/PreviewLayer.ts`、`tools/preview-check.mjs`（2 文件，+65/−9） |
+| 要点 | ① `show()`/`endPreview()` 原来只 `Tween.stopAllByTarget(this.node)` 不重置 `node.position`：抖动是位移 tween（±8px/160ms），被打断时节点留在中断帧偏移上，而 ghost 按本节点局部坐标绘制 → 整场 ghost 跟着偏；`shakeAndClear` 又以当前位置为基准，偏移被下一次抖动"继承"、越叠越偏。**修复**：`onLoad` 存 `basePosition`，新增 `stopShake()`（停 tween + 归位），`show()`/`endPreview()` 改走它；`shakeAndClear` 基准位改取 `basePosition` ② `preview-check.mjs` 新增 `--gap`（拖拽后等待，默认 600ms）与 `--drag-wait`（touchStart 后等多久发首个 move，默认 120ms）两个时序旋钮——合成输入管线有 ~34ms 投递延迟，默认节奏够不到 160ms 抖动窗口；DEBUG 日志加 `performance.now()` 时间戳（ghost/抖动起播/抖动播完/原生触摸事件）供时序取证 |
+| 验收 | 机械证据（同一手势序列同一时序，唯一差别是修复）：修复前抖动开始后 91ms 连抓 → `nodePos=(2.78,68)`；修复后同样 91ms 中断 → `nodePos=(0,68)`。回归：默认时序下非法松手抖动仍完整播完（174ms，帧量化后）；`npm run check` 199/199，`npm run preview:game` 无 Console 错误 |
+| 推翻 | 无 |
+
 ### `96ca176` · feat: M1-6 意图接线 dispatch（状态驱动视图刷新）+ ItemLayer 防幽灵
 
 | 项 | 内容 |

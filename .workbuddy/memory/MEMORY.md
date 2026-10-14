@@ -45,4 +45,6 @@
 - 命名：`GameController`（不是 `GameScene`，避免与 `cc.Scene`/`Game.scene` 撞名）。
 - **取整语义分场景**（M1-5 实测）：**抓取锚点用按下点算**（与 `grabOffset` 同源，否则格中心 round 不稳会跳到 `[0,-1]`）；**board 命中用 `localToGrid`（floor）**（格中心的点不能 round 进位到右下斜邻格，否则按物品中心抓不起来）；**move 锚点用 `snapToGrid`（round）**（TDD 6.3 裁决）。三处不同是有意的，别"统一"成同一个。
 - **Console 取证只看最后 80 行**（`preview-check.mjs` 的 `slice(-80)`）：长手势序列会被截断，靠 `--grep <子串>` 过滤看全量（注意 `--grep` **只打印匹配行**，不过滤时只留尾部；且是**纯子串**匹配、不认 `|` 正则——写 `a|b` 会 0 命中，用单关键词）。`--drag` 第 5 段截图是 touchEnd **前**的中途态；拍终态用独立 `--shot` step。
+- **时序取证（复现"动画没播完就连抓"类 bug）**：合成输入管线（CDP → 浏览器 → 引擎）有 **~34ms 投递延迟**，默认 `--drag` 节奏（touchStart 后等 120ms、拖拽间隔 600ms）够不到 160ms 的回弹窗口。压时序用 `--gap 0 --drag-wait 40`（拖拽后等待 / touchStart 后等多久发首个 move）。DEBUG 日志带 `performance.now()` 时间戳（ghost、抖动起播/播完、原生触摸事件），时序类 bug 全靠它对表。**停位移 tween 必须同时归位节点**（`Tween.stopAllByTarget` 只停动画，节点留在中断帧偏移上）——`PreviewLayer.stopShake` 是范本。
 - **改状态唯一入口 = `dispatch`**（M1-6 定型）：view 一律 `onIntent → GameController.handleIntent → session.dispatch`；重绘只由**真·改状态**事件触发（`state-changed` 每次 dispatch 都带，含 move，拿它当触发器会每移一格全盘重建）。`grab` 不改 state，故拖拽中被拖物品要 `setHiddenItem` 双视图排除（ItemLayer/TrayView）防"原位一份 + ghost 一份"。
+- **提交前先 `git status`**：仓库可能有其他协作者（如用户本人）的在途改动（如 prop_02_*.png 素材更换），`git add -A` 会一并卷入。只暂存自己的文件；误入了用 `git reset --soft HEAD~1` + `git restore --staged <路径>` 拆分，工作区改动不受影响。
