@@ -23,6 +23,30 @@
 
 ## 提交记录（倒序）
 
+### `8a81786` · chore: 加 typecheck:view 把 view 纳入 CI 类型检查
+
+| 项 | 内容 |
+| --- | --- |
+| 日期 | 2026-10-14 23:46 |
+| 完整 hash | `8a81786` |
+| 类型 | 工程设施（本地检查链扩容，不改运行时行为） |
+| 文件 | `tsconfig.view.json`（新，48 行）、`package.json`、`assets/view/GameController.ts`、`assets/view/ItemLayer.ts`、`assets/view/PreviewLayer.ts`、`assets/view/TrayView.ts`（6 文件，+54/−5） |
+| 要点 | ① **动机**：view 层此前没有任何静态检查关卡——`tsconfig.node.json` 的 `include` 只有 `assets/core/**`、`tools/**`、`test/**`，**不含 `assets/view/`**，而 Cocos 构建也**不做类型检查**。于是 M1-7 那次 `PANEL_ANIM_MS is not defined`（常量改名漏改）在 `npm run check` 全绿的情况下只在运行时炸，还连带引发五连崩（见 `742ce39` 条目）② **`tsconfig.view.json`（新）**：`extends ./temp/tsconfig.cocos.json`（Cocos 生成的基座，自带 cc 声明文件与 `experimentalDecorators`），`include: ["assets/view/**/*.ts"]`。两处**必须显式重写**的字段：`types`（继承而来的相对路径会以**被继承文件所在目录**为基准解析，留空会指到 `<root>/temp/temp/declarations/*` 而找不到 cc 声明）、`target/lib`（提到 ES2020——view 经 import 会连 core 一起检查，按基座的 ES2015 会给 `BigInt`/`padStart`/`Array.includes` 报一堆假错）③ 7 处 `onLoad`/`onEnable`/`onDisable` 补 `override` 修饰符以过 `noImplicitOverride`（DragController ×2、GameController、ItemLayer、PreviewLayer、SuccessOverlay、TrayView；其中 DragController/SuccessOverlay 两处随 `fcb894e` 一并提交）。引擎侧 TS 为 4.9.5（≥4.3 支持该修饰符，且编译期擦除，不影响构建产物）④ `package.json`：新增 `typecheck:view` 脚本并**编入 `npm run check`**（顺序在 `typecheck` 之后） |
+| 验收 | **负向验证**：临时在 `SuccessOverlay.ts` import 一个不存在的常量 `UI_OVERLAY_PANEL_RADIUS_TYPO` → `npm run typecheck:view` exit 2（`TS2724: '"../core"' has no exported member named '…TYPO'`），而同一时刻旧 `npm run typecheck` exit 0、0 错误——**正是这个漏洞本身**。回退后 `npm run check` **200/200** 全绿 |
+| 推翻 | 不改既有结论；补充/修正了 `742ce39` 条目里"view 的类型错误只有构建这一关能抓"的说法——现在多了一道 CI 关卡 |
+
+### `fcb894e` · fix: M1-7 复查三处（复玩战绩不刷新 / settle 回调叠加 / 冻结期手势靠残留标志）
+
+| 项 | 内容 |
+| --- | --- |
+| 日期 | 2026-10-14 23:45 |
+| 完整 hash | `fcb894e` |
+| 类型 | 缺陷修复（P1 真缺陷 + P2/P3 健壮性）+ 文档补记（P4） |
+| 文件 | `assets/view/SuccessOverlay.ts`、`assets/view/DragController.ts`、`docs/05-实施计划-v1.0.md`（3 文件，+78/−27） |
+| 要点 | ① **P1（真缺陷）复玩后战绩不刷新**：`show()` 调 `buildOnce(event)`，后者在 `built === true` 时提前 return，于是「第 N 关」「N 步 · N.Ns」两个 Label 只在**首次**构建时写入。触发路径是 M1-7 自己引入的 `replayLevel()`——同一关会发第二次 `level-cleared`，与注释里"同一关只会发一次"的心智模型冲突。**实测铁证**：第二次通关日志 `🎉 通关！L1 4 步 5.9s`，面板显示首次的 `15.2s`。**修法**：把随事件变化的文案抽成 `applyEvent(event)`，在 `show()` 里**无条件调用**；节点创建仍留在 `buildOnce()`（另把 `levelLabel` 提为字段）。**同类结构预防**：M2 的 `GuideOverlay`（首次引导）/`ConfirmDialog`（重置确认）是同样的懒加载形状，照此办理 ② **P2 settle 回调叠加**：`show()` 现在开头先 `unscheduleAllCallbacks()`——360ms 内二次 `show()` 会叠两个 settle 回调（当前因幂等 + 同关只发一次而无害，但属"碰巧正确"）③ **P3 冻结期手势靠残留标志**：`onTouchStart` 的冻结分支在 `consumedByDrag = false` / `pending = null` **之前**就 return，于是冻结期的 `touchend` 是拿**上一次手势残留的** `consumedByDrag` 判定"点还是拖"——上次恰好是拖拽（通关必由 drop 完成）所以兜住了 select tap，但这与"一条 view 异常 → 五连崩"是同一种病（靠残留状态碰巧正确）。**修法**：按下即 `beginGesture()` 归零（含 `consumedByDrag`），并记 `gestureFrozen = inputFrozen() === true`；**整段手势**（`onTouchMove`/`onTouchEnd`/`onTouchCancel`）据此显式作废。比"清标志"更进一步：通关动画只有 360ms，一个慢手势可能按下时冻结、松手时已解冻，补发意图等于在玩家刚看的结算画面上偷偷改状态 ④ **P4 计划缺口（docs/05）**：补 `M2-10` 完整庆祝动效条目（UI Spec 5.3：回弹 100–180ms → 合盖 250–450ms → 星光 → 按钮可用）——原来只在 M1-7 代码注释里声明"留 M2"，M2 表里没有对应行，容易漏；并在 M2-1 加顺带项：接上关卡加载后要把「下一关」调回**主按钮**、「再来一次」降为**次入口**，第 10 关不出现「下一关」 |
+| 验收 | 无头预览合并用例：L1 四拖通关 → 点「再来一次」→ 再四拖通关，两次入场的战绩**各自刷新**（`--grep 浮层入场` 全量对照：第一次 `15.2s`、第二次 `5.8s`；截图面板显示 `4 步 · 5.9s`）→ 冻结期 5 组触摸**零处理**（连 `[DragController] touch` 日志都没有，证明在 `onTouchStart` 就被 gate 挡住，不再依赖残留标志）→ `npm run check` **200/200** → `npm run preview:game` 无 Console 错误 |
+| 推翻 | 推翻 `742ce39` 中"同一关只会发一次 `level-cleared`，重复调用是安全的"这一注释所依赖的心智模型——该结论对**单次通关**成立（AC12 由 phase 保证），但漏了 replay 后再来一次 `show()` 的路径 |
+
 ### `742ce39` · feat: M1-7 通关判定接线 + SuccessOverlay 通关浮层（WinAnimating 输入冻结）
 
 | 项 | 内容 |

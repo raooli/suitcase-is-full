@@ -11,18 +11,19 @@
 
 ## 交付纪律（每个任务）
 
-1. `npm run check`（typecheck + check:arch + verify:levels + vitest）；
+1. `npm run check`（typecheck + **typecheck:view** + check:arch + verify:levels + vitest）；
 2. `npm run preview:game`（= CLI 构建 Game 场景 + 无头预览，有 error 即失败）；
 3. 双绿才提交；CHANGELOG 追加一条（一 commit 一条，倒序，文件用 `git show --stat` 核对）。
 
-> 注意：`typecheck`（tsconfig.node.json）**不含 `assets/view/`**——view 的类型错误只有"构建"这一关能抓，所以预览不可省。**且 Cocos 构建也不做类型检查**（M1-7 实测：view 里引用一个不存在的常量，构建照过、运行时才炸 ReferenceError）——view 的变量名/签名错误**只有运行能抓**，改完 view 必须跑预览，别以为构建绿了就没事。
+> **view 的类型检查（M1-7 后补，`8a81786`）**：`typecheck`（tsconfig.node.json）的 `include` **不含 `assets/view/`**，而 **Cocos 构建也不做类型检查**——M1-7 实测"view 里引用一个不存在的常量"构建照过、运行时才炸 ReferenceError（还连带五连崩）。为此新增 `tsconfig.view.json` + `npm run typecheck:view`（已编入 `check`）。两处必须显式重写：`types`（继承自 `temp/tsconfig.cocos.json` 的相对路径会以**被继承文件所在目录**为基准解析，留空会指到 `temp/temp/declarations/*`）、`target/lib` 提到 ES2020（否则连 core 一起检查时 `BigInt`/`padStart` 报假错）。视图里 `onLoad`/`onEnable`/`onDisable` 需 `override`（`noImplicitOverride`；引擎侧 TS 4.9.5 ≥ 4.3，编译期擦除不影响产物）。**预览仍不可省**：类型检查抓不到"逻辑/时序"错误。
 
 ## 引擎限制与状态机不变式（实测）
 
 - **一个节点只能有一个 renderable 组件**（Graphics/Label/Sprite…）：给已有 Graphics 的节点再 `addComponent(Graphics)` 会被引擎**静默拒绝**（Console 一条 `Can't add renderable component…` warning，绘制内容一个不出现）。同节点要多组绘制就复用同一 Graphics（`fill()` 消费 path，可反复 `circle()+fill()`），或建子节点。
 - **冻结门必须覆盖所有 intent handler，含清理路径**（M1-7 定稿补全）：`GameSession` 的 8 个写状态 handler 全部有 `isInputFrozen()` 门（`handleDrop`/`handleCancel` 这两条"无预览清理分支"是 M1-7 才补上的——它们本来就会把 phase 改回 Idle/Selected，通关动画期间放过去等于把"已通关"抹掉、输入提前解冻）；`handleMove` **不需要门**：它靠 `phase !== 'Dragging'` 提前返回、且**只重建 preview 不写 phase**。新增 intent 类型时先问：它在冻结期被放进来的话，哪条路径会写 phase/state？
-- **懒加载构建（`built` 标志 + `buildOnce` 提前 return）必须把"随事件变化的文案"抽出来每次写**（M1-7 遗留真缺陷）：`SuccessOverlay.show()` → `buildOnce` 在 `built===true` 时 return，于是「第 N 关」「N 步 · N.Ns」只在**首次**写入，**复玩后第二次通关仍显示首次的战绩**（实测：第二次 6.1s，面板显示 15.1s）。M2 的 `GuideOverlay`/`ConfirmDialog` 同类结构照此预防。
-- **`completeWinAnimation()` 幂等**（`if (phase === 'WinAnimating')` 守卫）——所以重复调无害，但这不构成"可以重复 `scheduleOnce`"的理由（`show()` 仍应先 `unscheduleAllCallbacks`）。
+- **懒加载构建（`built` 标志 + `buildOnce` 提前 return）必须把"随事件变化的文案"抽成 `applyEvent()`，在入口无条件调用**（M1-7 真缺陷，`fcb894e` 修）：`SuccessOverlay.show()` 曾在 `built===true` 时整个 return，「第 N 关」「N 步 · N.Ns」只在**首次**写入，**复玩后第二次通关仍显示首次战绩**（实测：第二次 5.9s，面板显示 15.2s；`--grep 浮层入场` 两条对照是铁证）。M2 的 `GuideOverlay`/`ConfirmDialog` 同类结构照此预防。
+- **`completeWinAnimation()` 幂等**（`if (phase === 'WinAnimating')` 守卫）——所以重复调无害，但这不构成"可以重复 `scheduleOnce`"的理由：`SuccessOverlay.show()` 开头已加 `unscheduleAllCallbacks()`（`fcb894e`）。
+- **冻结期手势要显式作废，不能靠残留标志**（`fcb894e`）：`DragController` 原 `onTouchStart` 的冻结分支在清 `consumedByDrag`/`pending` 之前就 return，于是冻结期的 `touchend` 拿**上一次手势残留的** `consumedByDrag` 判"点还是拖"——上次恰好是拖拽（通关必由 drop 完成）才没发出 select tap，属"碰巧正确"。现改为：按下即 `beginGesture()` 归零 + `gestureFrozen = inputFrozen()`，**整段手势**（move/end/cancel）据此显式 return——顺带覆盖"慢手势跨过 360ms 动画期、松手时已解冻"的补发风险。
 - **L1 通关拖拽校准配方**（无头测试直接抄）：L1 = 3×3 / cellPx=114；解法 `A@(1,1) B@(1,0) C@(2,1) D@(0,0)`。在 0 号槽按 **(47,658)** 四件物品 `grabOffset` 全为 (0,0)；松手点取**格中心 x−10、y+10（board-local，y 向上）**⇒ **折算页面坐标 = (x−10, y−10)**（格中心处 `round(r+0.5)` 会进位到右下斜邻格）。页面坐标格中心：(81,240)(195,240)(309,240)/(81,354)(195,354)(309,354)/(81,468)(195,468)(309,468)。SuccessOverlay「再来一次」按钮 = 页面 **(195,520)**。
 - **落点→格的换算式（页面坐标，M1-7 实测钉死，比抄点位可靠）**：`pointerRow = round((pageY − 183) / 114)`、`pointerCol = round((pageX − 24) / 114)`；等价：col 桶 `[-33+114c, 81+114c)`、row 桶 `[126+114r, 240+114r)`（**桶边界正好压在格里视觉中心**，所以"格中心"落点会进位到右下邻格）。**起点也可改用托盘 0 号槽中心页面 (62,658)**（左对齐、件数变化不移动；该点 offset：1×2/1×3 类 = (0,1)、2×1 类 = (0,0)）。已验证可通关的四拖：`A@(1,0)=(138,297)` `B@(1,2)=(252,297)` `C@(2,0)=(138,411)` `D@(0,0)=(138,183)`。
 
@@ -54,6 +55,6 @@
 - 命名：`GameController`（不是 `GameScene`，避免与 `cc.Scene`/`Game.scene` 撞名）。
 - **取整语义分场景**（M1-5 实测）：**抓取锚点用按下点算**（与 `grabOffset` 同源，否则格中心 round 不稳会跳到 `[0,-1]`）；**board 命中用 `localToGrid`（floor）**（格中心的点不能 round 进位到右下斜邻格，否则按物品中心抓不起来）；**move 锚点用 `snapToGrid`（round）**（TDD 6.3 裁决）。三处不同是有意的，别"统一"成同一个。
 - **Console 取证只看最后 80 行**（`preview-check.mjs` 的 `slice(-80)`）：长手势序列会被截断，靠 `--grep <子串>` 过滤看全量（注意 `--grep` **只打印匹配行**，不过滤时只留尾部；且是**纯子串**匹配、不认 `|` 正则——写 `a|b` 会 0 命中，用单关键词）。`--drag` 第 5 段截图是 touchEnd **前**的中途态；拍终态用独立 `--shot` step。
-- **时序取证（复现"动画没播完就连抓"类 bug）**：合成输入管线（CDP → 浏览器 → 引擎）有 **~34ms 投递延迟**，默认 `--drag` 节奏（touchStart 后等 120ms、拖拽间隔 600ms）够不到 160ms 的回弹窗口。压时序用 `--gap 0 --drag-wait 40`（拖拽后等待 / touchStart 后等多久发首个 move）。DEBUG 日志带 `performance.now()` 时间戳（ghost、抖动起播/播完、原生触摸事件），时序类 bug 全靠它对表。**停位移 tween 必须同时归位节点**（`Tween.stopAllByTarget` 只停动画，节点留在中断帧偏移上）——`PreviewLayer.stopShake` 是范本。
+- **时序取证（复现"动画没播完就连抓"类 bug）**：合成输入管线（CDP → 浏览器 → 引擎）有 **~34ms 投递延迟**，默认 `--drag` 节奏（touchStart 后等 120ms、拖拽间隔 600ms）够不到 160ms 的回弹窗口。压时序用 `--gap 0 --drag-wait 40`（拖拽后等待 / touchStart 后等多久发首个 move）。**`--gap`/`--drag-wait` 是全局单值、不是逐步参数**（`parseArgs` 最后赋值生效，且只作用于 drag 之后的等待；`--tap` 后无等待）——写成 `--gap 700 … --gap 0` 会让**所有** drag 都用 0，症状是"点击紧跟拖拽 75ms 后发生、撞在入场动画里被忽略"（实测踩过）。DEBUG 日志带 `performance.now()` 时间戳（ghost、抖动起播/播完、原生触摸事件），时序类 bug 全靠它对表。**停位移 tween 必须同时归位节点**（`Tween.stopAllByTarget` 只停动画，节点留在中断帧偏移上）——`PreviewLayer.stopShake` 是范本。
 - **改状态唯一入口 = `dispatch`**（M1-6 定型）：view 一律 `onIntent → GameController.handleIntent → session.dispatch`；重绘只由**真·改状态**事件触发（`state-changed` 每次 dispatch 都带，含 move，拿它当触发器会每移一格全盘重建）。`grab` 不改 state，故拖拽中被拖物品要 `setHiddenItem` 双视图排除（ItemLayer/TrayView）防"原位一份 + ghost 一份"。
 - **提交前先 `git status`**：仓库可能有其他协作者（如用户本人）的在途改动（如 prop_02_*.png 素材更换），`git add -A` 会一并卷入。只暂存自己的文件；误入了用 `git reset --soft HEAD~1` + `git restore --staged <路径>` 拆分，工作区改动不受影响。
