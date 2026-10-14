@@ -121,7 +121,7 @@ export class ItemLayer extends Component {
     this.nodes.clear();
   }
 
-  onDestroy(): void {
+  override onDestroy(): void {
     this.clear();
   }
 }

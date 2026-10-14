@@ -80,7 +80,7 @@ export class GameController extends Component {
     return this.gameSession;
   }
 
-  onLoad(): void {
+  override onLoad(): void {
     this.gameSession = this.createSession();
     if (this.gameSession === null) return;
 

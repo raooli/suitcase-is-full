@@ -61,7 +61,7 @@ export interface TrayHit {
 export class TrayView extends Component {
   private slots: TraySlot[] = [];
 
-  onLoad(): void {
+  override onLoad(): void {
     const transform = this.node.getComponent(UITransform) ?? this.node.addComponent(UITransform);
     transform.setContentSize(TrayView.contentWidth(), UI_TRAY_HEIGHT - UI_TRAY_PADDING * 2);
     this.node.setPosition(0, UI_TRAY_BAND_CENTER_Y, 0);

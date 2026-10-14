@@ -72,7 +72,7 @@ export class PreviewLayer extends Component {
    */
   private basePosition: Vec3 = new Vec3();
 
-  onLoad(): void {
+  override onLoad(): void {
     const transform = this.node.getComponent(UITransform) ?? this.node.addComponent(UITransform);
     // 尺寸只是占位：Graphics 不被 UITransform 裁剪，越界 ghost（非法出界）照样画得出来
     transform.setAnchorPoint(0.5, 0.5);

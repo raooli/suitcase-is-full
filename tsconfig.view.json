@@ -1,0 +1,48 @@
+{
+  /**
+   * view 层类型检查（M1-7 后补）。
+   *
+   * 为什么单开一份：`typecheck`（tsconfig.node.json）只覆盖 core/tools/test，
+   * **不含 `assets/view/`**——view 里引用一个不存在的常量（M1-7 实测的
+   * `PANEL_ANIM_MS is not defined`）在 CI 上全绿，只有运行时炸。而 Cocos
+   * 构建**也不做类型检查**，等于 view 的类型错误没有任何静态关卡。
+   *
+   * 基座用 Cocos 生成的 `temp/tsconfig.cocos.json`（它带 cc 的声明文件与
+   * 装饰器开关），只需把 `include` 指向 view。core 会作为 import 依赖被
+   * 一并检查（两份配置的 strict 档位一致，不会互相打架）。
+   */
+  "extends": "./temp/tsconfig.cocos.json",
+
+  "compilerOptions": {
+    /* 基座是 target ES2015（Cocos 为兼容老运行时设的），但 view 会连 core
+       一起检查，而 core 用了 BigInt / padStart / Array.includes —— 按 ES2015
+       的 lib 会报一堆假错。这里提到 ES2020，与 tsconfig.node.json 对齐
+       （只影响检查时可用的 lib，不改变引擎的实际转译目标） */
+    "target": "ES2020",
+    "lib": ["ES2020", "DOM"],
+
+    "strict": true,
+    "noImplicitOverride": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUncheckedIndexedAccess": false,
+    "exactOptionalPropertyTypes": false,
+    "forceConsistentCasingInFileNames": true,
+
+    "isolatedModules": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "noEmit": true,
+
+    /* 显式重写：继承而来的相对路径会以被继承文件所在目录为基准解析，
+       直接留空会指向 <root>/temp/temp/declarations/* ——必须在这层覆盖 */
+    "types": [
+      "./temp/declarations/cc.custom-macro",
+      "./temp/declarations/cc",
+      "./temp/declarations/jsb",
+      "./temp/declarations/cc.env"
+    ]
+  },
+
+  "include": ["assets/view/**/*.ts"],
+  "exclude": ["node_modules", "build", "temp", "library", "local"]
+}
