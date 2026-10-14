@@ -62,6 +62,8 @@ function parseArgs(argv) {
     else if (a === '--shot') out.steps.push({ kind: 'shot', path: argv[++i] });
     else if (a === '--tap') out.steps.push({ kind: 'tap', spec: argv[++i], mouse: false });
     else if (a === '--tap-mouse') out.steps.push({ kind: 'tap', spec: argv[++i], mouse: true });
+    // `--drag x1,y1,x2,y2`：一次完整拖拽手势（按下 → 插值移动 → 松手）
+    else if (a === '--drag') out.steps.push({ kind: 'drag', spec: argv[++i] });
     else if (a === '--quiet') out.quiet = true;
   }
   return out;
@@ -400,6 +402,18 @@ async function main() {
     const diag = await evaluate(`(() => {
       const out = [];
       let hidden = [];
+      // 关掉浏览器的手势接管（pan/滚动会让它对页面派发 touchcancel 而不是 touchend，
+      // 引擎侧就表现为 TOUCH_CANCEL、拖拽永远收不到松手）。
+      try {
+        const st = document.createElement('style');
+        st.textContent = 'html,body,#GameCanvas{touch-action:none;}';
+        document.head.appendChild(st);
+        out.push('touch-action:none 已注入');
+      } catch (e) { out.push('touch-action 注入失败: ' + e.message); }
+      // 记录原生触摸事件，用来分辨"浏览器取消了"还是"引擎取消了"
+      for (const t of ['touchstart', 'touchend', 'touchcancel']) {
+        document.addEventListener(t, () => console.log('[native] ' + t), true);
+      }
       try {
         const p = globalThis.cc && globalThis.cc.profiler;
         if (p && typeof p.hideStats === 'function') { p.hideStats(); hidden.push('cc.profiler.hideStats()'); }
@@ -453,6 +467,30 @@ async function main() {
           await session.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
           console.log(`👆 触摸点击 (${x}, ${y})`);
         }
+        await sleep(600);
+      } else if (step.kind === 'drag') {
+        // 真实拖拽手势：按下 → 若干插值 touchMove → 松手。
+        // 必须真的插值移动（而不是只发起点和终点）：引擎靠 move 序列判定
+        // 「过了拖拽阈值」并逐格更新锚点，跳变式输入验不出节流与跟手。
+        const [x1, y1, x2, y2] = step.spec.split(',').map(Number);
+        if (![x1, y1, x2, y2].every((n) => Number.isFinite(n))) {
+          throw new Error(`--drag 格式应为 x1,y1,x2,y2：${step.spec}`);
+        }
+        const point = (x, y) => ({ x, y, radiusX: 1, radiusY: 1, force: 1, id: 1 });
+        await session.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [point(x1, y1)] });
+        await sleep(120);
+        const segments = 8;
+        for (let i = 1; i <= segments; i++) {
+          const t = i / segments;
+          await session.send('Input.dispatchTouchEvent', {
+            type: 'touchMove',
+            touchPoints: [point(x1 + (x2 - x1) * t, y1 + (y2 - y1) * t)],
+          });
+          await sleep(40);
+        }
+        await sleep(80);
+        await session.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+        console.log(`👆 拖拽 (${x1}, ${y1}) → (${x2}, ${y2})`);
         await sleep(600);
       }
     }

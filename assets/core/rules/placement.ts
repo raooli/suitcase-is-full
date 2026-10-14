@@ -25,6 +25,32 @@ export function findItem(level: LevelSpec, itemId: string) {
 }
 
 /**
+ * 棋盘上**这一格是谁的**（M1-4 起拖时的命中查询）。
+ *
+ * 命中结果给的是物品的**锚点**而不是"被点的那一格"——调用方要的是
+ * "从哪件物品的哪个位置抓起来的"，锚点 + 手指格才能算出 `grabOffset`。
+ *
+ * 占用关系一律走 `buildIndex`（唯一真相），不在这里另写一遍格遍历。
+ * 空格 / 障碍格 / 越界都返回 `null`。
+ */
+export function itemAtCell(
+  level: LevelSpec,
+  placements: ReadonlyMap<string, Placement>,
+  row: number,
+  col: number,
+): { readonly itemId: string; readonly anchor: RC } | null {
+  const owner = buildIndex(level, placements).ownerAt(row, col);
+  if (owner < 0) return null;
+
+  const item = level.items[owner];
+  if (item === undefined) return null;
+  const placement = placements.get(item.id);
+  if (placement === undefined) return null;
+
+  return { itemId: item.id, anchor: [placement.row, placement.col] as RC };
+}
+
+/**
  * 判断某个落位是否合法。判定顺序固定 **越界 → 障碍 → 重叠**（PRD R-03）。
  *
  * **关键细节——「忽略自身」：** 拖动已放置物品时，它自己的旧占位不能算碰撞。

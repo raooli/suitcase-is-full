@@ -13,7 +13,7 @@
  * 缩放是像素到像素，天然没有这个风险，且 M4-5 换真图后行为一致。
  */
 
-import { Color, Component, EventTouch, Graphics, Node, UITransform, _decorator } from 'cc';
+import { Color, Component, Graphics, Node, UITransform, _decorator } from 'cc';
 
 import {
   UI_PALETTE,
@@ -37,9 +37,27 @@ export class TraySlot extends Component {
   /** 当前缩略图节点与其缩放后的像素尺寸（DEBUG 对账用，也是 `setItem` 的记账） */
   private itemNode: Node | null = null;
   private itemSize: { readonly width: number; readonly height: number } | null = null;
+  /**
+   * 物品的**格数**（不是像素）。M1-4 从托盘拖起时，要按"手指压在缩略图的哪一格"
+   * 算 `grabOffset`，所以这里得记住形状尺寸。
+   *
+   * 存格数而不是让调用方再算一遍：包围盒格数是渲染时就已知的量，
+   * 再算一遍等于给"托盘看着是竖的、落盘变成横的"这类错位开第二个口子。
+   */
+  private shapeRows = 0;
+  private shapeCols = 0;
 
-  /** 点选回调。由 `TrayView` 注入；值是**物品 id**，不是状态 */
-  onSelect: ((itemId: string) => void) | null = null;
+  /**
+   * 本槽位**不注册任何触摸监听**（M1-4 起）。
+   *
+   * 原因很实在：Cocos 由"手指按下时命中的最深节点"认领整次触摸，而松手时
+   * 若手指已不在该节点内，引擎派发的是 **TOUCH_CANCEL 而不是 TOUCH_END**
+   * （`NodeEventProcessor._handleTouchEnd`）。槽位只有 76×76，从托盘拖到棋盘
+   * 松手必然在它外面 → 拖拽永远收不到"松手"。
+   *
+   * 点选因此上移给 `DragController`（它挂在覆盖整屏的 `SafeAreaRoot` 上），
+   * 顺带把"点 vs 拖"的仲裁收在一处——这正是 M1-3 注释里留给 M1-4 的活。
+   */
 
   /** 由 `TrayView` 在创建时调用一次；之后只通过 `setVisual` 改外观 */
   init(itemId: string, side: number): void {
@@ -50,12 +68,7 @@ export class TraySlot extends Component {
     transform.setContentSize(side, side);
 
     this.graphics = this.node.getComponent(Graphics) ?? this.node.addComponent(Graphics);
-    this.node.on(Node.EventType.TOUCH_END, this.onTouchEnd, this);
     this.redraw();
-  }
-
-  onDestroy(): void {
-    this.node.off(Node.EventType.TOUCH_END, this.onTouchEnd, this);
   }
 
   setVisual(visual: SlotVisual): void {
@@ -78,7 +91,7 @@ export class TraySlot extends Component {
    * ⚠️ 两套锚点：本节点锚点是**中心**（返回值以此为中心为原点），
    * 而物品节点锚点在**左上角**（`ItemView`，`y` 是包围盒左上角的落点）。
    */
-  setItem(node: Node): void {
+  setItem(node: Node, rows: number, cols: number): void {
     const transform = node.getComponent(UITransform);
     if (transform === null) return;
 
@@ -89,6 +102,18 @@ export class TraySlot extends Component {
 
     this.itemNode = node;
     this.itemSize = { width: fit.width, height: fit.height };
+    this.shapeRows = rows;
+    this.shapeCols = cols;
+  }
+
+  /** 缩略图节点（M1-4 命中测试后要把按下点换算进去） */
+  getItemNode(): Node | null {
+    return this.itemNode;
+  }
+
+  /** 物品的格数 `{rows, cols}`；还没装物品时是 `{0,0}` */
+  getShape(): { readonly rows: number; readonly cols: number } {
+    return { rows: this.shapeRows, cols: this.shapeCols };
   }
 
   /** DEBUG 对账用。带上缩略图的落点，居中与否在日志里就能核，不用靠截图目测 */
@@ -100,13 +125,6 @@ export class TraySlot extends Component {
         ? '无缩略图'
         : `缩略${Math.round(size.width)}×${Math.round(size.height)}@(${Math.round(at.x)},${Math.round(at.y)})`;
     return `${this.itemId}@${this.side}px(${this.visual}) ${thumb}`;
-  }
-
-  private onTouchEnd(event: EventTouch): void {
-    // 必须掐断冒泡：否则会一路冒到 `TrayRoot` 的"点空白取消选中"，
-    // 结果是"点一下物品 → 选中 → 立刻被取消"，现象极像没写选中逻辑。
-    event.propagationStopped = true;
-    this.onSelect?.(this.itemId);
   }
 
   private redraw(): void {

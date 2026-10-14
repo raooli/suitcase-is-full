@@ -17,12 +17,14 @@ import {
   LevelDataError,
   eventName,
   findItem,
+  itemAtCell,
   parseLevelBundle,
   rotateBy,
   solve,
 } from '../core';
 import type { BoardSpec, LevelSpec } from '../core';
 import { BoardView } from './BoardView';
+import { DragController } from './DragController';
 import { ItemView } from './ItemView';
 import { TrayView } from './TrayView';
 
@@ -51,6 +53,10 @@ export class GameController extends Component {
   @property(TrayView)
   trayView: TrayView | null = null;
 
+  /** 拖拽手势 → 意图（M1-4）。本组件只负责给它接上"意图往哪送" */
+  @property(DragController)
+  dragController: DragController | null = null;
+
   private gameSession: GameSession | null = null;
 
   /** 会话句柄。装配失败（关卡数据有问题）时为 `null`，调用方必须判空 */
@@ -78,12 +84,44 @@ export class GameController extends Component {
 
     // 托盘（M1-3）：顺序与可见性都来自 `state`，所以必须在上面的预演之后建
     this.renderTray(level);
+    this.wireDrag(level);
   }
 
   /**
-   * 托盘渲染 + 点选接线（M1-3）。
+   * 拖拽接线（M1-4）。
+   *
+   * **意图出口现在是 Console 挂具**，不是 `dispatch`——实施计划 M1-4 注：
+   * M1-6 未完成前先人工比对意图序列是否正确，接线时把下面这一行换成
+   * `session.dispatch(intent)` 即可（本方法其余部分不动）。
+   *
+   * 棋盘命中由 `core.itemAtCell` 从 `state.placements` 现算，
+   * 本组件不缓存"哪格是谁的"。
+   */
+  private wireDrag(level: LevelSpec): void {
+    const drag = this.dragController;
+    if (drag === null) return;
+
+    drag.onIntent = (intent) => {
+      console.log(`[GameController] 意图（M1-4 挂具，未接线）：${JSON.stringify(intent)}`);
+    };
+
+    drag.boardItemAt = (row, col) => {
+      const session = this.gameSession;
+      if (session === null) return null;
+      return itemAtCell(level, session.getState().placements, row, col);
+    };
+
+    // 点击出口：托盘的点选现在也由 DragController 判（点 vs 拖共用手势，
+    // 仲裁必须只此一处），本组件只负责把它接到 select 意图上
+    drag.onTap = (itemId) => this.selectItem(itemId);
+  }
+
+  /**
+   * 托盘渲染（M1-3）。
    *
    * 数据只从 `session.getState()` 拿，本组件不持有"托盘里有什么"的副本。
+   * 点选**不在**这里接线：M1-4 起托盘不再自带触摸监听，点击由 `DragController`
+   * 判（见 `wireDrag`），本组件只认那条出口。
    */
   private renderTray(level: LevelSpec): void {
     const session = this.gameSession;
@@ -91,7 +129,6 @@ export class GameController extends Component {
     if (session === null || tray === null || this.boardView === null) return;
 
     tray.render(session.getState(), level, this.boardView);
-    tray.onSelect = (itemId) => this.selectItem(itemId);
   }
 
   /**

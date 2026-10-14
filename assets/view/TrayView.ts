@@ -9,13 +9,22 @@
  *    然后由 `applyState()` 把结果画出来。
  * 3. **不做格算术**：物品按棋盘口径画好，这里只整体缩放（见 `TraySlot.setItem`）。
  *
+ * ## 触摸监听不在本组件（M1-4 起）
+ *
+ * M1-3 时点选监听挂在槽位上，M1-4 拖起一上手就撞墙：Cocos 由**按下时命中的最深
+ * 节点**认领整次触摸，松手点不在该节点内时派发的是 **TOUCH_CANCEL 而非 TOUCH_END**。
+ * 槽位只有 76×76，从托盘拖到棋盘松手必然在它外面 → 拖拽永远收不到"松手"。
+ *
+ * 所以监听整体交给挂在覆盖整屏 `SafeAreaRoot` 上的 `DragController`，
+ * "点 vs 拖"的仲裁也一并收在那里（本组件只保留 `hitTest` 供它查询命中）。
+ *
  * 已知缺口（明确留给 M2，不假装完成）：物品多于一行放得下时，超出的槽位
  * 暂时 `active = false` 并告警。UI Spec 5.2 要的是**横向滚动**，
  * 而滚动与"从托盘拖起"共享同一套手势仲裁（点 vs 拖 vs 滑），
- * 那是 M1-4 `DragController` 的活，M1-3 先不抢。
+ * 那是 M1-4 `DragController` 的活（仲裁点已就位，滚动本体仍在 M2）。
  */
 
-import { Component, Node, UITransform, _decorator } from 'cc';
+import { Component, Node, UITransform, Vec3, _decorator } from 'cc';
 import { DEBUG } from 'cc/env';
 
 import {
@@ -27,6 +36,7 @@ import {
   UI_TRAY_SLOT_MIN,
   UI_TRAY_HEIGHT,
   UI_TRAY_BAND_CENTER_Y,
+  bboxOf,
   findItem,
   rotateBy,
   trayRotationOf,
@@ -38,27 +48,23 @@ import { TraySlot } from './TraySlot';
 
 const { ccclass } = _decorator;
 
+/** 托盘命中结果（M1-4 起拖用）。`rows/cols` 是物品的**格数** */
+export interface TrayHit {
+  readonly itemId: string;
+  /** 缩略图节点：把按下点换算进它的局部坐标，才能知道"压住了哪一格" */
+  readonly node: Node;
+  readonly rows: number;
+  readonly cols: number;
+}
+
 @ccclass('TrayView')
 export class TrayView extends Component {
-  /**
-   * 点选请求。`itemId === null` = 点了托盘空白处（UI Spec 6 节：取消高亮回 Idle）。
-   * M1-6 接线后仍在——只是那时的调用方从"本组件"变成"事件分发"。
-   */
-  onSelect: ((itemId: string | null) => void) | null = null;
-
   private slots: TraySlot[] = [];
 
   onLoad(): void {
     const transform = this.node.getComponent(UITransform) ?? this.node.addComponent(UITransform);
     transform.setContentSize(TrayView.contentWidth(), UI_TRAY_HEIGHT - UI_TRAY_PADDING * 2);
     this.node.setPosition(0, UI_TRAY_BAND_CENTER_Y, 0);
-
-    // 点托盘空白 → 取消选中（冒泡被槽位掐断时不会走到这里）
-    this.node.on(Node.EventType.TOUCH_END, this.onEmptyTouched, this);
-  }
-
-  onDestroy(): void {
-    this.node.off(Node.EventType.TOUCH_END, this.onEmptyTouched, this);
   }
 
   /** 按 `state.tray` 重建全部槽位。MVP 不做增量 diff（与 `BoardView` 同策略） */
@@ -138,11 +144,45 @@ export class TrayView extends Component {
     this.node.addChild(node);
     node.setPosition(TrayView.slotCenterX(index, slotSize), 0, 0);
 
+    // 槽位不带触摸监听：命中查询统一走 `hitTest()`，由 DragController 调用
+    // （原因见文件头"触摸监听不在本组件"，以及 `TraySlot` 里同名的那段注释）
     const slot = node.addComponent(TraySlot);
     slot.init(itemId, slotSize);
-    slot.onSelect = (id) => this.onSelect?.(id);
     this.slots.push(slot);
     return slot;
+  }
+
+  /**
+   * 世界坐标命中了哪个槽位（M1-4 起拖）。只用槽位自身的 `UITransform` 做
+   * 矩形判定，**不碰格算术**——拿到的是"哪件物品 + 它几行几列"，
+   * 至于"压住了哪一格"由 `DragController` 换算。
+   */
+  hitTest(worldPos: Vec3): TrayHit | null {
+    for (const slot of this.slots) {
+      if (!slot.node.active) continue;
+      const transform = slot.node.getComponent(UITransform);
+      if (transform === null) continue;
+
+      const size = transform.contentSize;
+      const local = transform.convertToNodeSpaceAR(worldPos);
+      if (Math.abs(local.x) > size.width / 2 || Math.abs(local.y) > size.height / 2) continue;
+
+      const itemNode = slot.getItemNode();
+      if (itemNode === null) continue;
+      const shape = slot.getShape();
+      return { itemId: slot.getItemId(), node: itemNode, rows: shape.rows, cols: shape.cols };
+    }
+    return null;
+  }
+
+  /** 世界坐标是否落在托盘带内（松手位置判定：拖回托盘 → `removeToTray`） */
+  containsPoint(worldPos: Vec3): boolean {
+    const transform = this.node.getComponent(UITransform);
+    if (transform === null) return false;
+
+    const size = transform.contentSize;
+    const local = transform.convertToNodeSpaceAR(worldPos);
+    return Math.abs(local.x) <= size.width / 2 && Math.abs(local.y) <= size.height / 2;
   }
 
   private mountItem(
@@ -162,12 +202,9 @@ export class TrayView extends Component {
     const view = node.addComponent(ItemView);
     view.init(item, cellPx, source.shapeMetrics(cells));
 
+    const box = bboxOf(cells);
     const slot = slotNode.getComponent(TraySlot);
-    slot?.setItem(node);
-  }
-
-  private onEmptyTouched(): void {
-    this.onSelect?.(null);
+    slot?.setItem(node, box.height, box.width);
   }
 
   private clear(): void {

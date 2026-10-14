@@ -178,6 +178,17 @@ export const UI_TRAY_SLOT_PADDING = 8;
 /** 选中态描边宽度（UI Spec 6 节：点击托盘物品 → 高亮物品轮廓） */
 export const UI_TRAY_SELECT_BORDER = 3;
 
+/**
+ * 「点」与「拖」的分界位移（设计单位）。
+ *
+ * 手指位移超过它才算拖拽，否则算点击（走 M1-3 的点选）。
+ * 这条线是 M1-4 的手势仲裁：托盘的"点选"和"拖起"共用同一次 touchstart，
+ * 没有阈值就会出现"想点一下却拖起来了 / 想拖却只选中了"的误判。
+ *
+ * 8 设计单位 ≈ 320px 屏上 6.6 物理像素，比手指抖动大、比一次有意的拖拽小。
+ */
+export const UI_DRAG_THRESHOLD_PX = 8;
+
 /** 物品占位色块的描边宽度（设计单位）。依据 TDD 17.4「深色描边（2px，`color.brown`）」 */
 export const UI_ITEM_BORDER_PX = 2;
 

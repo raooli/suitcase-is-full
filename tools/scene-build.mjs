@@ -158,6 +158,11 @@ function refTo(nodeName, className) {
   return { __ref__: `${nodeName}/${className}` };
 }
 
+/** 节点引用（如 DragController 的 gestureRoot 指向 SafeAreaRoot），构建末尾统一解析 */
+function nodeRef(nodeName) {
+  return { __refNode__: nodeName };
+}
+
 // ───────────────────────── 场景装配 ─────────────────────────
 
 /** 设计分辨率 = UI Spec 基准画布 390×844（TDD 11.3 指定，Fit Width） */
@@ -191,7 +196,9 @@ function buildScene(sceneName, rootNodes) {
   });
 
   const scriptRegistry = new Map();
+  const nodeRegistry = new Map();
   const pendingRefs = [];
+  const pendingNodeRefs = [];
 
   const pushComponent = (spec, nodeIndex, seed, nodeName) => {
     let comp;
@@ -219,9 +226,9 @@ function buildScene(sceneName, rootNodes) {
       };
       scriptRegistry.set(`${nodeName}/${spec.script}`, objs.length);
       for (const [key, value] of Object.entries(spec.props ?? {})) {
-        if (value !== null && typeof value === 'object' && '__ref__' in value) {
-          pendingRefs.push({ comp, key, target: value.__ref__ });
-        }
+        if (value === null || typeof value !== 'object') continue;
+        if ('__ref__' in value) pendingRefs.push({ comp, key, target: value.__ref__ });
+        else if ('__refNode__' in value) pendingNodeRefs.push({ comp, key, name: value.__refNode__ });
       }
     }
     objs.push(comp);
@@ -246,6 +253,7 @@ function buildScene(sceneName, rootNodes) {
       _id: cocosId(`${seed}/${spec.name}`),
     });
     const nodeIndex = objs.length - 1;
+    nodeRegistry.set(spec.name, nodeIndex);
     objs[parentIndex]._children.push({ __id__: nodeIndex });
 
     const canvasIndexes = [];
@@ -276,6 +284,13 @@ function buildScene(sceneName, rootNodes) {
   for (const { comp, key, target } of pendingRefs) {
     const index = scriptRegistry.get(target);
     if (index === undefined) throw new Error(`组件引用找不到目标：${target}`);
+    comp[key] = { __id__: index };
+  }
+
+  // 解析节点引用
+  for (const { comp, key, name } of pendingNodeRefs) {
+    const index = nodeRegistry.get(name);
+    if (index === undefined) throw new Error(`节点引用找不到目标：${name}`);
     comp[key] = { __id__: index };
   }
 
@@ -365,13 +380,23 @@ const SCENES = {
       canvasNode([safeAreaRootNode([boardRootNode(), trayRootNode()])]),
       {
         // M1-0：会话引导。与官方 taxi 模板的 GameRoot 同形状（Scene 根节点不带组件）
+        // M1-4：拖拽手势也挂在这里——它只用全局 input，不需要自己的节点位置，
+        // 但必须在场景里存在才会 onEnable 注册监听。
         name: 'GameRoot',
         components: [
+          script('DragController', {
+            boardView: refTo('BoardRoot', 'BoardView'),
+            trayView: refTo('TrayRoot', 'TrayView'),
+            // 手势根节点 = 覆盖整屏的 SafeAreaRoot：手指必须在整次拖拽里都"在"它上面，
+            // 否则 Cocos 会在手指移出节点时派发 TOUCH_CANCEL 而不是 TOUCH_END（M1-4 实测）
+            gestureRoot: nodeRef('SafeAreaRoot'),
+          }),
           script('GameController', {
             levelId: 1,
             levelJson: assetRef('assets/data/levels.json', 'cc.JsonAsset'),
             boardView: refTo('BoardRoot', 'BoardView'),
             trayView: refTo('TrayRoot', 'TrayView'),
+            dragController: refTo('GameRoot', 'DragController'),
           }),
         ],
       },

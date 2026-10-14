@@ -63,6 +63,12 @@ export {
 } from './geometry/shape';
 export type { BBox } from './geometry/shape';
 export { clampAnchor, inBounds, rcKey, toIndex, toRC } from './geometry/coords';
+export {
+  anchorForPointerCell,
+  grabOffsetForBoardCell,
+  grabOffsetFromRatio,
+  sameRC,
+} from './geometry/drag';
 export { fitThumbnail } from './geometry/thumbnail';
 export type { ThumbnailFit } from './geometry/thumbnail';
 
@@ -81,6 +87,7 @@ export {
   findItem,
   insertByTrayOrder,
   isPlacementLegal,
+  itemAtCell,
   removeToTray,
   rotateInPlace,
   trayRotationOf,
