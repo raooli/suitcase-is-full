@@ -84,7 +84,7 @@ export class TrayView extends Component {
       const slot = this.createSlot(itemId, slotSize, index);
       if (index >= visible) {
         // 溢出：先不画（否则会越出托盘压到工具栏上），等 M2 的横向滚动
-        slot.node.active = false;
+        slot.markOverflow();
       }
       this.mountItem(slot.node, item, state, source, cellPx);
       index++;
@@ -111,6 +111,19 @@ export class TrayView extends Component {
   applyState(state: LevelState): void {
     for (const slot of this.slots) {
       slot.setVisual(slot.getItemId() === state.selectedId ? 'selected' : 'normal');
+    }
+  }
+
+  /**
+   * 拖拽中排除 / 恢复某件（M1-6）。
+   *
+   * 从托盘起拖时物品**仍在 `state.tray` 里**（`grab` 不改 state），槽位不排除
+   * 就是"托盘里还有一件、手指上还有 ghost"的幽灵态。排除只切显隐、不重建
+   * （松手后由 `GameController.refreshAll` 按新 state 整体重画）。
+   */
+  setHiddenItem(itemId: string | null): void {
+    for (const slot of this.slots) {
+      slot.setHidden(slot.getItemId() === itemId);
     }
   }
 

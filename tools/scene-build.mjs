@@ -349,9 +349,16 @@ const canvasNode = (contentRoots = []) => ({
 
 const boardRootNode = () => ({
   // M1-1：棋盘。初始尺寸只是编辑器里的占位，运行时由 BoardView 按关卡动态算
+  // M1-6：ItemLayer 与 BoardView 挂同一节点——物品是 BoardRoot 的子节点、
+  // 在格子之后创建，天然盖在格子上，且位置直接用 gridToLocal 的 board-local
+  // 坐标，不需要第二套换算（R-A6 唯一出口）
   name: 'BoardRoot',
   layer: LAYER.UI_2D,
-  components: [builtin('uiTransform', [BOARD_AREA.width, BOARD_AREA.height]), script('BoardView')],
+  components: [
+    builtin('uiTransform', [BOARD_AREA.width, BOARD_AREA.height]),
+    script('BoardView'),
+    script('ItemLayer', { boardView: refTo('BoardRoot', 'BoardView') }),
+  ],
 });
 
 const trayRootNode = () => ({
@@ -416,6 +423,7 @@ const SCENES = {
             trayView: refTo('TrayRoot', 'TrayView'),
             dragController: refTo('GameRoot', 'DragController'),
             previewLayer: refTo('PreviewRoot', 'PreviewLayer'),
+            itemLayer: refTo('BoardRoot', 'ItemLayer'),
           }),
         ],
       },

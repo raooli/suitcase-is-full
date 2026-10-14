@@ -46,6 +46,12 @@ export class TraySlot extends Component {
    */
   private shapeRows = 0;
   private shapeCols = 0;
+  /**
+   * 溢出标记（M1-3：一行放不下时缩槽位仍放不下 → 隐藏）。
+   * 与 M1-6 的「拖拽中排除」是两个独立的显隐理由，必须分开记——
+   * 否则拖拽结束恢复显示时，会把本应隐藏的溢出 slot 一起放出来。
+   */
+  private overflow = false;
 
   /**
    * 本槽位**不注册任何触摸监听**（M1-4 起）。
@@ -109,6 +115,21 @@ export class TraySlot extends Component {
   /** 缩略图节点（M1-4 命中测试后要把按下点换算进去） */
   getItemNode(): Node | null {
     return this.itemNode;
+  }
+
+  /** 溢出槽位（M1-3）：本行放不下，先隐藏，等 M2 的横向滚动 */
+  markOverflow(): void {
+    this.overflow = true;
+    this.node.active = false;
+  }
+
+  /**
+   * 拖拽中排除 / 恢复（M1-6）。`hidden === true` 时物品被拖起，
+   * 槽位跟着藏——拖拽中被拖物品还显示在托盘里 = 幽灵物品。
+   * 溢出的槽位不受影响（它本来就该藏着）。
+   */
+  setHidden(hidden: boolean): void {
+    this.node.active = !hidden && !this.overflow;
   }
 
   /** 物品的格数 `{rows, cols}`；还没装物品时是 `{0,0}` */

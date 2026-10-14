@@ -2,31 +2,31 @@
  * Game 场景的会话引导（实施计划 M1-0）。
  *
  * 职责边界（架构文档 4.3）：**只做装配**——把关卡资产变成 `GameSession`，
- * 再把它交给后续的 BoardView / TrayView / DragController 订阅。
- * 本组件不含任何玩法规则，也不做任何渲染。
+ * 再把它交给后续的 BoardView / TrayView / DragController / ItemLayer /
+ * PreviewLayer 订阅。本组件不含任何玩法规则，也不做任何渲染。
+ *
+ * M1-6 起本组件还是**单向数据流的接线总闸**（实施计划 M1.A）：
+ * 所有改变状态的请求都收敛到 `handleIntent()` → `session.dispatch()`，
+ * 返回的事件数组决定"刷什么、表现什么"——view 不直接改任何 core 状态。
  *
  * 挂载点：`Game.scene` 的 `GameRoot` 节点（与官方 2D 模板 taxi 的 `GameRoot`
  * 同一形状；Scene 根节点上不带组件，这是引擎示例的既有惯例）。
  */
 
-import { _decorator, Component, JsonAsset, Node } from 'cc';
+import { _decorator, Component, JsonAsset } from 'cc';
 import { DEBUG } from 'cc/env';
 
-import {
-  GameSession,
-  LevelDataError,
-  canPlace,
-  eventName,
-  findItem,
-  itemAtCell,
-  parseLevelBundle,
-  rotateBy,
-  solve,
+import { GameSession, LevelDataError, itemAtCell, parseLevelBundle } from '../core';
+import type {
+  BoardSpec,
+  Intent,
+  LevelSpec,
+  LevelState,
+  SessionResult,
 } from '../core';
-import type { BoardSpec, DragPreview, LevelSpec, RC } from '../core';
 import { BoardView } from './BoardView';
 import { DragController } from './DragController';
-import { ItemView } from './ItemView';
+import { ItemLayer } from './ItemLayer';
 import { PreviewLayer } from './PreviewLayer';
 import { TrayView } from './TrayView';
 
@@ -47,7 +47,7 @@ export class GameController extends Component {
   @property
   levelId = 1;
 
-  /** 棋盘渲染器。装配成功后由本组件把棋盘规格推给它（M1-6 起改为事件驱动） */
+  /** 棋盘渲染器。装配成功后由本组件把棋盘规格推给它 */
   @property(BoardView)
   boardView: BoardView | null = null;
 
@@ -62,6 +62,10 @@ export class GameController extends Component {
   /** 拖拽预览层（M1-5）：合法/非法/取出 三态 ghost */
   @property(PreviewLayer)
   previewLayer: PreviewLayer | null = null;
+
+  /** 棋盘已放置物品层（M1-6）：按 `state.placements` 全量渲染，与 BoardView 同节点 */
+  @property(ItemLayer)
+  itemLayer: ItemLayer | null = null;
 
   private gameSession: GameSession | null = null;
 
@@ -79,42 +83,32 @@ export class GameController extends Component {
 
     // 预览层（M1-5）需要查物品形状，给它同一关的 level（只读）
     this.previewLayer?.init(level);
+    // 物品层（M1-6）同理；初绘按初始 state（托盘全满、棋盘空的常态）
+    this.itemLayer?.init(level);
+    this.itemLayer?.render(this.gameSession.getState());
 
     if (DEBUG) {
-      const snapshot = this.gameSession.debugSnapshot();
       console.log(
         `[GameController] 会话就绪：L${level.levelId}《${level.title}》` +
           ` ${level.board.rows}×${level.board.cols} / ${level.items.length} 件物品`,
       );
-      console.log('[GameController] debugSnapshot() =', JSON.stringify(snapshot));
       BoardView.logSizingTable(this.bundleLevels());
-      this.debugPlaceFirstItem(level);
     }
 
-    // 托盘（M1-3）：顺序与可见性都来自 `state`，所以必须在上面的预演之后建
+    // 托盘（M1-3）：顺序与可见性都来自 `state`
     this.renderTray(level);
     this.wireDrag(level);
   }
 
   /**
-   * 拖拽接线（M1-4）。
+   * 拖拽接线（M1-4 起建、M1-6 接真）。
    *
-   * **意图出口现在是 Console 挂具**，不是 `dispatch`——实施计划 M1-4 注：
-   * M1-6 未完成前先人工比对意图序列是否正确，接线时把下面这一行换成
-   * `session.dispatch(intent)` 即可（本方法其余部分不动）。
-   *
-   * 棋盘命中由 `core.itemAtCell` 从 `state.placements` 现算，
-   * 本组件不缓存"哪格是谁的"。
-   */
-  /**
-   * 拖拽接线（M1-4 + M1-5）。
-   *
-   * **意图出口现在是 Console 挂具**，不是 `dispatch`——实施计划 M1-4 注：
-   * M1-6 未完成前先人工比对意图序列是否正确，接线时把下面这一行换成
-   * `session.dispatch(intent)` 即可（本方法其余部分不动）。
-   *
-   * **预览挂具（M1-5）**：`previewProvider` 用 `canPlace` 现算 `DragPreview.check`，
-   * 不碰 session。M1-6 接线后改由 `session.getPreview()` 直接提供，挂具这行删掉即可。
+   * **M1-6 起全部接真**：
+   * - `onIntent` → `handleIntent` → `session.dispatch`（唯一的改状态入口）；
+   * - `previewSource` → `session.getPreview()`（drag 期间由 session 维护，
+   *   view 不再用 `canPlace` 复刻一份——两份真相必然分叉）；
+   * - `inputFrozen` → 通关动画期间冻结手势（M1-7 生效；core 的
+   *   `isInputFrozen()` 是第二道防线）。
    *
    * 棋盘命中由 `core.itemAtCell` 从 `state.placements` 现算，
    * 本组件不缓存"哪格是谁的"。
@@ -123,9 +117,9 @@ export class GameController extends Component {
     const drag = this.dragController;
     if (drag === null) return;
 
-    drag.onIntent = (intent) => {
-      console.log(`[GameController] 意图（M1-4 挂具，未接线）：${JSON.stringify(intent)}`);
-    };
+    drag.onIntent = (intent) => this.handleIntent(intent);
+
+    drag.inputFrozen = () => this.isFrozen();
 
     drag.boardItemAt = (row, col) => {
       const session = this.gameSession;
@@ -133,36 +127,146 @@ export class GameController extends Component {
       return itemAtCell(level, session.getState().placements, row, col);
     };
 
-    // M1-5 挂具：构造 DragPreview（check 由 canPlace 算，不查碰撞在 view）
-    drag.previewProvider = (itemId, anchor, from) => this.buildPreview(itemId, anchor, from);
+    // 预览只从 session 读（M1-5 的 canPlace 挂具已删）：grab/move 的 dispatch
+    // 在 onIntent 里同步跑完，session 的 preview 就是最新的
+    drag.previewSource = () => this.gameSession?.getPreview() ?? null;
     drag.onPreview = (preview, overTray) => this.previewLayer?.show(preview, overTray);
     drag.onPreviewEnd = (invalid) => this.previewLayer?.endPreview(invalid);
 
-    // 点击出口：托盘的点选现在也由 DragController 判（点 vs 拖共用手势，
-    // 仲裁必须只此一处），本组件只负责把它接到 select 意图上
-    drag.onTap = (itemId) => this.selectItem(itemId);
+    // 点击出口：托盘的点选也由 DragController 判（点 vs 拖共用手势，
+    // 仲裁必须只此一处），本组件把它并进同一入口
+    drag.onTap = (itemId) => this.handleIntent({ type: 'select', itemId });
+  }
+
+  // ───────────────────────── 单向数据流总闸（M1-6） ─────────────────────────
+
+  /**
+   * **一切改变状态的请求的唯一入口**（M1.A 铁律 ①：view 不直接改 core 状态）。
+   *
+   * `dispatch` 是原子提交：状态变更与事件在同一次调用里返回，本方法据此
+   * **一次性**完成视图维护，禁止在单个事件回调里二次改状态（实施计划 M1-6 注）。
+   */
+  private handleIntent(intent: Intent): void {
+    const session = this.gameSession;
+    if (session === null) return;
+
+    const result = session.dispatch(intent);
+    this.afterDispatch(intent, result);
   }
 
   /**
-   * 构造 `DragPreview`（M1-5 挂具，M1-6 接线后由 `session.getPreview()` 取代）。
+   * dispatch 之后：① 维护拖拽生命周期视图（防幽灵）→ ② 刷选中态 →
+   * ③ 按事件决定重绘与表现。
    *
-   * 复刻 `GameSession.buildPreview` 的口径：朝向来自 `trayRotations`（托盘起拖）
-   * 或 `placements`（棋盘起拖），`check` 走 `canPlace`。**不存任何状态**——
-   * 每次 move 都用当前 `state` 现算，避免与 session 的真相分叉。
+   * ③ 只对**真·改状态**的事件触发 `refreshAll`（placement-committed /
+   * item-returned / undo-applied / level-reset / item-rotated / rotate-blocked）。
+   * `state-changed` 每次 dispatch 都会带（`move` 也带），拿它当触发器会让
+   * 每移一格全盘重建——计划原文点名要避免的。
    */
-  private buildPreview(itemId: string, anchor: RC, from: 'tray' | 'board'): DragPreview | null {
-    const session = this.gameSession;
-    if (session === null) return null;
-    const state = session.getState();
-    const item = findItem(session.level, itemId);
-    if (item === undefined) return null;
+  private afterDispatch(intent: Intent, result: SessionResult): void {
+    // ① 拖拽生命周期：被拖物品在两个视图里都排除；松手/取消/取出后恢复。
+    //    grab 用 `result.phase === 'Dragging'` 判断 session 是否收下这次起拖
+    //    （冻结期会被拒），不靠猜。
+    if (intent.type === 'grab') {
+      if (result.phase === 'Dragging') this.setDraggingItem(intent.itemId);
+    } else if (
+      intent.type === 'drop' ||
+      intent.type === 'cancel' ||
+      intent.type === 'removeToTray'
+    ) {
+      this.setDraggingItem(null);
+    }
 
-    const rotation =
-      from === 'board'
-        ? (state.placements.get(itemId)?.rotation ?? 0)
-        : (state.trayRotations.get(itemId) ?? 0);
-    const check = canPlace(session.level, state, { itemId, row: anchor[0], col: anchor[1], rotation });
-    return { itemId, anchor, rotation, check, from };
+    // ② 选中态（select / grab 会改 selectedId）。只刷高亮不重建节点
+    if (intent.type === 'select' || intent.type === 'grab') {
+      this.trayView?.applyState(result.state);
+    }
+
+    // ③ 事件 → 表现
+    let refresh = false;
+    for (const event of result.events) {
+      switch (event.type) {
+        case 'state-changed':
+          break; // 信号本身不触发重画（见方法注释）
+        case 'placement-committed':
+          refresh = true;
+          if (DEBUG) {
+            console.log(
+              `[GameController] ${event.from === 'tray' ? '放入' : '移动'} ${event.itemId}` +
+                ` → (${event.placement.row},${event.placement.col}) rot=${event.placement.rotation}`,
+            );
+          }
+          break;
+        case 'placement-rejected':
+          // M1：Console（回弹动画由 PreviewLayer 的 ghost 抖动承担）；
+          // M2-4 的 Toast 挂点就是这个 case
+          console.warn(
+            `[GameController] 放不下：${event.itemId}（${event.reason}）——状态未变、不入撤回栈`,
+          );
+          break;
+        case 'item-returned':
+        case 'undo-applied':
+        case 'level-reset':
+          refresh = true;
+          break;
+        case 'item-rotated':
+          refresh = true;
+          break;
+        case 'rotate-blocked':
+          refresh = true;
+          console.warn(`[GameController] 旋转失败：${event.itemId}（四策略全失败，未提交）`);
+          break;
+        case 'deadlock-warning':
+          // M1 仅 Console.warn（实施计划原文）；M2-4 换 Toast
+          console.warn(
+            `[GameController] 面积快检：一定装不下（剩余 ${event.freeCells} 格 /` +
+              ` 还需 ${event.requiredCells} 格）`,
+          );
+          break;
+        case 'level-cleared':
+          // M1-7 接 SuccessOverlay；M1-6 先落日志 + 输入已由 phase 冻结
+          console.log(
+            `[GameController] 🎉 通关！L${event.levelId} ${event.moves} 步` +
+              ` ${(event.elapsedMs / 1000).toFixed(1)}s（M1-7 接 SuccessOverlay）`,
+          );
+          break;
+      }
+    }
+
+    if (refresh) this.refreshAll(result.state, result.phase);
+  }
+
+  /**
+   * 整体重绘（MVP 不做增量 diff，与 `TrayView.render` 同策略）：
+   * ItemLayer + TrayView 都按 state 快照重建，"无幽灵、无重复占位"是机制保证。
+   */
+  private refreshAll(state: LevelState, phase: string): void {
+    const session = this.gameSession;
+    const board = this.boardView;
+    if (session === null || board === null) return;
+
+    this.itemLayer?.render(state);
+    this.trayView?.render(state, session.level, board);
+
+    if (DEBUG) {
+      const placed = Array.from(state.placements.keys()).join(',') || '(空)';
+      console.log(
+        `[GameController] 重绘：tray=[${state.tray.join(',') || '(空)'}]` +
+          ` 已放 ${state.placements.size} 件 [${placed}] phase=${phase}`,
+      );
+    }
+  }
+
+  /** 拖拽中排除 / 恢复被拖物品（两个视图同步，防幽灵） */
+  private setDraggingItem(itemId: string | null): void {
+    this.itemLayer?.setHiddenItem(itemId);
+    this.trayView?.setHiddenItem(itemId);
+  }
+
+  /** 手势层冻结查询：通关动画期间一切输入停摆（core 的 isInputFrozen 同口径） */
+  private isFrozen(): boolean {
+    const phase = this.gameSession?.getPhase();
+    return phase === 'WinAnimating' || phase === 'Completed';
   }
 
   /**
@@ -170,7 +274,7 @@ export class GameController extends Component {
    *
    * 数据只从 `session.getState()` 拿，本组件不持有"托盘里有什么"的副本。
    * 点选**不在**这里接线：M1-4 起托盘不再自带触摸监听，点击由 `DragController`
-   * 判（见 `wireDrag`），本组件只认那条出口。
+   * 判（见 `wireDrag`），并进 `handleIntent` 同一入口。
    */
   private renderTray(level: LevelSpec): void {
     const session = this.gameSession;
@@ -178,93 +282,6 @@ export class GameController extends Component {
     if (session === null || tray === null || this.boardView === null) return;
 
     tray.render(session.getState(), level, this.boardView);
-  }
-
-  /**
-   * 点选 → `dispatch({type:'select'})` → 把结果画回来。
-   *
-   * 这是 M1-6 单向数据流的**最小样板**：view 只发意图、只按结果重画，
-   * 绝不自己改 `selectedId`。`applyState()` 只刷选中态，不重建节点。
-   */
-  private selectItem(itemId: string | null): void {
-    const session = this.gameSession;
-    if (session === null) return;
-
-    const result = session.dispatch({ type: 'select', itemId });
-    this.trayView?.applyState(result.state);
-
-    if (DEBUG) {
-      console.log(
-        `[GameController] select(${itemId ?? 'null'}) → phase=${result.phase}` +
-          ` selected=${result.state.selectedId ?? 'null'}`,
-      );
-    }
-  }
-
-  /**
-   * **临时脚手架（M1-6 接线后删除）**：按求解器的解，把**第一件**走真实意图流放上棋盘。
-   *
-   * M1-2 时这里是"直接建节点摆盘"，M1-3 改成走 `dispatch`：托盘上线后，
-   * 直接建节点会造成"盘上有 4 件、托盘里还有 4 件"的矛盾态，一眼就穿帮。
-   * 走 dispatch 则 `state` 与画面天然一致，也顺手把 M1-6 那条链路预演了一遍。
-   *
-   * 只放一件是有意的：留几件在托盘里，M1-3 的"顺序 / 选中 / 取消"才有东西可验。
-   */
-  private debugPlaceFirstItem(level: LevelSpec): void {
-    const session = this.gameSession;
-    const board = this.boardView;
-    if (session === null || board === null) return;
-
-    const result = solve(level);
-    if (result.outcome !== 'solved' || result.solution === null) {
-      console.warn(`[GameController] 求解器未给出解（${result.outcome}），跳过摆盘预演`);
-      return;
-    }
-    const first = result.solution[0];
-    if (first === undefined) return;
-
-    session.dispatch({ type: 'grab', itemId: first.itemId, anchor: [first.row, first.col] });
-    session.dispatch({ type: 'move', anchor: [first.row, first.col] });
-    const dropped = session.dispatch({ type: 'drop' });
-
-    console.log(
-      `[GameController] M1-3 预演：dispatch 放入 ${first.itemId} @(${first.row},${first.col})` +
-        ` → 事件 ${dropped.events.map((e) => eventName(e)).join(',') || '(无)'}`,
-    );
-    this.debugMountPlaced(level);
-  }
-
-  /**
-   * 把 `state.placements` 里的物品画到棋盘上（**脚手架**，M1-6 由 `ItemLayer` 接管）。
-   *
-   * 与 M1-2 版的区别：数据源是 `state` 而不是求解器的解——
-   * 这样"画出来的"和"逻辑上的"永远是一份，不会各说各话。
-   */
-  private debugMountPlaced(level: LevelSpec): void {
-    const session = this.gameSession;
-    const board = this.boardView;
-    if (session === null || board === null) return;
-
-    const state = session.getState();
-    const placed: string[] = [];
-    for (const [itemId, placement] of state.placements) {
-      const item = findItem(level, itemId);
-      if (item === undefined) continue;
-
-      const cells = rotateBy(item.cells, placement.rotation);
-      const node = new Node(`Item_${itemId}`);
-      node.layer = board.node.layer;
-      // 挂在棋盘节点下：位置直接用 `BoardView` 的局部坐标，不做二次换算
-      board.node.addChild(node);
-      node.setPosition(board.gridToLocal(placement.row, placement.col));
-
-      const view = node.addComponent(ItemView);
-      view.init(item, board.getCellPx(), board.shapeMetrics(cells));
-      placed.push(view.describe());
-    }
-    if (placed.length > 0) {
-      console.log(`[GameController] 棋盘已放 ${placed.length} 件：${placed.join(' ｜ ')}`);
-    }
   }
 
   /**

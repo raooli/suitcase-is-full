@@ -7,7 +7,8 @@
  * `grab → move* → drop|cancel|removeToTray`，交给 `onIntent`。
  *
  * **不做**：
- * - 不碰 `GameSession`、不读 `LevelState`、不改任何状态（M1-6 才由调用方接到 dispatch）；
+ * - 不碰 `GameSession`、不读 `LevelState`、不改任何状态（M1-6 起由调用方接到
+ *   `session.dispatch`，但那是 `onIntent` 回调里的事，本组件仍不持有会话）；
  * - 不做格算术——像素→格一律走 `BoardView.snapToGrid()`（R-A6 / TDD 8.3 铁律 2）；
  * - 不做合法性判定——"能不能放"是 core 的事，这里只报"手指想放哪"。
  *
@@ -74,11 +75,12 @@ export class DragController extends Component {
   gestureRoot: Node | null = null;
 
   /**
-   * 意图出口。**M1-4 阶段由 `GameController` 接到 Console 挂具**（实施计划 M1-4 注：
-   * 接线前先人工比对意图序列），M1-6 一接线就换成 `session.dispatch`。
+   * 意图出口。**M1-6 起由 `GameController` 接到 `session.dispatch`**——
+   * 事件分发（重绘 / 回弹 / Toast 挂点）在调用方的 `handleIntent` 里做，
+   * 本组件只负责把"手指想干什么"翻译成意图。
    *
    * 之所以留成回调而不是在这里直接 dispatch：本组件因此不需要知道会话的存在，
-   * 换接线方式是调用方一行的事。
+   * 意图的去向（真 dispatch / 测试挂具 / 录制回放）是调用方一行的事。
    */
   onIntent: ((intent: Intent) => void) | null = null;
 
@@ -99,15 +101,21 @@ export class DragController extends Component {
   onTap: ((itemId: string | null) => void) | null = null;
 
   /**
-   * **预览构造（M1-5 挂具）**。grab/move 时由本组件调，把锚点与来源交给它，
-   * 换回一个 `DragPreview`（含 `check`）。M1-5 阶段由 `GameController` 用
-   * `canPlace` 实现（不碰 session）；M1-6 接线后这一路改由 `session.getPreview()`
-   * 直接给，本组件调用的形状不变。
+   * **当前预览的读取口（M1-5 是 `previewProvider` 挂具，M1-6 起接
+   * `session.getPreview()`）**。grab/move 的意图已同步 dispatch 进 session
+   * （`onIntent` 在 `emitPreview` 之前跑），所以这里读到的一定是最新预览。
    *
    * 之所以是回调而不是直接读 session：本组件因此不持有 `GameSession`，
    * 换数据源（挂具 → session）是调用方一行的事。
    */
-  previewProvider: ((itemId: string, anchor: RC, from: 'tray' | 'board') => DragPreview | null) | null = null;
+  previewSource: (() => DragPreview | null) | null = null;
+
+  /**
+   * 输入冻结查询（M1-6 接，M1-7 通关动画期间真正生效）。
+   * 返回 true 时本组件连 `pending` 都不建——手势层立刻冻结，
+   * 不依赖 core 的 `isInputFrozen()` 兜底（那是第二道防线，两者都要有）。
+   */
+  inputFrozen: (() => boolean) | null = null;
 
   /**
    * 预览显示出口：锚点变化时调，把 `DragPreview` 与「手指是否在托盘带内」
@@ -191,6 +199,9 @@ export class DragController extends Component {
   // ───────────────────────── 触摸生命周期 ─────────────────────────
 
   private onTouchStart(event: EventTouch): void {
+    // 通关动画期间冻结一切输入（M1-7 的 SuccessOverlay 播出时）
+    if (this.inputFrozen?.() === true) return;
+
     this.consumedByDrag = false;
     this.pending = null;
     this.dragging = false;
@@ -396,7 +407,8 @@ export class DragController extends Component {
   }
 
   /**
-   * 喂预览给 `PreviewLayer`：用 `previewProvider` 把当前锚点换成 `DragPreview`，
+   * 喂预览给 `PreviewLayer`：从 `previewSource` 读当前预览（M1-6 起是
+   * `session.getPreview()`——grab/move 的 dispatch 已在 `emit` 里同步完成），
    * 连同「手指是否在托盘带内」一起发出。grab/move 各调一次，锚点没变时不调
    * （`emitMoveIfChanged` 已节流）。
    */
@@ -404,7 +416,7 @@ export class DragController extends Component {
     const pending = this.pending;
     const anchor = this.lastAnchor;
     if (pending === null || anchor === null) return;
-    const preview = this.previewProvider?.(pending.itemId, anchor, pending.from) ?? null;
+    const preview = this.previewSource?.() ?? null;
     this.lastPreview = preview;
     this.onPreview?.(preview, this.overTray(uiX, uiY));
   }
