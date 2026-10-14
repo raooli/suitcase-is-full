@@ -22,6 +22,20 @@
  *   （内缩 / 圆角 / 虚线），与 `ItemView` 同构。
  * - **不持有玩法状态**：`level` 只是用来查物品形状（只读），不读 `placements`。
  *
+ * ## 手指遮挡补偿（G1-1）
+ *
+ * ghost 画在手指正下方会被手挡住，玩家看不到"现在悬在哪一格"。所以拖起时把
+ * **绘制矩形**整体上浮 `UI_DRAG_LIFT_PX` + 轻微放大 `UI_DRAG_LIFT_SCALE` +
+ * 右下浅阴影（UI Spec 6 节「手指不遮挡目标格的视觉偏移策略」）。
+ *
+ * **三条硬约束**：
+ * 1. **只改画法，不改判定**——落点仍由手指位置经 `snapToGrid` 算出，`preview.anchor`
+ *    一个字都不动，否则 G1-2「松手落格 = 预览所示格」立刻破功；
+ * 2. **不挪本节点**——M1-7 实测过，位移 tween 不归位会留下 8px 持久偏移（见 `stopShake`）；
+ * 3. 缩放锚点取**整体包围盒中心**（`core/geometry/lift.ts`），取单格中心会让多格物品散开。
+ *
+ * 具体偏移值是**可调初值**（UI Spec 9 节把它列为试玩待定项），真机校准只改 `config.ts`。
+ *
  * ## 松手回弹（P-05：120–180ms）
  *
  * 非法松手时 ghost 抖一下再消失（`tween` 位移 ±8px、160ms），作为"放不下"的
@@ -37,13 +51,19 @@ import { Color, Component, Graphics, Node, UITransform, Vec3, _decorator } from 
 import { DEBUG } from 'cc/env';
 
 import {
+  UI_DRAG_LIFT_PX,
+  UI_DRAG_LIFT_SCALE,
+  UI_DRAG_SHADOW_ALPHA,
+  UI_DRAG_SHADOW_OFFSET_PX,
   UI_ITEM_CELL_INSET_RATIO,
   UI_ITEM_RADIUS_RATIO,
   UI_PALETTE,
   findItem,
+  liftAndScale,
+  offsetRects,
   rotateBy,
 } from '../core';
-import type { DragPreview, LevelSpec } from '../core';
+import type { DragPreview, LevelSpec, Rect } from '../core';
 import { BoardView } from './BoardView';
 import { shakeX, stopShake } from './shake';
 
@@ -53,6 +73,12 @@ const { ccclass, property } = _decorator;
 const VALID_FILL_ALPHA = 0.4;
 /** 非法态描边透明度 */
 const INVALID_STROKE_ALPHA = 0.85;
+
+/** 圆角：占短边比例，且不超过短边一半（短边退化时不会变成胶囊） */
+function radiusOf(r: Rect): number {
+  const short = Math.min(r.w, r.h);
+  return Math.min(short * UI_ITEM_RADIUS_RATIO, short / 2);
+}
 
 @ccclass('PreviewLayer')
 export class PreviewLayer extends Component {
@@ -157,9 +183,32 @@ export class PreviewLayer extends Component {
     // 与 ItemView 同构的绘制参数（R-A6：unit 来自 BoardView，本文件只做绘制细节）
     const inset = unit * UI_ITEM_CELL_INSET_RATIO;
     const side = unit - inset * 2;
-    const radius = Math.min(side * UI_ITEM_RADIUS_RATIO, side / 2);
+
+    // 逐格矩形（未补偿）。`metrics.centers` 相对包围盒左上角，corner 也是左上角口径
+    const base: Rect[] = metrics.centers.map((center) => ({
+      x: corner.x + center.x - side / 2,
+      y: corner.y + center.y - side / 2,
+      w: side,
+      h: side,
+    }));
+
+    // 手指遮挡补偿（G1-1）：上浮 + 轻微放大。**只改这里画的矩形，不改 preview.anchor**
+    // ——落点判定仍由手指位置算，否则 G1-2「松手落格 = 预览所示格」立刻破功。
+    // 也不要挪本节点：M1-7 实测过位移 tween 不归位会留下持久偏移（见 stopShake）。
+    const lifted = liftAndScale(base, UI_DRAG_LIFT_SCALE, UI_DRAG_LIFT_PX);
+    // 阴影落右下（y 向上为正 → 向下是负）。UI Spec 4.1「右下短而淡」
+    const shadow = offsetRects(lifted, UI_DRAG_SHADOW_OFFSET_PX, -UI_DRAG_SHADOW_OFFSET_PX);
 
     g.clear();
+
+    // 1) 抬起阴影：先画，压在 ghost 下面
+    const shadowColor = Color.fromHEX(new Color(), UI_PALETTE.brown);
+    shadowColor.a = Math.round(255 * UI_DRAG_SHADOW_ALPHA);
+    g.fillColor = shadowColor;
+    for (const r of shadow) {
+      g.roundRect(r.x, r.y, r.w, r.h, radiusOf(r));
+      g.fill();
+    }
 
     if (preview.check.ok) {
       // 合法：半透明实心块 + 实线描边
@@ -168,12 +217,10 @@ export class PreviewLayer extends Component {
       g.fillColor = fill;
       g.strokeColor = Color.fromHEX(new Color(), UI_PALETTE.valid);
       g.lineWidth = 2;
-      for (const center of metrics.centers) {
-        const x = corner.x + center.x - side / 2;
-        const y = corner.y + center.y - side / 2;
-        g.roundRect(x, y, side, side, radius);
+      for (const r of lifted) {
+        g.roundRect(r.x, r.y, r.w, r.h, radiusOf(r));
         g.fill();
-        g.roundRect(x, y, side, side, radius);
+        g.roundRect(r.x, r.y, r.w, r.h, radiusOf(r));
         g.stroke();
       }
     } else {
@@ -182,10 +229,8 @@ export class PreviewLayer extends Component {
       stroke.a = Math.round(255 * INVALID_STROKE_ALPHA);
       g.strokeColor = stroke;
       g.lineWidth = 3;
-      for (const center of metrics.centers) {
-        const x = corner.x + center.x - side / 2;
-        const y = corner.y + center.y - side / 2;
-        this.dashRect(g, x, y, side, side, 7, 5);
+      for (const r of lifted) {
+        this.dashRect(g, r.x, r.y, r.w, r.h, 7, 5);
       }
       g.stroke();
     }
@@ -196,6 +241,9 @@ export class PreviewLayer extends Component {
       console.log(
         `[PreviewLayer] ghost ${preview.itemId}@(${preview.anchor[0]},${preview.anchor[1]})` +
           ` rot=${preview.rotation} → ${reason}` +
+          // 上浮是画在矩形上的（不改节点、不改 anchor），取证时拿它对表：
+          // ghost 首个矩形的 y 应比未补偿时高 UI_DRAG_LIFT_PX
+          ` lift=+${UI_DRAG_LIFT_PX} scale=${UI_DRAG_LIFT_SCALE}` +
           ` nodePos=(${Math.round(p.x * 100) / 100},${Math.round(p.y * 100) / 100})` +
           ` t=${Math.round(performance.now())}`,
       );

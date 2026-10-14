@@ -71,6 +71,8 @@ export {
 } from './geometry/drag';
 export { fitThumbnail } from './geometry/thumbnail';
 export type { ThumbnailFit } from './geometry/thumbnail';
+export { centerOf, liftAndScale, offsetRects } from './geometry/lift';
+export type { Point as RectPoint, Rect } from './geometry/lift';
 
 // 规则
 export {
