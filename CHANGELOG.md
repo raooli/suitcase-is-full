@@ -23,6 +23,24 @@
 
 ## 提交记录（倒序）
 
+### `89d0371` · feat: M1-3 托盘列表（TrayView + TraySlot）+ 缩略图居中纯函数 + 预览夹具手势/视口改造
+
+| 项 | 内容 |
+| --- | --- |
+| 日期 | 2026-10-14 02:07 |
+| 完整 hash | `89d0371`（见 `git log -1 --format=%H`） |
+| 类型 | 功能（M1-3：可玩内核第 4 步 · 托盘与点选）+ 预览夹具改造 |
+| 文件 | 17 个：新增 `assets/view/TrayView.ts(+.meta)`、`assets/view/TraySlot.ts(+.meta)`、`assets/core/geometry/thumbnail.ts(+.meta)`、`test/thumbnail.spec.ts`、`art/art-source/props/prop_01_B_wallet.svg`；改 `assets/core/{config.ts,index.ts}`、`assets/view/{BoardView.ts,GameController.ts,ItemView.ts}`、`assets/scenes/Game.scene`、`tools/{preview-check.mjs,scene-build.mjs}`、`art/art-source/props/prop_01_A_phone.svg` |
+
+**要点：**
+
+- **`view/TrayView.ts` + `view/TraySlot.ts`（新增）**：托盘列表。按 `state.tray` 顺序建槽位（数据与顺序全来自 `state`，本组件不持有副本）；`onSelect` 回调 → `GameController.selectItem` → `dispatch({type:'select'})` → `applyState` **只刷选中态、不重建节点**。选中描边 `accentPink`、取消回 `border`（预览实测：触摸 `(62,668)` 命中槽位 0，`select(L01_A) → phase=Selected`）。
+- **`core/geometry/thumbnail.ts`（新增，纯函数、零 cc）**：`fitThumbnail(w,h,side,padding)` 把"缩放居中"算术从视图层抽出。**背景 bug**：`TraySlot.setItem` 原把"距边距离"当中心原点坐标，物品整体偏移 (+38,−38) 设计单位（横向跑出卡缘、纵向垂到卡下）；修复后 `x=-w/2 / y=+h/2`（物品锚点左上 (0,1) 与槽位中心 (0.5,0.5) 混用，是易错点）。8 条单测覆盖居中不变量、永不溢出、只缩不放（保"占几格"预判）、等比、退化输入无 NaN；**负向验证**：临时填回旧公式 `(side-w)/2,-(side-h)/2` → 4 条断言 FAIL、差异恰 38，与像素实测 (+38,−38) 一致，证明这组单测真能拦住该 bug。
+- **`TrayView` 渲染口径**：`slotSizeFor`/`visibleCount` 复用 P-04 下限 44px 热区；`mountItem` 用 `source.shapeMetrics` + `slot.setItem` 拿像素；溢出告警留给 M2。
+- **`view/GameController.ts`**：新增 `trayView` 属性、`renderTray()`、`selectItem()`（走真实 dispatch + `applyState` 回画）；`debugPlaceFirstItem` 由 M1-2 的"直接建节点摆盘"改为走 `grab/move/drop` 真实意图流——托盘上线后直接建节点会造成"盘上 4 件 + 托盘 4 件"矛盾态，走 dispatch 则 `state` 与画面天然一致，也预演了 M1-6 链路；引用 `findItem`/`eventName`。
+- **预览夹具 `tools/preview-check.mjs` 重构（可复用手法）**：`--shot`/`--tap`/`--tap-mouse` 由独立字段改为**按命令行顺序的 `steps` 有序动作**（`--shot a.png --tap 62,668 --shot b.png` 一次采改前/改后对照图）；视口默认 `390x844@2`（Fit Width 下画布 1:1 铺满，托盘不被截）；运行时 `cc.profiler.hideStats()` 隐藏 FPS 面板（`showFPS=false` 构建参数无效）；`Emulation.setTouchEmulationEnabled` 开触摸仿真（仅 `mobile:true` 不够）。**关键修复**：Chrome 加 `--no-sandbox`/`--no-zygote` —— 受限外层沙箱会拦截 Chrome 启动期系统调用使其 SIGTRAP 崩溃、调试端口起了即死、导致 `Runtime.enable` 超时，关掉 Chrome 内部沙箱后正常（实测 EXIT=0、无 Console 错误）。
+- **验证**：`npm run check` 全绿 **185/185**（原 177 + 新增 thumbnail 8）；`npm run preview:game` 无 Console 错误（EXIT=0），`[TrayView] 托盘 3 件 … 缩略60×30@(-30,15) …` 证实居中修复；触摸 select 日志与几何 `canvas:[0,0,390,844] hasTouch:true` 核对无误。
+
 ### `0f4d69d` · feat: M1-2 物品占位色块（ItemView）+ 明度阶梯（core/palette）+ P-04 压缩阶梯告警
 
 | 项 | 内容 |
