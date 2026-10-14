@@ -20,8 +20,11 @@
 ## 引擎限制与状态机不变式（实测）
 
 - **一个节点只能有一个 renderable 组件**（Graphics/Label/Sprite…）：给已有 Graphics 的节点再 `addComponent(Graphics)` 会被引擎**静默拒绝**（Console 一条 `Can't add renderable component…` warning，绘制内容一个不出现）。同节点要多组绘制就复用同一 Graphics（`fill()` 消费 path，可反复 `circle()+fill()`），或建子节点。
-- **冻结门必须覆盖所有 intent handler，含清理路径**（M1-7 补缺）：`GameSession` 的 `handleSelect/Grab/Rotate/RemoveToTray/Undo/Reset` 都有 `isInputFrozen()` 门，但 `handleDrop`/`handleCancel` 的"无预览清理分支"会改写 phase（回 Idle/Selected）——通关动画期间（WinAnimating/Completed）任何残留的 drop/cancel 意图都会把"已通关"抹掉、输入提前解冻。新增 intent 类型时先问：它在冻结期被放进来的话，哪条路径会写 phase/state？
-- **L1 通关拖拽校准配方**（无头测试直接抄）：L1 = 3×3 / cellPx=114；解法 `A@(1,1) B@(1,0) C@(2,1) D@(0,0)`。在 0 号槽按 **(47,658)** 四件物品 `grabOffset` 全为 (0,0)；松手点取**格中心 x−10、y+10**（格中心处 `round(r+0.5)` 会进位到右下斜邻格）。页面坐标格中心：(81,240)(195,240)(309,240)/(81,354)(195,354)(309,354)/(81,468)(195,468)(309,468)。SuccessOverlay「再来一次」按钮 = 页面 **(195,520)**。
+- **冻结门必须覆盖所有 intent handler，含清理路径**（M1-7 定稿补全）：`GameSession` 的 8 个写状态 handler 全部有 `isInputFrozen()` 门（`handleDrop`/`handleCancel` 这两条"无预览清理分支"是 M1-7 才补上的——它们本来就会把 phase 改回 Idle/Selected，通关动画期间放过去等于把"已通关"抹掉、输入提前解冻）；`handleMove` **不需要门**：它靠 `phase !== 'Dragging'` 提前返回、且**只重建 preview 不写 phase**。新增 intent 类型时先问：它在冻结期被放进来的话，哪条路径会写 phase/state？
+- **懒加载构建（`built` 标志 + `buildOnce` 提前 return）必须把"随事件变化的文案"抽出来每次写**（M1-7 遗留真缺陷）：`SuccessOverlay.show()` → `buildOnce` 在 `built===true` 时 return，于是「第 N 关」「N 步 · N.Ns」只在**首次**写入，**复玩后第二次通关仍显示首次的战绩**（实测：第二次 6.1s，面板显示 15.1s）。M2 的 `GuideOverlay`/`ConfirmDialog` 同类结构照此预防。
+- **`completeWinAnimation()` 幂等**（`if (phase === 'WinAnimating')` 守卫）——所以重复调无害，但这不构成"可以重复 `scheduleOnce`"的理由（`show()` 仍应先 `unscheduleAllCallbacks`）。
+- **L1 通关拖拽校准配方**（无头测试直接抄）：L1 = 3×3 / cellPx=114；解法 `A@(1,1) B@(1,0) C@(2,1) D@(0,0)`。在 0 号槽按 **(47,658)** 四件物品 `grabOffset` 全为 (0,0)；松手点取**格中心 x−10、y+10（board-local，y 向上）**⇒ **折算页面坐标 = (x−10, y−10)**（格中心处 `round(r+0.5)` 会进位到右下斜邻格）。页面坐标格中心：(81,240)(195,240)(309,240)/(81,354)(195,354)(309,354)/(81,468)(195,468)(309,468)。SuccessOverlay「再来一次」按钮 = 页面 **(195,520)**。
+- **落点→格的换算式（页面坐标，M1-7 实测钉死，比抄点位可靠）**：`pointerRow = round((pageY − 183) / 114)`、`pointerCol = round((pageX − 24) / 114)`；等价：col 桶 `[-33+114c, 81+114c)`、row 桶 `[126+114r, 240+114r)`（**桶边界正好压在格里视觉中心**，所以"格中心"落点会进位到右下邻格）。**起点也可改用托盘 0 号槽中心页面 (62,658)**（左对齐、件数变化不移动；该点 offset：1×2/1×3 类 = (0,1)、2×1 类 = (0,0)）。已验证可通关的四拖：`A@(1,0)=(138,297)` `B@(1,2)=(252,297)` `C@(2,0)=(138,411)` `D@(0,0)=(138,183)`。
 
 ## 无 GUI 预览与取证手法
 
