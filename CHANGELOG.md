@@ -23,6 +23,18 @@
 
 ## 提交记录（倒序）
 
+### `96ca176` · feat: M1-6 意图接线 dispatch（状态驱动视图刷新）+ ItemLayer 防幽灵
+
+| 项 | 内容 |
+| --- | --- |
+| 日期 | 2026-10-14 14:58 |
+| 完整 hash | `96ca176`（见 `git log -1 --format=%H`） |
+| 类型 | 功能（M1-6：可玩内核第 7 步 · 意图接线与状态驱动刷新） |
+| 文件 | `assets/view/ItemLayer.ts`（新）+ `.meta`（新）、`assets/view/DragController.ts`、`assets/view/GameController.ts`、`assets/view/TraySlot.ts`、`assets/view/TrayView.ts`、`assets/scenes/Game.scene`、`tools/scene-build.mjs`（8 文件，+400/−173） |
+| 要点 | ① 新增 `ItemLayer`（挂 BoardRoot 与 BoardView 同节点）：按 `state.placements` **全量重绘、先清后建**，「无幽灵物品、无重复占位」成为机制保证；拖拽中 `setHiddenItem` 排除被拖物品（`grab` 不改 state，不排除就会原位再画一份 + 手指处 ghost 两份并存）；格→像素全走 `BoardView`（R-A6）② `DragController` 挂具全接真：`onIntent → handleIntent → session.dispatch`（唯一改状态入口）；`previewProvider` 挂具 → `previewSource` 直读 `session.getPreview()`（view 不再用 `canPlace` 复刻合法性——两份真相必然分叉）；新增 `inputFrozen`（通关动画期冻结手势，M1-7 生效）；`onTap` 并进同一入口 ③ `GameController.afterDispatch` 单向数据流总闸：只对**真·改状态**事件触发 `refreshAll`（`placement-committed/item-returned/undo-applied/level-reset/item-rotated/rotate-blocked`）——`state-changed` 每次 dispatch 都带（`move` 也带），拿它当触发器会每移一格全盘重建；`placement-rejected/deadlock-warning` 走 Console（M2-4 Toast 挂点）；`level-cleared` 落日志（M1-7 接 SuccessOverlay）；删启动时 `debugSnapshot` 行 ④ `TraySlot/TrayView` 加 `setHiddenItem`（托盘起拖时那件还在 `state.tray`，同理排除）；`render` 改用 `markOverflow` 记录溢出态，与拖拽排除分开（否则恢复显示会把缩小的溢出 slot 放出来）⑤ `scene-build.mjs`：BoardRoot 增挂 ItemLayer，GameController 接 `itemLayer` |
+| 验收 | 无头预览 13 连快速拖拽压力用例：12 次状态转移全部正确（放入↔取出完美交替），第 4 次 L01_B 落到已占格被正确拒绝（`放不下：overlap，状态未变、不入撤回栈` + ghost 抖动后清），状态零错乱；拖拽全程「拖拽中排除」日志在、无幽灵；终态截图证实 L01_A@(1,0)/L01_B@(0,2) 各就各位、托盘正确减至 2 件；`npm run check` 199/199，`npm run preview:game` 无 Console 错误 |
+| 推翻 | 无 |
+
 ### `3c5448f` · feat: M1-5 拖拽预览层（PreviewLayer）三态 ghost + 非法回弹
 
 | 项 | 内容 |

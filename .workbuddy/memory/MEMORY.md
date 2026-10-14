@@ -43,3 +43,5 @@
 - TDD 17.4 占位策略：按最终包围盒尺寸绘制、2px brown 描边、真图 M4-5 替换时结构不动（`ItemView.setSpriteFrame()` 是桩）。
 - 命名：`GameController`（不是 `GameScene`，避免与 `cc.Scene`/`Game.scene` 撞名）。
 - **取整语义分场景**（M1-5 实测）：**抓取锚点用按下点算**（与 `grabOffset` 同源，否则格中心 round 不稳会跳到 `[0,-1]`）；**board 命中用 `localToGrid`（floor）**（格中心的点不能 round 进位到右下斜邻格，否则按物品中心抓不起来）；**move 锚点用 `snapToGrid`（round）**（TDD 6.3 裁决）。三处不同是有意的，别"统一"成同一个。
+- **Console 取证只看最后 80 行**（`preview-check.mjs` 的 `slice(-80)`）：长手势序列会被截断，靠 `--grep <子串>` 过滤看全量（注意 `--grep` **只打印匹配行**，不过滤时只留尾部）。`--drag` 第 5 段截图是 touchEnd **前**的中途态；拍终态用独立 `--shot` step。
+- **改状态唯一入口 = `dispatch`**（M1-6 定型）：view 一律 `onIntent → GameController.handleIntent → session.dispatch`；重绘只由**真·改状态**事件触发（`state-changed` 每次 dispatch 都带，含 move，拿它当触发器会每移一格全盘重建）。`grab` 不改 state，故拖拽中被拖物品要 `setHiddenItem` 双视图排除（ItemLayer/TrayView）防"原位一份 + ghost 一份"。
