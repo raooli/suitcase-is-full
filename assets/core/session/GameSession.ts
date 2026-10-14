@@ -154,8 +154,14 @@ export class GameSession {
    * - 预览非法 → **不改变状态**，只发 `placement-rejected`（PRD AC10：非法尝试不入撤回栈）
    * - 预览合法 → 提交。压入操作前快照，然后写状态
    * - 无预览（未抓到任何东西）→ 无操作
+   *
+   * 冻结门必须在最前面：无预览的清理分支会改写 phase（回 Idle/Selected），
+   * 通关动画期间（WinAnimating）放它过去就等于把"已通关"抹掉（M1-7 实测：
+   * view 侧一次异常导致拖拽状态残留，残留的 drop 意图把 phase 从 WinAnimating
+   * 打回 Idle，通关态丢失）。冻结期的一切 intent 一律原样拒绝。
    */
   private handleDrop(events: GameEvent[]): void {
+    if (this.isInputFrozen()) return;
     const preview = this.preview;
     if (preview === null || this.phase !== 'Dragging') {
       this.preview = null;
@@ -202,6 +208,8 @@ export class GameSession {
 
   /** 取消拖动 / touchCancel：一律回退，**不**视为取出（TDD 7.3 明确禁止混淆） */
   private handleCancel(): void {
+    // 同 handleDrop：清理分支也会改写 phase，冻结期必须整体拒绝
+    if (this.isInputFrozen()) return;
     this.preview = null;
     this.dragFrom = null;
     this.phase = this.state.selectedId ? 'Selected' : 'Idle';

@@ -228,3 +228,20 @@ export const UI_PALETTE = {
   valid: '#50B88A',
   invalid: '#E56B77',
 } as const;
+
+// ───────────────────────── 通关浮层（UI Spec 5.3） ─────────────────────────
+
+/**
+ * 通关浮层遮罩 alpha（0–1）。整屏盖住棋盘/托盘，背景误触由
+ * `WinAnimating`/`Completed` 的输入冻结兜底（双保险，UI Spec 5.3 要求）。
+ */
+export const UI_OVERLAY_MASK_ALPHA = 0.55;
+
+/** 浮层面板尺寸与圆角（UI Spec 4 节圆角档位取 24） */
+export const UI_OVERLAY_PANEL_WIDTH = 280;
+export const UI_OVERLAY_PANEL_HEIGHT = 300;
+export const UI_OVERLAY_PANEL_RADIUS = 24;
+
+/** 「再来一次」按钮尺寸（UI Spec 4 节交互热区下限 44 之上留余量） */
+export const UI_OVERLAY_BUTTON_WIDTH = 200;
+export const UI_OVERLAY_BUTTON_HEIGHT = 48;

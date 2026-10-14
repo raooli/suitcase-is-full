@@ -389,6 +389,20 @@ const previewRootNode = () => ({
   ],
 });
 
+/**
+ * M1-7：通关浮层。覆盖整屏（390×844，原点即画布中心），排在 SafeAreaRoot
+ * 子节点**最后**——渲染序在最后 = 盖在棋盘/托盘/预览层之上。节点初始
+ * active=false（SuccessOverlay.onLoad 里设），未通关时不参与渲染与命中。
+ */
+const successRootNode = () => ({
+  name: 'SuccessRoot',
+  layer: LAYER.UI_2D,
+  components: [
+    builtin('uiTransform', [DESIGN.width, DESIGN.height]),
+    script('SuccessOverlay'),
+  ],
+});
+
 const SCENES = {
   'Boot.scene': {
     sceneName: 'Boot',
@@ -402,7 +416,7 @@ const SCENES = {
     sceneName: 'Game',
     nodes: [
       cameraNode(),
-      canvasNode([safeAreaRootNode([boardRootNode(), trayRootNode(), previewRootNode()])]),
+      canvasNode([safeAreaRootNode([boardRootNode(), trayRootNode(), previewRootNode(), successRootNode()])]),
       {
         // M1-0：会话引导。与官方 taxi 模板的 GameRoot 同形状（Scene 根节点不带组件）
         // M1-4：拖拽手势也挂在这里——它只用全局 input，不需要自己的节点位置，
@@ -424,6 +438,7 @@ const SCENES = {
             dragController: refTo('GameRoot', 'DragController'),
             previewLayer: refTo('PreviewRoot', 'PreviewLayer'),
             itemLayer: refTo('BoardRoot', 'ItemLayer'),
+            successOverlay: refTo('SuccessRoot', 'SuccessOverlay'),
           }),
         ],
       },

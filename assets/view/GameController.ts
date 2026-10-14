@@ -8,6 +8,7 @@
  * M1-6 起本组件还是**单向数据流的接线总闸**（实施计划 M1.A）：
  * 所有改变状态的请求都收敛到 `handleIntent()` → `session.dispatch()`，
  * 返回的事件数组决定"刷什么、表现什么"——view 不直接改任何 core 状态。
+ * M1-7 起 `level-cleared` 在这里接上 `SuccessOverlay`。
  *
  * 挂载点：`Game.scene` 的 `GameRoot` 节点（与官方 2D 模板 taxi 的 `GameRoot`
  * 同一形状；Scene 根节点上不带组件，这是引擎示例的既有惯例）。
@@ -28,6 +29,7 @@ import { BoardView } from './BoardView';
 import { DragController } from './DragController';
 import { ItemLayer } from './ItemLayer';
 import { PreviewLayer } from './PreviewLayer';
+import { SuccessOverlay } from './SuccessOverlay';
 import { TrayView } from './TrayView';
 
 const { ccclass, property } = _decorator;
@@ -67,6 +69,10 @@ export class GameController extends Component {
   @property(ItemLayer)
   itemLayer: ItemLayer | null = null;
 
+  /** 通关浮层（M1-7）：`level-cleared` 时入场，播完调 `completeWinAnimation` */
+  @property(SuccessOverlay)
+  successOverlay: SuccessOverlay | null = null;
+
   private gameSession: GameSession | null = null;
 
   /** 会话句柄。装配失败（关卡数据有问题）时为 `null`，调用方必须判空 */
@@ -98,6 +104,64 @@ export class GameController extends Component {
     // 托盘（M1-3）：顺序与可见性都来自 `state`
     this.renderTray(level);
     this.wireDrag(level);
+    this.wireSuccessOverlay();
+  }
+
+  /**
+   * 通关浮层接线（M1-7）。
+   *
+   * - `onSettled`：入场动画播完 → `completeWinAnimation()` 把 phase 从
+   *   `WinAnimating` 推到 `Completed`。**冻结的解除时机由 view 决定**
+   *   （动画播了多久只有 view 知道），core 不自己数时间；
+   * - `onReplay`：换一个同关卡的新会话（不走 `dispatch({type:'reset'})`——
+   *   reset 在 `Completed` 期被 isInputFrozen 故意冻结，那是防"浮层盖住
+   *   工具栏时误重置抹掉通关态"的；浮层自身按钮是明确意图，另走换会话）。
+   */
+  private wireSuccessOverlay(): void {
+    const overlay = this.successOverlay;
+    if (overlay === null) return;
+
+    overlay.onSettled = () => {
+      this.gameSession?.completeWinAnimation();
+    };
+    overlay.onReplay = () => {
+      this.replayLevel();
+    };
+  }
+
+  /**
+   * 「再来一次」：换同关卡的新会话（M1-7）。
+   *
+   * 为什么不走 `dispatch({type:'reset'})`：reset 意图在 WinAnimating /
+   * Completed 两个 phase 下会被 `session.isInputFrozen()` 拒绝（TDD 注释：
+   * 冻结 reset 是防玩家被浮层误导误触工具栏抹掉通关态）。而"再玩一次"是
+   * 浮层按钮上的**明确意图**，与误触有本质区别——但它同样要清空棋盘回到
+   * 初始态，用新 `GameSession` 表达最干净：状态、撤回栈、计时全部重置，
+   * 不依赖 reset 意图的解冻（那条解冻要等 M2-3 的 ConfirmDialog 设计）。
+   *
+   * 步骤与 onLoad 装配同构：换 session → 重画棋盘格 → init 三层 → 全量刷新。
+   * `renderBoard` / `ItemLayer.render` 都先清后建，重复调用安全（M1-1 起如此）。
+   * `wireDrag` 也要重挂：它的 `boardItemAt` 闭包捕获了旧 `level`，换关卡
+   * （M2 的「下一关」）时不重挂就会拿旧关的物品表查命中。
+   */
+  private replayLevel(): void {
+    this.gameSession = this.createSession();
+    const session = this.gameSession;
+    if (session === null) return;
+
+    const level = session.level;
+    this.boardView?.renderBoard(level.board);
+    this.previewLayer?.init(level);
+    this.itemLayer?.init(level);
+    this.wireDrag(level);
+    this.refreshAll(session.getState(), session.getPhase());
+    this.successOverlay?.hide();
+
+    if (DEBUG) {
+      console.log(
+        `[GameController] 再来一次：L${level.levelId} 新会话（${level.items.length} 件物品回托盘）`,
+      );
+    }
   }
 
   /**
@@ -224,11 +288,13 @@ export class GameController extends Component {
           );
           break;
         case 'level-cleared':
-          // M1-7 接 SuccessOverlay；M1-6 先落日志 + 输入已由 phase 冻结
+          // M1-7：进通关浮层。输入此刻已由 phase（WinAnimating）冻结，
+          // 浮层播完再经 onSettled → completeWinAnimation 解冻
           console.log(
             `[GameController] 🎉 通关！L${event.levelId} ${event.moves} 步` +
-              ` ${(event.elapsedMs / 1000).toFixed(1)}s（M1-7 接 SuccessOverlay）`,
+              ` ${(event.elapsedMs / 1000).toFixed(1)}s → SuccessOverlay`,
           );
+          this.successOverlay?.show(event);
           break;
       }
     }

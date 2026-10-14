@@ -379,6 +379,25 @@ describe('GameSession：通关判定', () => {
     expect(session.getState()).toBe(before);
   });
 
+  it('WinAnimating 期间残留的 drop / cancel 不得改写 phase（M1-7 回归）', () => {
+    // view 侧一次异常（M1-7 实测：SuccessOverlay 抛错中断 onTouchEnd 的清理）
+    // 会让拖拽状态残留，残留的 drop/cancel 意图随后打进 core。这两类 intent
+    // 的"无预览清理分支"本来就会改写 phase（回 Idle/Selected）——冻结期放它
+    // 过去，等于浮层还在播、输入却已解冻，"已通关"状态被抹掉
+    const session = new GameSession(winLevel);
+    session.dispatch({ type: 'grab', itemId: 'X', anchor: [0, 0] });
+    session.dispatch({ type: 'drop' });
+    expect(session.getPhase()).toBe('WinAnimating');
+
+    session.dispatch({ type: 'drop' });
+    session.dispatch({ type: 'cancel' });
+    expect(session.getPhase()).toBe('WinAnimating');
+
+    // 解冻路径不受影响：动画播完照常进 Completed
+    session.completeWinAnimation();
+    expect(session.getPhase()).toBe('Completed');
+  });
+
   it('动画结束后进入 Completed', () => {
     const session = new GameSession(winLevel);
     session.dispatch({ type: 'grab', itemId: 'X', anchor: [0, 0] });
