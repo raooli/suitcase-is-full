@@ -12,10 +12,19 @@
 import { _decorator, Component, JsonAsset, Node } from 'cc';
 import { DEBUG } from 'cc/env';
 
-import { GameSession, LevelDataError, parseLevelBundle, rotateBy, solve } from '../core';
+import {
+  GameSession,
+  LevelDataError,
+  eventName,
+  findItem,
+  parseLevelBundle,
+  rotateBy,
+  solve,
+} from '../core';
 import type { BoardSpec, LevelSpec } from '../core';
 import { BoardView } from './BoardView';
 import { ItemView } from './ItemView';
+import { TrayView } from './TrayView';
 
 const { ccclass, property } = _decorator;
 
@@ -37,6 +46,10 @@ export class GameController extends Component {
   /** 棋盘渲染器。装配成功后由本组件把棋盘规格推给它（M1-6 起改为事件驱动） */
   @property(BoardView)
   boardView: BoardView | null = null;
+
+  /** 托盘渲染器（M1-3）。物品像素指标仍然从 `boardView` 取（R-A6 唯一出口） */
+  @property(TrayView)
+  trayView: TrayView | null = null;
 
   private gameSession: GameSession | null = null;
 
@@ -60,49 +73,112 @@ export class GameController extends Component {
       );
       console.log('[GameController] debugSnapshot() =', JSON.stringify(snapshot));
       BoardView.logSizingTable(this.bundleLevels());
-      // M1-2 的可视化脚手架：把物品按一个解摆上棋盘，好让两条视觉验收能真看到
-      this.debugLayoutSolved(level);
+      this.debugPlaceFirstItem(level);
+    }
+
+    // 托盘（M1-3）：顺序与可见性都来自 `state`，所以必须在上面的预演之后建
+    this.renderTray(level);
+  }
+
+  /**
+   * 托盘渲染 + 点选接线（M1-3）。
+   *
+   * 数据只从 `session.getState()` 拿，本组件不持有"托盘里有什么"的副本。
+   */
+  private renderTray(level: LevelSpec): void {
+    const session = this.gameSession;
+    const tray = this.trayView;
+    if (session === null || tray === null || this.boardView === null) return;
+
+    tray.render(session.getState(), level, this.boardView);
+    tray.onSelect = (itemId) => this.selectItem(itemId);
+  }
+
+  /**
+   * 点选 → `dispatch({type:'select'})` → 把结果画回来。
+   *
+   * 这是 M1-6 单向数据流的**最小样板**：view 只发意图、只按结果重画，
+   * 绝不自己改 `selectedId`。`applyState()` 只刷选中态，不重建节点。
+   */
+  private selectItem(itemId: string | null): void {
+    const session = this.gameSession;
+    if (session === null) return;
+
+    const result = session.dispatch({ type: 'select', itemId });
+    this.trayView?.applyState(result.state);
+
+    if (DEBUG) {
+      console.log(
+        `[GameController] select(${itemId ?? 'null'}) → phase=${result.phase}` +
+          ` selected=${result.state.selectedId ?? 'null'}`,
+      );
     }
   }
 
   /**
-   * **M1-2 临时脚手架**（M1-6 接线后删除，届时由 `state.placements` 驱动重绘）。
+   * **临时脚手架（M1-6 接线后删除）**：按求解器的解，把**第一件**走真实意图流放上棋盘。
    *
-   * 为什么现在就要画出物品：M1-2 的两条验收——「1 格物品看起来是 1 格」和
-   * 「相邻物品明度可区分」——都是**视觉验收**，不把物品真的摆进格子里，
-   * 就只能靠单测的数字猜。所以这里向求解器要一个解，直接摆上去看。
+   * M1-2 时这里是"直接建节点摆盘"，M1-3 改成走 `dispatch`：托盘上线后，
+   * 直接建节点会造成"盘上有 4 件、托盘里还有 4 件"的矛盾态，一眼就穿帮。
+   * 走 dispatch 则 `state` 与画面天然一致，也顺手把 M1-6 那条链路预演了一遍。
+   *
+   * 只放一件是有意的：留几件在托盘里，M1-3 的"顺序 / 选中 / 取消"才有东西可验。
    */
-  private debugLayoutSolved(level: LevelSpec): void {
+  private debugPlaceFirstItem(level: LevelSpec): void {
+    const session = this.gameSession;
     const board = this.boardView;
-    if (board === null) return;
+    if (session === null || board === null) return;
 
     const result = solve(level);
     if (result.outcome !== 'solved' || result.solution === null) {
-      console.warn(`[GameController] 求解器未给出解（${result.outcome}），跳过摆盘预览`);
+      console.warn(`[GameController] 求解器未给出解（${result.outcome}），跳过摆盘预演`);
       return;
     }
+    const first = result.solution[0];
+    if (first === undefined) return;
 
-    const specs = new Map(level.items.map((item) => [item.id, item]));
+    session.dispatch({ type: 'grab', itemId: first.itemId, anchor: [first.row, first.col] });
+    session.dispatch({ type: 'move', anchor: [first.row, first.col] });
+    const dropped = session.dispatch({ type: 'drop' });
+
+    console.log(
+      `[GameController] M1-3 预演：dispatch 放入 ${first.itemId} @(${first.row},${first.col})` +
+        ` → 事件 ${dropped.events.map((e) => eventName(e)).join(',') || '(无)'}`,
+    );
+    this.debugMountPlaced(level);
+  }
+
+  /**
+   * 把 `state.placements` 里的物品画到棋盘上（**脚手架**，M1-6 由 `ItemLayer` 接管）。
+   *
+   * 与 M1-2 版的区别：数据源是 `state` 而不是求解器的解——
+   * 这样"画出来的"和"逻辑上的"永远是一份，不会各说各话。
+   */
+  private debugMountPlaced(level: LevelSpec): void {
+    const session = this.gameSession;
+    const board = this.boardView;
+    if (session === null || board === null) return;
+
+    const state = session.getState();
     const placed: string[] = [];
-    for (const slot of result.solution) {
-      const item = specs.get(slot.itemId);
+    for (const [itemId, placement] of state.placements) {
+      const item = findItem(level, itemId);
       if (item === undefined) continue;
 
-      const cells = rotateBy(item.cells, slot.rotation);
-      const node = new Node(`Item_${item.id}`);
+      const cells = rotateBy(item.cells, placement.rotation);
+      const node = new Node(`Item_${itemId}`);
       node.layer = board.node.layer;
       // 挂在棋盘节点下：位置直接用 `BoardView` 的局部坐标，不做二次换算
       board.node.addChild(node);
-      node.setPosition(board.gridToLocal(slot.row, slot.col));
+      node.setPosition(board.gridToLocal(placement.row, placement.col));
 
       const view = node.addComponent(ItemView);
       view.init(item, board.getCellPx(), board.shapeMetrics(cells));
       placed.push(view.describe());
     }
-    console.log(
-      `[GameController] M1-2 摆盘预览（${placed.length}/${level.items.length} 件，节点 ${result.nodes}）：` +
-        placed.join(' ｜ '),
-    );
+    if (placed.length > 0) {
+      console.log(`[GameController] 棋盘已放 ${placed.length} 件：${placed.join(' ｜ ')}`);
+    }
   }
 
   /**

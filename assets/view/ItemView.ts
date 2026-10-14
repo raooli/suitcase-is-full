@@ -25,9 +25,20 @@ import {
   UI_PALETTE,
   itemFillHex,
 } from '../core';
-import type { ItemSpec } from '../core';
+import type { ItemSpec, RC } from '../core';
 
 const { ccclass } = _decorator;
+
+/**
+ * 物品像素指标的提供者（R-A6：**只有 `BoardView` 能实现**）。
+ *
+ * 托盘也要画物品，但它不该因此拥有第二套格→像素换算——
+ * 所以这里只声明能力，由 `BoardView` 提供实现（M1-3 起托盘也走这个口子）。
+ */
+export interface ShapeSource {
+  getCellPx(): number;
+  shapeMetrics(cells: readonly RC[]): ShapeMetrics;
+}
 
 /** 形状的像素指标。`BoardView` 产出（唯一的格算术出口），`ItemView` 只消费 */
 export interface ShapeMetrics {

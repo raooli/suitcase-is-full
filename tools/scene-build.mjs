@@ -339,6 +339,16 @@ const boardRootNode = () => ({
   components: [builtin('uiTransform', [BOARD_AREA.width, BOARD_AREA.height]), script('BoardView')],
 });
 
+const trayRootNode = () => ({
+  // M1-3：托盘。位置与尺寸同样由 TrayView 在运行时按 config 常量定（与 BoardView 同口径）
+  name: 'TrayRoot',
+  layer: LAYER.UI_2D,
+  components: [
+    builtin('uiTransform', [BOARD_AREA.width, LAYOUT.tray - 24]),
+    script('TrayView'),
+  ],
+});
+
 const SCENES = {
   'Boot.scene': {
     sceneName: 'Boot',
@@ -352,7 +362,7 @@ const SCENES = {
     sceneName: 'Game',
     nodes: [
       cameraNode(),
-      canvasNode([safeAreaRootNode([boardRootNode()])]),
+      canvasNode([safeAreaRootNode([boardRootNode(), trayRootNode()])]),
       {
         // M1-0：会话引导。与官方 taxi 模板的 GameRoot 同形状（Scene 根节点不带组件）
         name: 'GameRoot',
@@ -361,6 +371,7 @@ const SCENES = {
             levelId: 1,
             levelJson: assetRef('assets/data/levels.json', 'cc.JsonAsset'),
             boardView: refTo('BoardRoot', 'BoardView'),
+            trayView: refTo('TrayRoot', 'TrayView'),
           }),
         ],
       },

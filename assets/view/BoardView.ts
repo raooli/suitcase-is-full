@@ -21,6 +21,7 @@ import { DEBUG } from 'cc/env';
 import {
   CELL_PX_MIN,
   GRID_EPSILON,
+  UI_BOARD_BAND_CENTER_Y,
   UI_DESIGN_HEIGHT,
   UI_DESIGN_WIDTH,
   UI_HEADER_HEIGHT,
@@ -231,9 +232,12 @@ export class BoardView extends Component {
     return (cellPx * screenWidth) / UI_DESIGN_WIDTH;
   }
 
-  /** 棋盘带的中心 y（三横带布局，UI Spec 3 节） */
+  /**
+   * 棋盘带的中心 y（三横带布局，UI Spec 3 节）。
+   * 常量在 `core/config.ts`：托盘出现后两条带必须同源，否则会各飘一边。
+   */
   private static boardBandCenterY(): number {
-    return (UI_TRAY_HEIGHT + UI_TOOLBAR_HEIGHT - UI_HEADER_HEIGHT) / 2;
+    return UI_BOARD_BAND_CENTER_Y;
   }
 
   /**

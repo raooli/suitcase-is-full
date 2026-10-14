@@ -70,6 +70,16 @@ export const UI_TRAY_HEIGHT = 160;
 export const UI_TOOLBAR_HEIGHT = 96;
 
 /**
+ * 三条横带**中心**的 y（画布中心为原点，`+y` 向上）。
+ *
+ * 从上面的带高推导，不写死数字：横带高度一旦按 M3-5 的压缩阶梯调整，
+ * 两条带的中心必须跟着走，否则棋盘和托盘会各飘一边。
+ */
+export const UI_BOARD_BAND_CENTER_Y = (UI_TRAY_HEIGHT + UI_TOOLBAR_HEIGHT - UI_HEADER_HEIGHT) / 2;
+export const UI_TRAY_BAND_CENTER_Y =
+  -(UI_DESIGN_HEIGHT / 2 - UI_TOOLBAR_HEIGHT - UI_TRAY_HEIGHT / 2);
+
+/**
  * 棋盘格边长**硬下限**（TDD P-04，V1.2 统一口径为 44px）。
  * 低于此值时优先压缩托盘/标题/留白，**不得**继续缩棋盘。
  */
@@ -146,6 +156,27 @@ export const UI_CELL_RADIUS_RATIO = 0.12;
 
 /** 交替格背景的叠加强度（UI Spec 5.2「单元格有微弱的交替背景」） */
 export const UI_CELL_ALT_ALPHA = 90;
+
+// ───────────────────────── 托盘（UI Spec 5.2 / 组件 TraySlot） ─────────────────────────
+
+/** 托盘带的内边距（带高 160 里留出上下呼吸） */
+export const UI_TRAY_PADDING = 12;
+
+/** 槽位基准边长。**下限 44 = 交互热区硬约束**（UI Spec 4 节） */
+export const UI_TRAY_SLOT = 76;
+export const UI_TRAY_SLOT_MIN = 44;
+
+/** 槽位间距 */
+export const UI_TRAY_GAP = 8;
+
+/** 槽位卡片圆角（UI Spec 4 节圆角档位 10/18/24/32） */
+export const UI_TRAY_SLOT_RADIUS = 18;
+
+/** 槽位内边距：物品缩略图与卡片边框之间留白 */
+export const UI_TRAY_SLOT_PADDING = 8;
+
+/** 选中态描边宽度（UI Spec 6 节：点击托盘物品 → 高亮物品轮廓） */
+export const UI_TRAY_SELECT_BORDER = 3;
 
 /** 物品占位色块的描边宽度（设计单位）。依据 TDD 17.4「深色描边（2px，`color.brown`）」 */
 export const UI_ITEM_BORDER_PX = 2;

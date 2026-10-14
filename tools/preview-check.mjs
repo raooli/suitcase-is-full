@@ -16,6 +16,12 @@
  *   node tools/preview-check.mjs --scene Game            # 构建 Game.scene 再预览（推荐）
  *   node tools/preview-check.mjs --scene Game --grep [GameController]
  *   node tools/preview-check.mjs --shot /tmp/p.png --quiet   # 只复用现有构建产物
+ *   node tools/preview-check.mjs --shot /tmp/p.png --tap 62,422   # 点一下再截图（交互取证）
+ *
+ * 视口默认 `390x844@2` = 设计分辨率，配合 Fit Width 时**画布恰好铺满视口**，
+ * 于是截图坐标与设计坐标是 1:1（乘 dsf）——托盘/工具栏不会被截掉，UI 的点位也能算准。
+ * 点选坐标换算：`pageX = designX + 195`，`pageY = 422 - designY`。
+ * `--tap` 派发触摸事件（移动端口径），`--tap-mouse` 派发鼠标事件（桌面口径）。
  *
  * 环境变量：COCOS_CREATOR 覆盖编辑器可执行文件路径。
  *
@@ -38,21 +44,34 @@ function parseArgs(argv) {
   const out = {
     dir: 'build/web-mobile',
     wait: 12000,
-    shot: null,
     quiet: false,
     grep: null,
     scene: null,
+    viewport: '390x844@2',
+    // `--shot` / `--tap` / `--tap-mouse` 是**按命令行顺序执行的动作序列**，
+    // 所以 `--shot a.png --tap 62,668 --shot b.png` 能一次采到改前/改后两张对照图。
+    steps: [],
   };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--dir') out.dir = argv[++i];
     else if (a === '--wait') out.wait = Number(argv[++i]);
-    else if (a === '--shot') out.shot = argv[++i];
     else if (a === '--grep') out.grep = argv[++i];
     else if (a === '--scene') out.scene = argv[++i];
+    else if (a === '--viewport') out.viewport = argv[++i];
+    else if (a === '--shot') out.steps.push({ kind: 'shot', path: argv[++i] });
+    else if (a === '--tap') out.steps.push({ kind: 'tap', spec: argv[++i], mouse: false });
+    else if (a === '--tap-mouse') out.steps.push({ kind: 'tap', spec: argv[++i], mouse: true });
     else if (a === '--quiet') out.quiet = true;
   }
   return out;
+}
+
+/** `390x844@2` → `{ width: 390, height: 844, dsf: 2 }` */
+function parseViewport(spec) {
+  const m = /^(\d+)x(\d+)(?:@(\d+(?:\.\d+)?))?$/.exec(spec);
+  if (m === null) throw new Error(`--viewport 格式应为 WxH[@dsf]，收到 ${spec}`);
+  return { width: Number(m[1]), height: Number(m[2]), dsf: m[3] === undefined ? 1 : Number(m[3]) };
 }
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -60,12 +79,17 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 /**
  * 调 Cocos CLI 构建，并把 `--scene` 指定的场景设为启动场景。
  *
- * 两个坑（本机实测）：
+ * 三个坑（本机实测）：
  * - 环境里继承了 `ELECTRON_RUN_AS_NODE=1`（宿主是 Electron 应用），会让 Cocos
  *   二进制退化成 node 而拒收参数 → 必须删掉这个环境变量。
  * - Chromium 的 GPU 沙箱在非交互环境下初始化失败 → 需要 `ELECTRON_DISABLE_SANDBOX=1`。
  * - 编辑器退出码恒为 36（关闭期 worker 收 SIGTERM），**不是**构建失败，
  *   所以判定成功看日志里的 "build Task (... ) Finished in"。
+ *
+ * `showFPS=false`：默认开着 FPS 面板（调试构建），那块灰底面板会盖住左下角的
+ * 棋盘/托盘，截图取证的像素就不可信了。**实测这个构建参数不生效**（`application.js`
+ * 里 `this.showFPS` 仍写死 true），所以改在运行时把面板这个 DOM 节点隐藏掉
+ * （见 `hideProfiler`）——性能读数改从日志里的定量输出取。
  */
 async function cocosBuild(scene) {
   const metaPath = join(process.cwd(), 'assets/scenes', `${scene}.scene.meta`);
@@ -82,7 +106,12 @@ async function cocosBuild(scene) {
   const code = await new Promise((ok) => {
     const child = spawn(
       CREATOR,
-      ['--project', process.cwd(), '--build', `platform=web-mobile;debug=true;startScene=${uuid}`],
+      [
+        '--project',
+        process.cwd(),
+        '--build',
+        `platform=web-mobile;debug=true;showFPS=false;startScene=${uuid}`,
+      ],
       { env, stdio: ['ignore', 'pipe', 'pipe'] },
     );
     child.stdout.on('data', (b) => logChunks.push(b));
@@ -201,6 +230,8 @@ async function main() {
   }
 
   const args = parseArgs(process.argv.slice(2));
+  // 提前解析视口：Chrome 的窗口尺寸要跟着走，否则窗口比设备视口小会被裁。
+  const vp = parseViewport(args.viewport);
   if (args.scene) await cocosBuild(args.scene);
 
   const root = resolve(process.cwd(), args.dir);
@@ -228,13 +259,20 @@ async function main() {
       `--user-data-dir=${profile}`,
       '--no-first-run',
       '--no-default-browser-check',
+      // 关掉 Chrome 自身的沙箱/zygote：本夹具是一次性无头截图，不需要 Chrome 内部沙箱；
+      // 更重要的是——外层（WorkBuddy）沙箱会拦截 Chrome 启动期的一些系统调用，使 Chrome 以
+      // SIGTRAP 崩溃、调试端口起了却立刻死掉，导致 `Runtime.enable` 超时。关掉 Chrome 内部沙箱后
+      // 它能在受限外层沙箱里正常起来（实测修复）。
+      '--no-sandbox',
+      '--disable-setuid-sandbox',
+      '--no-zygote',
       '--disable-gpu',
       '--use-gl=angle',
       '--use-angle=swiftshader',
       '--enable-unsafe-swiftshader',
       '--hide-scrollbars',
       '--mute-audio',
-      '--window-size=720,1280',
+      `--window-size=${vp.width},${vp.height}`,
       'about:blank',
     ],
     { stdio: 'ignore' },
@@ -325,15 +363,98 @@ async function main() {
     await session.send('Runtime.enable');
     await session.send('Log.enable');
     await session.send('Page.enable');
-    await session.send('Page.navigate', { url });
 
+    // 视口必须在 navigate **之前**覆盖：引擎在启动时读 window.innerWidth/Height
+    // 决定分辨率策略，晚了就按旧尺寸算完画布了。
+    //
+    // 触摸仿真要单独开：只设 `mobile: true` 时 `'ontouchstart' in window` 仍是 false
+    // （实测），引擎的 `sys.hasFeature(INPUT_TOUCH)` 就为假 → TouchInputSource 不注册
+    // 监听，派发触摸事件会石沉大海。游戏的目标平台是触摸优先，所以这里必须开。
+    await session.send('Emulation.setDeviceMetricsOverride', {
+      width: vp.width,
+      height: vp.height,
+      deviceScaleFactor: vp.dsf,
+      mobile: true,
+    });
+    await session.send('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 1 });
+
+    await session.send('Page.navigate', { url });
     await sleep(args.wait);
 
-    if (args.shot) {
+    /** 截图落盘（CDP 给的是 base64） */
+    const shoot = async (path) => {
       const { data } = await session.send('Page.captureScreenshot', { format: 'png' });
-      const { writeFile } = await import('node:fs/promises');
-      await writeFile(args.shot, Buffer.from(data, 'base64'));
-      console.log(`📷 截图：${args.shot}`);
+      await writeFile(path, Buffer.from(data, 'base64'));
+      console.log(`📷 截图：${path}`);
+    };
+
+    /** 页面里求值并取回值（用于诊断信息与小范围 DOM 操作） */
+    const evaluate = async (expression) => {
+      const r = await session.send('Runtime.evaluate', { expression, returnByValue: true });
+      return r.result?.value;
+    };
+
+    // 隐藏 FPS 面板：它是引擎插在页面上的 DOM 层，会盖住左下角的托盘，
+    // 不盖住就没法像素取证。顺手把画布几何打出来——点击坐标要靠它核对。
+    const firstTap = args.steps.find((s) => s.kind === 'tap')?.spec ?? null;
+    const diag = await evaluate(`(() => {
+      const out = [];
+      let hidden = [];
+      try {
+        const p = globalThis.cc && globalThis.cc.profiler;
+        if (p && typeof p.hideStats === 'function') { p.hideStats(); hidden.push('cc.profiler.hideStats()'); }
+      } catch (e) { out.push('hideStats 异常: ' + e.message); }
+      for (const sel of ['#profiler', '.profiler']) {
+        const el = document.querySelector(sel);
+        if (el && el.style.display !== 'none') { el.style.display = 'none'; hidden.push(sel); }
+      }
+      const c = document.getElementById('GameCanvas');
+      const r = c ? c.getBoundingClientRect() : null;
+      const tap = ${JSON.stringify(firstTap)} ? ${JSON.stringify(firstTap)}.split(',').map(Number) : null;
+      const topEl = tap ? document.elementFromPoint(tap[0], tap[1]) : null;
+      return JSON.stringify({
+        window: [innerWidth, innerHeight],
+        dpr: devicePixelRatio,
+        canvas: r ? [Math.round(r.left), Math.round(r.top), Math.round(r.width), Math.round(r.height)] : null,
+        hasTouch: 'ontouchstart' in window,
+        topElAtTap: topEl ? (topEl.id || topEl.tagName) : null,
+        hidesStats: hidden,
+        problems: out,
+      });
+    })()`);
+    console.log(`🔎 几何：${diag}`);
+
+    // 按命令行顺序执行动作序列：`--shot` 截图，`--tap`/`--tap-mouse` 派发点击。
+    // 这样 `--shot a.png --tap 62,668 --shot b.png` 能一次采到改前/改后两张对照图。
+    // 点击默认走**触摸**事件（本夹具按移动端视口模拟，触摸才是要验的输入链路），
+    // `--tap-mouse` 走鼠标事件。两者都是 CDP 真实输入，会走浏览器的 pointer 事件链，
+    // 因此验的是引擎的触摸处理 + 组件的冒泡控制，而非直接调接口。
+    for (const step of args.steps) {
+      if (step.kind === 'shot') {
+        await shoot(step.path);
+      } else if (step.kind === 'tap') {
+        const [x, y] = step.spec.split(',').map(Number);
+        if (!Number.isFinite(x) || !Number.isFinite(y)) throw new Error(`--tap 格式应为 x,y：${step.spec}`);
+        if (step.mouse) {
+          const base = { x, y, modifiers: 0, pointerType: 'mouse' };
+          await session.send('Input.dispatchMouseEvent', { ...base, type: 'mouseMoved', button: 'none' });
+          await session.send('Input.dispatchMouseEvent', {
+            ...base, type: 'mousePressed', button: 'left', buttons: 1, clickCount: 1,
+          });
+          await sleep(60);
+          await session.send('Input.dispatchMouseEvent', {
+            ...base, type: 'mouseReleased', button: 'left', buttons: 0, clickCount: 1,
+          });
+          console.log(`👆 鼠标点击 (${x}, ${y})`);
+        } else {
+          const point = { x, y, radiusX: 1, radiusY: 1, force: 1, id: 1 };
+          await session.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [point] });
+          await sleep(60);
+          await session.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+          console.log(`👆 触摸点击 (${x}, ${y})`);
+        }
+        await sleep(600);
+      }
     }
   } catch (e) {
     console.error(`❌ 预览失败：${e.message}`);

@@ -63,6 +63,8 @@ export {
 } from './geometry/shape';
 export type { BBox } from './geometry/shape';
 export { clampAnchor, inBounds, rcKey, toIndex, toRC } from './geometry/coords';
+export { fitThumbnail } from './geometry/thumbnail';
+export type { ThumbnailFit } from './geometry/thumbnail';
 
 // 规则
 export {
