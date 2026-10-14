@@ -21,6 +21,7 @@
 
 - 构建/预览坑：`env -u ELECTRON_RUN_AS_NODE`、`ELECTRON_DISABLE_SANDBOX=1`；编辑器退出码恒 36（关闭期 SIGTERM），以日志 `build Task (web-mobile) Finished in` 判成功。
 - `node tools/preview-check.mjs --scene Game [--shot out.png] [--grep X]`；复现现有构建可省 `--scene`。
+- **Chrome 必须 `--no-sandbox --no-zygote`**：本环境外层（WorkBuddy）沙箱会拦截 Chrome 启动期系统调用，使其 **SIGTRAP 崩溃**、调试端口起了即死、`Runtime.enable` 超时（实测）。关掉 Chrome 内部沙箱后正常。注意 `dangerouslyDisableSandbox` 在本环境被拒、且一次性 escalation 过期后也会失效，**别依赖它兜预览**；`--no-sandbox` 才是稳的。`HOME` 重定向对 RLZ 拦截无效（macOS Chrome 硬编码真实 Application Support）。
 - **像素级核对**（比目测可靠）：写个纯 stdlib PNG 解码 + 扫描线找色块中心，比对格中心（例：色块中心 149.5/359.5/569.5 ↔ 格中心 150/360/570）。
 - **负向验证**：改阈值（如 `CELL_PX_MIN`）故意触发告警分支，确认它真的会报，然后回退。
 
