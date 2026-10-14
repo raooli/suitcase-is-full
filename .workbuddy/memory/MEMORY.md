@@ -27,6 +27,7 @@
 - **手势取证**：`--drag x1,y1,x2,y2`（按下 → 8 段**插值** move → 松手；跳变式输入验不出节流与跟手）。
 - **三套坐标别混**：`--tap/--drag` 收 **CSS 页面坐标**；引擎 `event.getUILocation()` = **世界坐标**（y 自下而上，`uiY = 844 − pageY`）；**设计坐标**原点在画布中心（`= world − (195,422)`）。`getLocation()` 是设备像素（dsf=2 时 2×），别拿它对设计值。
 - **取真实退出码**：用 `cmd > log 2>&1; echo $?`。`cmd | tail` 拿到的是 tail 的码。后台任务状态可能因沙箱拦截 Cocos 编辑器临时文件清理而显示 failed，但脚本自身 EXIT=0——以日志里的「✅ 预览无 Console 错误」+ 退出码为准。
+- **「Cocos 编辑器点预览只见棋盘」= 视口纵横比问题，不是代码 bug**：设计 390×844 竖屏 + Fit Width，编辑器预览若在横屏/矮窗里跑，844 高的画布按宽度缩放后远超窗口高，**底部托盘（设计 y ≈ −166~−326）+ 工具栏被裁出视野**。无头夹具固定 390×844 就完整（截图实证棋盘 + 4 托盘物品）。**浏览器试玩**：构建 web-mobile → `cd build/web-mobile && python3 -m http.server 8123`（file:// 会被 ES module CORS 拦）→ 开 `http://localhost:8123/` → DevTools 设备模拟选竖屏 iPhone（390×844）**并开 touch 仿真**（桌面鼠标不触发 TOUCH_*，不开设备模拟拖不动）。
 
 ## Cocos 3.8.8 触摸事件的三条实测事实
 
@@ -43,5 +44,5 @@
 - TDD 17.4 占位策略：按最终包围盒尺寸绘制、2px brown 描边、真图 M4-5 替换时结构不动（`ItemView.setSpriteFrame()` 是桩）。
 - 命名：`GameController`（不是 `GameScene`，避免与 `cc.Scene`/`Game.scene` 撞名）。
 - **取整语义分场景**（M1-5 实测）：**抓取锚点用按下点算**（与 `grabOffset` 同源，否则格中心 round 不稳会跳到 `[0,-1]`）；**board 命中用 `localToGrid`（floor）**（格中心的点不能 round 进位到右下斜邻格，否则按物品中心抓不起来）；**move 锚点用 `snapToGrid`（round）**（TDD 6.3 裁决）。三处不同是有意的，别"统一"成同一个。
-- **Console 取证只看最后 80 行**（`preview-check.mjs` 的 `slice(-80)`）：长手势序列会被截断，靠 `--grep <子串>` 过滤看全量（注意 `--grep` **只打印匹配行**，不过滤时只留尾部）。`--drag` 第 5 段截图是 touchEnd **前**的中途态；拍终态用独立 `--shot` step。
+- **Console 取证只看最后 80 行**（`preview-check.mjs` 的 `slice(-80)`）：长手势序列会被截断，靠 `--grep <子串>` 过滤看全量（注意 `--grep` **只打印匹配行**，不过滤时只留尾部；且是**纯子串**匹配、不认 `|` 正则——写 `a|b` 会 0 命中，用单关键词）。`--drag` 第 5 段截图是 touchEnd **前**的中途态；拍终态用独立 `--shot` step。
 - **改状态唯一入口 = `dispatch`**（M1-6 定型）：view 一律 `onIntent → GameController.handleIntent → session.dispatch`；重绘只由**真·改状态**事件触发（`state-changed` 每次 dispatch 都带，含 move，拿它当触发器会每移一格全盘重建）。`grab` 不改 state，故拖拽中被拖物品要 `setHiddenItem` 双视图排除（ItemLayer/TrayView）防"原位一份 + ghost 一份"。
