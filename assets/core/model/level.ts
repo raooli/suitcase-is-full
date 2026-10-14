@@ -225,3 +225,29 @@ export function parseLevelBundle(raw: unknown, levelId: number): LevelSpec {
   return parseLevelSpec(hit);
 }
 
+/**
+ * 关卡包里有哪些关卡（`levelId` 升序、去重、只收形状像关卡的条目）。
+ *
+ * 用途（M2-1）：
+ * 1. **「下一关」是否存在**——最后一关（当前是第 10 关）没有下一关，不能显示
+ *    一个点不动的按钮（UI Spec：禁止空按钮）。判断"有没有下一关"是**逻辑**，
+ *    不该由 view 自己数数组长度；
+ * 2. **运行时载入体检**——M2-1 的验收是「10/10 关能载入且可解」，需要对包里
+ *    每一关逐个 `parseLevelBundle` 试一遍，而"有哪些关"要先问它。
+ *
+ * 与 `parseLevelBundle` 同一层的原因相同：view 不自己拆 JSON 结构
+ * （执行纪律 #3）。取不到就返回空数组——调用方按"没有关卡"降级，
+ * 不把包结构问题抛到引擎层。
+ */
+export function levelIdsOf(raw: unknown): number[] {
+  if (typeof raw !== 'object' || raw === null) return [];
+  const levels = (raw as { levels?: unknown }).levels;
+  if (!Array.isArray(levels)) return [];
+
+  const ids = new Set<number>();
+  for (const candidate of levels) {
+    if (looksLikeLevel(candidate)) ids.add(candidate.levelId);
+  }
+  return Array.from(ids).sort((a, b) => a - b);
+}
+

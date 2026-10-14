@@ -270,12 +270,23 @@ export const UI_OVERLAY_MASK_ALPHA = 0.55;
 
 /** 浮层面板尺寸与圆角（UI Spec 4 节圆角档位取 24） */
 export const UI_OVERLAY_PANEL_WIDTH = 280;
-export const UI_OVERLAY_PANEL_HEIGHT = 300;
+/**
+ * 面板高度（M2-1 从 300 加到 340）：UI Spec 5.3 规定通关浮层是**「下一关」主按钮
+ * + 「再来一次」次入口**两个入口，300 装不下两个按钮（会压到面板外或被裁）。
+ * 340 = 文字区（上 170）+ 主按钮 48 + 间距 12 + 次入口 44 + 下留白 30。
+ */
+export const UI_OVERLAY_PANEL_HEIGHT = 340;
 export const UI_OVERLAY_PANEL_RADIUS = 24;
 
-/** 「再来一次」按钮尺寸（UI Spec 4 节交互热区下限 44 之上留余量） */
+/** 主按钮「下一关」尺寸（UI Spec 4 节交互热区下限 44 之上留余量） */
 export const UI_OVERLAY_BUTTON_WIDTH = 200;
 export const UI_OVERLAY_BUTTON_HEIGHT = 48;
+
+/**
+ * 次入口「再来一次」尺寸。比主按钮矮 4px 以体现主次，但**不低于 44**——
+ * UI Spec 4 节的交互热区硬下限（P-04 亦同口径：格边长 44px 下限）。
+ */
+export const UI_OVERLAY_BUTTON_SECONDARY_HEIGHT = 44;
 
 /**
  * 负反馈抖动（「放不下」「转不动」共用）：横向位移幅度与总时长。

@@ -17,7 +17,7 @@
 import { _decorator, Component, JsonAsset } from 'cc';
 import { DEBUG } from 'cc/env';
 
-import { GameSession, LevelDataError, itemAtCell, parseLevelBundle } from '../core';
+import { GameSession, LevelDataError, itemAtCell, levelIdsOf, parseLevelBundle } from '../core';
 import type {
   BoardSpec,
   Intent,
@@ -81,30 +81,66 @@ export class GameController extends Component {
   }
 
   override onLoad(): void {
-    this.gameSession = this.createSession();
-    if (this.gameSession === null) return;
-
-    const level = this.gameSession.level;
-    this.boardView?.renderBoard(level.board);
-
-    // 预览层（M1-5）需要查物品形状，给它同一关的 level（只读）
-    this.previewLayer?.init(level);
-    // 物品层（M1-6）同理；初绘按初始 state（托盘全满、棋盘空的常态）
-    this.itemLayer?.init(level);
-    this.itemLayer?.render(this.gameSession.getState());
-
     if (DEBUG) {
-      console.log(
-        `[GameController] 会话就绪：L${level.levelId}《${level.title}》` +
-          ` ${level.board.rows}×${level.board.cols} / ${level.items.length} 件物品`,
-      );
+      // 尺寸体检表：逐关打印 cellSize 折算（G1-D3 要盯它在 320px 屏是否过 44 下限）
       BoardView.logSizingTable(this.bundleLevels());
     }
-
-    // 托盘（M1-3）：顺序与可见性都来自 `state`
-    this.renderTray(level);
-    this.wireDrag(level);
+    // 装配与"换一关"是同一条路径（M2-1）：首启就是载入第 `levelId` 关
+    this.startLevel(this.levelId);
     this.wireSuccessOverlay();
+  }
+
+  /**
+   * 载入指定关卡并整体重建视图（M2-1）。**首启 / 再来一次 / 下一关 三条路径共用**——
+   * 三条路径要做的事完全一样，拆成三份必然分叉（M1-7 的 replay 就是先例）。
+   *
+   * 步骤：`levelId` 落库 → 换 `GameSession` → 重画棋盘格 → init 两个只读层 →
+   * 重挂 `wireDrag` → 全量刷新 → 收起浮层。
+   *
+   * 两处容易漏的：
+   * - **`wireDrag` 必须重挂**：`boardItemAt` 的闭包捕获了 `level`，换关不重挂
+   *   会拿上一关的物品表去查这一关的命中（点得到但抓不起来）；
+   * - **`renderBoard` / `ItemLayer.render` 都先清后建**，重复调用安全（M1-1 起如此）。
+   *
+   * 换关走**新 `GameSession`** 而不是 `dispatch({type:'reset'})`：reset 在
+   * `WinAnimating` / `Completed` 被 `isInputFrozen()` 故意冻结（防玩家被浮层误导
+   * 误触工具栏抹掉通关态），而浮层按钮是明确意图，另走换会话更干净。
+   */
+  private startLevel(levelId: number): void {
+    this.levelId = levelId;
+    this.gameSession = this.createSession();
+    const session = this.gameSession;
+    if (session === null) return;
+
+    const level = session.level;
+    this.boardView?.renderBoard(level.board);
+    // 预览层（M1-5）/ 物品层（M1-6）只查物品形状，给它们同一关的 level（只读）
+    this.previewLayer?.init(level);
+    this.itemLayer?.init(level);
+    this.wireDrag(level);
+    this.refreshAll(session.getState(), session.getPhase());
+    this.successOverlay?.hide();
+
+    if (DEBUG) {
+      const next = this.hasNextLevel() ? `L${levelId + 1}` : '（已是最后一关）';
+      console.log(
+        `[GameController] 载入 L${level.levelId}《${level.title}》` +
+          ` ${level.board.rows}×${level.board.cols} / ${level.items.length} 件物品` +
+          ` → 下一关 ${next}`,
+      );
+    }
+  }
+
+  /**
+   * 有没有下一关（UI Spec 5.3：最后一关不显示「下一关」，也不留空按钮）。
+   *
+   * 问 core 的 `levelIdsOf()`，不在 view 里数数组长度——"包里有哪些关"是数据
+   * 结构判断，属于 core（执行纪律 #3：逻辑进 core，表现进 view）。
+   */
+  private hasNextLevel(): boolean {
+    const ids = levelIdsOf(this.levelJson?.json);
+    if (ids.length === 0) return false;
+    return this.levelId < Math.max(...ids);
   }
 
   /**
@@ -125,43 +161,14 @@ export class GameController extends Component {
       this.gameSession?.completeWinAnimation();
     };
     overlay.onReplay = () => {
-      this.replayLevel();
+      this.startLevel(this.levelId);
     };
-  }
-
-  /**
-   * 「再来一次」：换同关卡的新会话（M1-7）。
-   *
-   * 为什么不走 `dispatch({type:'reset'})`：reset 意图在 WinAnimating /
-   * Completed 两个 phase 下会被 `session.isInputFrozen()` 拒绝（TDD 注释：
-   * 冻结 reset 是防玩家被浮层误导误触工具栏抹掉通关态）。而"再玩一次"是
-   * 浮层按钮上的**明确意图**，与误触有本质区别——但它同样要清空棋盘回到
-   * 初始态，用新 `GameSession` 表达最干净：状态、撤回栈、计时全部重置，
-   * 不依赖 reset 意图的解冻（那条解冻要等 M2-3 的 ConfirmDialog 设计）。
-   *
-   * 步骤与 onLoad 装配同构：换 session → 重画棋盘格 → init 三层 → 全量刷新。
-   * `renderBoard` / `ItemLayer.render` 都先清后建，重复调用安全（M1-1 起如此）。
-   * `wireDrag` 也要重挂：它的 `boardItemAt` 闭包捕获了旧 `level`，换关卡
-   * （M2 的「下一关」）时不重挂就会拿旧关的物品表查命中。
-   */
-  private replayLevel(): void {
-    this.gameSession = this.createSession();
-    const session = this.gameSession;
-    if (session === null) return;
-
-    const level = session.level;
-    this.boardView?.renderBoard(level.board);
-    this.previewLayer?.init(level);
-    this.itemLayer?.init(level);
-    this.wireDrag(level);
-    this.refreshAll(session.getState(), session.getPhase());
-    this.successOverlay?.hide();
-
-    if (DEBUG) {
-      console.log(
-        `[GameController] 再来一次：L${level.levelId} 新会话（${level.items.length} 件物品回托盘）`,
-      );
-    }
+    overlay.onNextLevel = () => {
+      // 双保险：最后一关不显示这个按钮，所以这里正常情况下不会发生；
+      // 真发生了也不能把玩家送进不存在的关卡（`parseLevelBundle` 会抛）
+      if (!this.hasNextLevel()) return;
+      this.startLevel(this.levelId + 1);
+    };
   }
 
   /**
@@ -344,7 +351,7 @@ export class GameController extends Component {
             `[GameController] 🎉 通关！L${event.levelId} ${event.moves} 步` +
               ` ${(event.elapsedMs / 1000).toFixed(1)}s → SuccessOverlay`,
           );
-          this.successOverlay?.show(event);
+          this.successOverlay?.show(event, this.hasNextLevel());
           break;
       }
     }
@@ -383,21 +390,6 @@ export class GameController extends Component {
   private isFrozen(): boolean {
     const phase = this.gameSession?.getPhase();
     return phase === 'WinAnimating' || phase === 'Completed';
-  }
-
-  /**
-   * 托盘渲染（M1-3）。
-   *
-   * 数据只从 `session.getState()` 拿，本组件不持有"托盘里有什么"的副本。
-   * 点选**不在**这里接线：M1-4 起托盘不再自带触摸监听，点击由 `DragController`
-   * 判（见 `wireDrag`），并进 `handleIntent` 同一入口。
-   */
-  private renderTray(level: LevelSpec): void {
-    const session = this.gameSession;
-    const tray = this.trayView;
-    if (session === null || tray === null || this.boardView === null) return;
-
-    tray.render(session.getState(), level, this.boardView);
   }
 
   /**

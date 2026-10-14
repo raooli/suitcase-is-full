@@ -28,7 +28,13 @@ export type {
   SaveDataV1,
   Vec2Like,
 } from './model/types';
-export { LevelDataError, parseLevelBundle, parseLevelSpec, validateLevelSpec } from './model/level';
+export {
+  LevelDataError,
+  levelIdsOf,
+  parseLevelBundle,
+  parseLevelSpec,
+  validateLevelSpec,
+} from './model/level';
 export type { LevelBundle } from './model/level';
 
 // 色板与明度阶梯（纯函数，view 与单测共用）
