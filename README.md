@@ -53,6 +53,7 @@ npm run preview:game     # ★ 无头预览：CLI 构建 Game 场景 + 真实跑
 | `npm run report:difficulty` | 难度代理指标报告（[tools/difficulty-report.ts](./tools/difficulty-report.ts)） |
 | `npm run check:art` / `check:art:strict` / `art:missing` | 美术覆盖率 / 尺寸朝向 / 缺失清单（[tools/check-art.ts](./tools/check-art.ts)） |
 | `npm run scene:build` | 由声明式规格生成 `.scene`（[tools/scene-build.mjs](./tools/scene-build.mjs)） |
+| `npm run protect:branch` | 分支保护规则应用器，**默认 dry-run**（[tools/protect-branch.mjs](./tools/protect-branch.mjs)，说明见 [.github/BRANCH-PROTECTION.md](./.github/BRANCH-PROTECTION.md)） |
 | `npm run preview:game` | 无 GUI 预览取证（[tools/preview-check.mjs](./tools/preview-check.mjs)） |
 
 ---

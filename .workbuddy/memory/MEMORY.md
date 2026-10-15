@@ -54,5 +54,6 @@ view 类型检查：`tsconfig.view.json` 显式重写 `types`（相对路径以�
 - 通关浮层：下一关粉实心(195,482)、再来一次白描边(195,540)、面板280×340；末关不显下一关；`applyButtons` 每次 `show` 重排。
 - 关卡加载：场景直挂 `JsonAsset` 不换 `resources.load`。解锁门禁(M2-7)/进度持久化(M2-8)/完整庆祝(M2-10) 未做。
 - 手指遮挡补偿只改画法：anchor 不动、不挪节点、缩放锚点取整体包围盒中心（`core/geometry/lift.ts` `centerOf`）。`UI_DRAG_LIFT_PX=24`/`LIFT_SCALE=1.05`/`SHADOW_OFFSET_PX=3`/`ALPHA=0.18`。
-- 撤销不给临时手势，只等 M2-2 工具栏（与旋转刻意不对称：破坏性无 redo、规格在工具栏、空白区手势已占用）。
+- 撤销不给临时手势，只等 M2-2 工具栏（与旋转刻意不对称：破坏性无 redo、规格在工具栏、空白区手势已占用）。M2-2 已落地：四按钮页面 x=60/150/240/330、y=796；重置走 ConfirmDialog（确定 195,470 / 取消 195,526）。
+- **Cocos 触摸派发给「所有」命中节点**（不只是最深的）——"整屏节点挡住触摸"必须显式 `propagationStopped`，光有 UITransform 尺寸没用（M2-2 实测：SuccessOverlay 有 390×844 遮罩但没挂监听，WinAnimating 期工具栏照样能点、确认框直接盖在通关浮层上）。已隔开的：ConfirmDialog/ToolbarView（遮罩+按钮都停了）。
 - L1 通关坐标配方：cellPx=114；`A@(1,1) B@(1,0) C@(2,1) D@(0,0)`；页面格中心(81/195/309, 240/354/468)；落点→格 `pointerRow=round((pageY−183)/114)` `pointerCol=round((pageX−24)/114)`；托盘0号槽中心(62,658)。

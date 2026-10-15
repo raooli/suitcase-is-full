@@ -23,6 +23,16 @@
 
 ## 提交记录（倒序）
 
+### `f8cef5d` · fix: SuccessOverlay 整屏遮罩显式 propagationStopped 隔离输入（P1）
+
+| 项 | 内容 |
+| --- | --- |
+| 日期 | 2026-10-15 15:59 |
+| 文件 | `assets/view/SuccessOverlay.ts`（+16/−3） |
+| 要点 | ① **P1 视觉缺陷修复**：WinAnimating 期点「重置」会穿透整屏遮罩打开 `ConfirmDialog` 盖在通关浮层上（截图铁证），且对话框存续到入场动画播完之后。状态不坏——core 冻结门（`session.isInputFrozen()` / `DragController.inputFrozen` 双保险）拒收冻结期 `reset`，仍是「已放 4 件 phase=WinAnimating」；但属视觉缺陷（且 `showHint` 同样无门，冻结期能画高亮）② **根因（新查明引擎事实）**：Cocos 把触摸派发给**所有**命中节点，"整屏节点挡住触摸"必须显式 `propagationStopped`——光有 390×844 的 `UITransform` 尺寸没用。`ConfirmDialog` / `ToolbarView` 都显式停了所以有效；`SuccessRoot` 场景里虽有全屏 `uiTransform` 但没挂监听，什么都没挡住 ③ **修法**：`onLoad` 给整屏节点挂 `TOUCH_START` / `TOUCH_END` 的 `propagationStopped`（3 行）。按钮是子节点、先被派发不受影响（见 `buildOnce` 的 Next/Replay 按钮 TOUCH_END 回调）；节点 `active=false` 时不收事件，`show()` / `hide()` 显隐即自动启停本隔离 |
+| 验收 | **复跑冻结期取证（无头预览，零 Console 错误）**：L1 四拖通关 → 点「重置」(240,796) → **无任何 `[ToolbarView] 点击「重置」` 与 `[ConfirmDialog] 显示确认框` 日志**（穿透已挡住 ✅）→ 点「再来一次」(195,540) 仍生效（L1 重载 ✅）。`npm run check` **233/233** |
+| 推翻 | 推翻 2026-10-15 早前（M2-3 复盘）"SuccessOverlay 整屏遮罩在命中层级挡住工具栏"的错误结论——当时未实测，本轮无头预览实证该遮罩**只画不挡**，重置能穿透它打开确认框 |
+
 ### `006306b` · fix: M2-3 ConfirmDialog 消息文案按面板宽度换行 + 端到端验收
 
 | 项 | 内容 |
