@@ -23,6 +23,17 @@
 
 ## 提交记录（倒序）
 
+### `fbe7d27` · feat: M2-4 「装不下」非阻断 Toast（deadend 判据从面积守恒改为无合法落点）
+
+| 项 | 内容 |
+| --- | --- |
+| 日期 | 2026-10-15 17:35 |
+| 类型 | 新功能（M2 第四个任务：UI Spec 13 / PRD R-10 / TDD 8.4 的「非阻断装不下提示」落地）+ 核心判据修复 |
+| 文件 | `assets/core/solver/deadend.ts`、`assets/core/config.ts`、`assets/view/Toast.ts`(+.meta)、`assets/view/GameController.ts`、`test/model.spec.ts`（5 文件，+138/−22；另 `Toast.ts.meta` 新增） |
+| 要点 | ① **核心判据修复（M2-4 推进时实测发现的关键缺陷）**：旧 `checkDeadend` 用 `freeCells < requiredCells` 做快检，但 `freeCells − requiredCells = 可用格 − 物品总面积`（放置无关恒等），只能检出「关卡本身过载」而对**玩家摆错**毫无作用；10 个正式关卡全部 ≤ 满载 → `deadlock-warning` 在正规玩法里**永不触发**、Toast 沦为死代码。新判据 `stuck = !hasAnyLegalPlacement(level, state)`：逐件（含旋转）逐格试探是否还有任何合法落点，O(物品×旋转×格) 在 36 格规模可忽略，真正反映「玩家把局面走死」② **仍是单向断言**：`stuck=false` 只说明至少一件能放下、不代表最终装得下，故绝不触发失败态/禁用操作（PRD 明确不判失败）③ **`Toast` 新组件（代码注入 SafeAreaRoot，同 SuccessOverlay 范式）**：棕底(α0.92)+奶油字 pill（`UI_TOAST_WIDTH=320`/`HEIGHT=44`/`RADIUS=22`，锚点 `y=330` 居顶不挡棋盘）；**无触摸监听、无 `propagationStopped`**（Cocos 派发到所有命中节点，`SafeAreaRoot` 始终收手势 → 提示出现时棋盘/托盘仍可拖拽，UI Spec 13）；`show(msg)` 幂等（取消上一次待淡出）、`Tween` 淡入 150ms → `DEADLOCK_TOAST_MS=2000` 后淡出 300ms；`buildOnce` 懒建、背景 `Graphics` + 子节点 `Label`（一个节点只允许一个 renderable）④ **接线**：`config.ts` 加 `UI_TOAST_*`；`GameController.buildToast` 注入 `dragController?.gestureRoot` 末尾（最顶层）、`onLoad` 在 `buildDialog` 后调用；`afterDispatch` 的 `deadlock-warning` case 由 `console.warn` 改为 `this.toastView?.show('剩下的空间装不下啦，试试挪一挪或者撤回一步')`（设计内行为、不报异常）⑤ **需求来源**：PRD R-10 / TDD 8.4 / UI Spec 13「装不下」非阻断提示，文案指向「挪一挪 / 撤回一步」 |
+| 验收 | **`npm run check` 234/234**（+1：新增「面积够但碎片化装不下」回归用例，直接锁定旧面积守恒快检的盲区——证明重写后 `deadlock-warning` 会真正着火）；**`npm run preview:game` 无 Console 错误**，日志含 `[GameController] 装不下提示条已注入 SafeAreaRoot`（`Toast.onLoad` 设 `active=false` 不挡手势、不报错）。注：in-engine 视觉 pill 由一次「把棋盘走死」的手玩确认（deadlock 触发链 `afterCommit→checkDeadend→deadlock-warning→toastView.show` 已按代码路径验证，单元层已证事件会发射） |
+| 推翻 | 推翻「面积守恒快检（`freeCells < requiredCells`）足以检出装不下」的旧假设——该判据与摆放进度无关、10 关永不触发，M2-4 推进时经单元回放实测发现，已改用「无合法落点」判据 |
+
 ### `f8cef5d` · fix: SuccessOverlay 整屏遮罩显式 propagationStopped 隔离输入（P1）
 
 | 项 | 内容 |
