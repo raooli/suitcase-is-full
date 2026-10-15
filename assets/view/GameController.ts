@@ -155,6 +155,9 @@ export class GameController extends Component {
     this.previewLayer?.init(level);
     this.itemLayer?.init(level);
     this.wireDrag(level);
+    // 换关 / 重开才把托盘滚回开头：**`render` 保留偏移**（每次状态变更重建都归零
+    // 会让 L7+ 刚取回的物品滚出视野），所以归零必须由这里显式声明
+    this.trayView?.resetScroll();
     this.refreshAll(session.getState(), session.getPhase());
     this.successOverlay?.hide();
     // 工具栏可用态随关卡刷新（首关 / 换关后重算）
@@ -359,6 +362,7 @@ export class GameController extends Component {
 
     // ④ 事件 → 表现
     let refresh = false;
+    let resetTrayScroll = false;
     for (const event of result.events) {
       switch (event.type) {
         case 'state-changed':
@@ -381,8 +385,13 @@ export class GameController extends Component {
           break;
         case 'item-returned':
         case 'undo-applied':
-        case 'level-reset':
           refresh = true;
+          break;
+        case 'level-reset':
+          // 「重置」= 回到本关初始状态，托盘也一并回到开头（`render` 刻意保留偏移，
+          // 见 TrayView.render 注释；归零是这里的显式意图）
+          refresh = true;
+          resetTrayScroll = true;
           break;
         case 'item-rotated':
           refresh = true;
@@ -421,6 +430,10 @@ export class GameController extends Component {
       }
     }
 
+    // 归零放在 refreshAll **之前**：让重建本身就按 0 布局（不然会先按保留的旧偏移
+    // 建一遍再跳回开头，日志/首帧都对不上）。此刻动作只改一个偏移字段，旧槽位随
+    // 重建被清掉，不产生浪费的可见中间态。
+    if (resetTrayScroll) this.trayView?.resetScroll();
     if (refresh) this.refreshAll(result.state, result.phase);
 
     // 任何状态变更都可能改写工具栏可用态（撤回栈 / 选中 / 进度 / 提示可行性）

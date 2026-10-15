@@ -125,10 +125,25 @@ export class TrayView extends Component {
       index++;
     }
 
-    // 换关 / 状态变更都会整体重建：滚动偏移归零，再按可见窗口算每槽显隐（M2-11）。
+    // 状态变更会整体重建：**保留**滚动偏移，再按可见窗口算每槽显隐（M2-11）。
+    // 这里若归零，每次放入 / 取出 / 旋转 / 撤回都会把托盘弹回开头——L7+ 最坑：
+    // 取出高 `trayOrder` 物品时，拖拽中 `ensureSlotVisible` 已把目标槽挪进窗口并
+    // 高亮，提交后归零等于把刚回巢（且 selected）的物品又滚出视野、反馈自相矛盾。
+    // 偏移由 `applyScrollLayout` 按新的 `maxScroll` 夹取，件数变化时自动收敛到
+    // 合法区间；真正"从头开始"只有换关 / 重开，走 `resetScroll()`。
     // 溢出件不再永久隐藏——建全部、靠滚动露出来够到（取代 M1-3 的 markOverflow）
-    this.scrollOffsetValue = 0;
     this.applyScrollLayout();
+
+    // 提交后重建：当前若有选中件（典型是刚从棋盘取回的那件），把它挪进窗口。
+    // 偏移被夹到新 `maxScroll` 后，界外件可能只露半截——"刚回巢且高亮"的物品
+    // 必须完整可见，否则 M2-5 的取出目标位高亮等于没给反馈。
+    // 只在这里做（render = 提交后、无进行中手势）；`applyState` 不做，免得
+    // 拖拽中把托盘在手指底下平移。
+    const selectedId = state.selectedId;
+    if (selectedId !== null) {
+      const at = state.tray.indexOf(selectedId);
+      if (at >= 0) this.ensureSlotVisible(at);
+    }
 
     this.applyState(state);
 
@@ -136,7 +151,8 @@ export class TrayView extends Component {
       const max = this.maxScroll();
       const inWindow = this.slots.filter((s) => s.node.active).length;
       console.log(
-        `[TrayView] 托盘 ${count} 件（槽位 ${slotSize}px，可滚 ${max}px，窗内 ${inWindow}）：` +
+        `[TrayView] 托盘 ${count} 件（槽位 ${slotSize}px，可滚 ${max}px，` +
+          `偏移 ${this.scrollOffsetValue}px，窗内 ${inWindow}）：` +
           this.slots.map((s) => s.describe()).join(' '),
       );
       if (max > 0) {
@@ -307,6 +323,16 @@ export class TrayView extends Component {
   setScrollOffset(offset: number): void {
     this.scrollOffsetValue = offset;
     this.applyScrollLayout();
+  }
+
+  /**
+   * 滚动偏移归零（**换关 / 重开**用，见 `render` 的注释）。
+   *
+   * `render()` 刻意保留偏移（否则每次状态变更都把托盘弹回开头），所以"从头
+   * 开始"这件事必须由调用方显式声明，而不是搭 render 的便车。
+   */
+  resetScroll(): void {
+    this.setScrollOffset(0);
   }
 
   /** 夹取偏移 → 平移容器 → 逐槽显隐。`setScrollOffset` / `render` 共用 */
