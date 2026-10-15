@@ -257,3 +257,51 @@ export function rotateInPlace(
   // 策略 4：放弃。注意此时**不能**返回任何 placement
   return { ok: false, placement: null, reason: 'rotate-blocked', strategy: 4 };
 }
+
+// ───────────────────────── 提示（M2-2 / UI Spec 152） ─────────────────────────
+
+/** 一条提示建议：把某件托盘物品放在某处。 */
+export interface HintSuggestion {
+  readonly itemId: string;
+  readonly row: number;
+  readonly col: number;
+  readonly rotation: Rotation;
+  /** 落位后的绝对占用格（已含 anchor 偏移），供棋盘高亮 */
+  readonly cells: readonly RC[];
+}
+
+/**
+ * 给出「下一步该放哪」的提示（UI Spec 152 的免费提示，不伪装成可用空按钮）。
+ *
+ * 策略：按 `state.tray` 顺序取**第一件**还能放下（存在任一合法落点）的物品，
+ * 再按「行主序、左上优先」扫描棋盘第一个合法落位。
+ * 不可旋转物品只试 `rotation=0`；可旋转物品试 0/1/2/3，取首个合法。
+ *
+ * 纯函数、零副作用；棋盘放不下任何托盘物品（含全放完却未通关的死局）返回 `null`。
+ * 用「首件 + 首个落位」而非穷举最优，是为了提示稳定、可预测、且 O(格子×朝向) 足够便宜。
+ */
+export function suggestNextPlacement(level: LevelSpec, state: LevelState): HintSuggestion | null {
+  for (const itemId of state.tray) {
+    const item = findItem(level, itemId);
+    if (item === undefined) continue;
+
+    const rotations: readonly Rotation[] = item.rotatable ? [0, 1, 2, 3] : [0];
+    for (const rotation of rotations) {
+      const shape = rotateBy(item.cells, rotation);
+      const box = bboxOf(shape);
+      const maxRow = level.board.rows - box.height;
+      const maxCol = level.board.cols - box.width;
+      for (let row = 0; row <= maxRow; row++) {
+        for (let col = 0; col <= maxCol; col++) {
+          if (canPlace(level, state, { itemId, row, col, rotation }).ok) {
+            const cells = shape.map(
+              ([dr, dc]) => [row + dr, col + dc] as RC,
+            );
+            return { itemId, row, col, rotation, cells };
+          }
+        }
+      }
+    }
+  }
+  return null;
+}

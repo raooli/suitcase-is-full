@@ -78,6 +78,28 @@ export const UI_TOOLBAR_HEIGHT = 96;
 export const UI_BOARD_BAND_CENTER_Y = (UI_TRAY_HEIGHT + UI_TOOLBAR_HEIGHT - UI_HEADER_HEIGHT) / 2;
 export const UI_TRAY_BAND_CENTER_Y =
   -(UI_DESIGN_HEIGHT / 2 - UI_TOOLBAR_HEIGHT - UI_TRAY_HEIGHT / 2);
+/**
+ * 工具栏带中心 y（画布中心为原点，+y 向上）。
+ * 工具栏在最底部，紧贴屏幕下边缘：从 `-(designH/2)` 到 `-(designH/2 - toolbar)`，
+ * 故中心 = `-(designH/2) + toolbar/2`。
+ */
+export const UI_TOOLBAR_BAND_CENTER_Y = -(UI_DESIGN_HEIGHT / 2 - UI_TOOLBAR_HEIGHT / 2);
+
+// ───────────────────────── 工具栏（M2-2：撤回 / 旋转 / 重置 / 提示） ─────────────────────────
+
+/**
+ * 工具栏四个按钮（撤回 / 旋转 / 重置 / 提示）的布局。
+ *
+ * 行排布：4 个按钮 + 3 个间隙，刚好填满「内容宽 = 设计宽 − 2×安全边距 = 342」，
+ * 即 `4×WIDTH + 3×GAP = 342`（72×4 + 18×3 = 288 + 54）。无需额外居中。
+ * 按钮热区高度 56 高于 UI Spec 4 节 44px 硬下限，留余量。
+ */
+export const UI_TOOLBAR_BUTTON_WIDTH = 72;
+export const UI_TOOLBAR_BUTTON_HEIGHT = 56;
+export const UI_TOOLBAR_BUTTON_GAP = 18;
+
+/** 提示高亮的自动消失时长（ms）。玩家一有状态变更会立即清除，这是兜底超时（UI Spec 152） */
+export const UI_HINT_AUTO_CLEAR_MS = 3500;
 
 /**
  * 棋盘格边长**硬下限**（TDD P-04，V1.2 统一口径为 44px）。

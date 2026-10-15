@@ -17,7 +17,7 @@ import type { RC } from '../core';
 const { ccclass } = _decorator;
 
 /** 格子视觉态 */
-export type CellVisual = 'normal' | 'blocked' | 'valid' | 'invalid';
+export type CellVisual = 'normal' | 'blocked' | 'valid' | 'invalid' | 'hint';
 
 @ccclass('GridCellView')
 export class GridCellView extends Component {
@@ -53,6 +53,11 @@ export class GridCellView extends Component {
     return this.cell;
   }
 
+  /** 当前视觉态（供 `BoardView.showHint` 记录并还原） */
+  getVisual(): CellVisual {
+    return this.visual;
+  }
+
   private redraw(): void {
     const g = this.graphics;
     if (g === null) return;
@@ -71,6 +76,17 @@ export class GridCellView extends Component {
     g.lineWidth = 1;
     g.roundRect(-half, -half, side, side, radius);
     g.stroke();
+
+    if (this.visual === 'hint') {
+      // 提示高亮：蓝色填充 + 蓝色描边（UI Spec 152 免费提示，与合法/非法预览区分）
+      g.fillColor = Color.fromHEX(new Color(), UI_PALETTE.surfaceBlue);
+      g.roundRect(-half, -half, side, side, radius);
+      g.fill();
+      g.strokeColor = Color.fromHEX(new Color(), UI_PALETTE.surfaceBlue);
+      g.lineWidth = 3;
+      g.roundRect(-half, -half, side, side, radius);
+      g.stroke();
+    }
 
     if (this.visual === 'blocked') {
       // 障碍不只靠颜色区分（UI Spec 第 10 节第 6 条：不依赖颜色单通道）

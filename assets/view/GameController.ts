@@ -14,10 +14,23 @@
  * 同一形状；Scene 根节点上不带组件，这是引擎示例的既有惯例）。
  */
 
-import { _decorator, Component, JsonAsset } from 'cc';
+import { _decorator, Component, JsonAsset, Node, UITransform } from 'cc';
 import { DEBUG } from 'cc/env';
 
-import { GameSession, LevelDataError, itemAtCell, levelIdsOf, parseLevelBundle } from '../core';
+import {
+  GameSession,
+  LevelDataError,
+  findItem,
+  itemAtCell,
+  levelIdsOf,
+  parseLevelBundle,
+  suggestNextPlacement,
+  UI_DESIGN_HEIGHT,
+  UI_DESIGN_WIDTH,
+  UI_HINT_AUTO_CLEAR_MS,
+  UI_TOOLBAR_BAND_CENTER_Y,
+  UI_TOOLBAR_HEIGHT,
+} from '../core';
 import type {
   BoardSpec,
   Intent,
@@ -26,10 +39,12 @@ import type {
   SessionResult,
 } from '../core';
 import { BoardView } from './BoardView';
+import { ConfirmDialog } from './ConfirmDialog';
 import { DragController } from './DragController';
 import { ItemLayer } from './ItemLayer';
 import { PreviewLayer } from './PreviewLayer';
 import { SuccessOverlay } from './SuccessOverlay';
+import { ToolbarView } from './ToolbarView';
 import { TrayView } from './TrayView';
 
 const { ccclass, property } = _decorator;
@@ -73,6 +88,18 @@ export class GameController extends Component {
   @property(SuccessOverlay)
   successOverlay: SuccessOverlay | null = null;
 
+  /** 底部工具栏（M2-2）：撤回 / 旋转 / 重置 / 提示。运行时代码注入 SafeAreaRoot */
+  private toolbarView: ToolbarView | null = null;
+
+  /** 重置二次确认框（M2-3）：运行时代码注入 SafeAreaRoot，置于最顶层 */
+  private confirmDialog: ConfirmDialog | null = null;
+
+  /** 确认框是否打开（期间冻结拖拽手势，双保险） */
+  private dialogOpen = false;
+
+  /** 提示高亮自动清除的待执行回调（用于取消上一次的超时） */
+  private hintClearCallback: (() => void) | null = null;
+
   private gameSession: GameSession | null = null;
 
   /** 会话句柄。装配失败（关卡数据有问题）时为 `null`，调用方必须判空 */
@@ -88,6 +115,10 @@ export class GameController extends Component {
     // 装配与"换一关"是同一条路径（M2-1）：首启就是载入第 `levelId` 关
     this.startLevel(this.levelId);
     this.wireSuccessOverlay();
+    // M2-2 工具栏 + M2-3 重置确认框：运行时代码注入 SafeAreaRoot（场景 JSON 的
+    // `__type__` 编码易碎，故不手改场景，改由代码建节点 + addComponent）
+    this.buildToolbar();
+    this.buildDialog();
   }
 
   /**
@@ -120,6 +151,8 @@ export class GameController extends Component {
     this.wireDrag(level);
     this.refreshAll(session.getState(), session.getPhase());
     this.successOverlay?.hide();
+    // 工具栏可用态随关卡刷新（首关 / 换关后重算）
+    this.updateToolbarState();
 
     if (DEBUG) {
       const next = this.hasNextLevel() ? `L${levelId + 1}` : '（已是最后一关）';
@@ -258,6 +291,9 @@ export class GameController extends Component {
    * 每移一格全盘重建——计划原文点名要避免的。
    */
   private afterDispatch(intent: Intent, result: SessionResult): void {
+    // 任何状态变更都清掉提示高亮（提示是临时态，不该残留到下一步操作）
+    this.clearHint();
+
     // ① 拖拽生命周期：被拖物品在两个视图里都排除；松手/取消/取出后恢复。
     //    grab 用 `result.phase === 'Dragging'` 判断 session 是否收下这次起拖
     //    （冻结期会被拒），不靠猜。
@@ -357,6 +393,9 @@ export class GameController extends Component {
     }
 
     if (refresh) this.refreshAll(result.state, result.phase);
+
+    // 任何状态变更都可能改写工具栏可用态（撤回栈 / 选中 / 进度 / 提示可行性）
+    this.updateToolbarState();
   }
 
   /**
@@ -386,10 +425,10 @@ export class GameController extends Component {
     this.trayView?.setHiddenItem(itemId);
   }
 
-  /** 手势层冻结查询：通关动画期间一切输入停摆（core 的 isInputFrozen 同口径） */
+  /** 手势层冻结查询：通关动画 / 确认框期间一切输入停摆（core 的 isInputFrozen 同口径） */
   private isFrozen(): boolean {
     const phase = this.gameSession?.getPhase();
-    return phase === 'WinAnimating' || phase === 'Completed';
+    return phase === 'WinAnimating' || phase === 'Completed' || this.dialogOpen;
   }
 
   /**
@@ -429,5 +468,133 @@ export class GameController extends Component {
     }
 
     return new GameSession(level);
+  }
+
+  // ───────────────────────── M2-2 工具栏（代码注入 SafeAreaRoot） ─────────────────────────
+
+  /**
+   * 创建工具栏节点并挂到 `SafeAreaRoot`（覆盖整屏的手势根，来自 `DragController`），
+   * 置于最底层（棋盘/托盘/预览/成功层之下，确认框之上）。接好四个按钮回调后显示。
+   *
+   * 不手改场景 JSON（`__type__` 编码易碎），改由代码建节点 + `addComponent`，
+   * 与 `SuccessOverlay` 的「代码建 UI」范式一致。
+   */
+  private buildToolbar(): void {
+    const root = this.dragController?.gestureRoot ?? this.node;
+    const node = new Node('ToolbarView');
+    node.layer = root.layer;
+    root.addChild(node);
+    node.setSiblingIndex(0); // 最底层：不遮挡棋盘/托盘/成功浮层
+
+    const transform = node.getComponent(UITransform) ?? node.addComponent(UITransform);
+    transform.setContentSize(UI_DESIGN_WIDTH, UI_TOOLBAR_HEIGHT);
+    transform.setAnchorPoint(0.5, 0.5);
+    node.setPosition(0, UI_TOOLBAR_BAND_CENTER_Y, 0);
+
+    const toolbar = node.addComponent(ToolbarView);
+    toolbar.onUndo = () => this.handleIntent({ type: 'undo' });
+    toolbar.onRotate = () => {
+      const sel = this.gameSession?.getState().selectedId;
+      if (sel != null) this.handleIntent({ type: 'rotate', itemId: sel });
+    };
+    toolbar.onReset = () => this.requestReset();
+    toolbar.onHint = () => this.showHint();
+    toolbar.show();
+    this.toolbarView = toolbar;
+
+    if (DEBUG) console.log('[GameController] 工具栏已注入 SafeAreaRoot');
+    // 初始可用态（首关装配已完成，session 已建）
+    this.updateToolbarState();
+  }
+
+  /**
+   * 创建重置确认框节点并挂到 `SafeAreaRoot`，置于最顶层（遮罩盖住一切）。
+   * 仅接回调，平时 `active=false` 不挡输入。
+   */
+  private buildDialog(): void {
+    const root = this.dragController?.gestureRoot ?? this.node;
+    const node = new Node('ConfirmDialog');
+    node.layer = root.layer;
+    root.addChild(node); // 末尾追加 → 最顶层（盖住成功浮层与工具栏）
+
+    const transform = node.getComponent(UITransform) ?? node.addComponent(UITransform);
+    transform.setContentSize(UI_DESIGN_WIDTH, UI_DESIGN_HEIGHT);
+    transform.setAnchorPoint(0.5, 0.5);
+
+    const dialog = node.addComponent(ConfirmDialog);
+    dialog.onConfirm = () => this.confirmReset();
+    dialog.onCancel = () => this.cancelReset();
+    this.confirmDialog = dialog;
+  }
+
+  /** 重算工具栏四个按钮的可用态（由当前 session 状态推出） */
+  private updateToolbarState(): void {
+    const session = this.gameSession;
+    const toolbar = this.toolbarView;
+    if (session === null || toolbar === null) return;
+
+    const state = session.getState();
+    const selectedId = state.selectedId;
+    const selectedRotatable =
+      selectedId !== null && findItem(session.level, selectedId)?.rotatable === true;
+    const hintAvailable = suggestNextPlacement(session.level, state) !== null;
+
+    toolbar.updateState({
+      canUndo: session.canUndo,
+      canRotate: selectedRotatable,
+      canReset: state.placements.size > 0,
+      canHint: hintAvailable,
+    });
+  }
+
+  /** 工具栏「重置」→ 弹确认框（UI Spec 149：二次确认） */
+  private requestReset(): void {
+    this.dialogOpen = true;
+    this.confirmDialog?.show();
+  }
+
+  private confirmReset(): void {
+    this.dialogOpen = false;
+    this.confirmDialog?.hide();
+    // reset 在 WinAnimating/Completed 期被会话冻结（防误触抹掉通关态）；此处是
+    // 正常游玩中的明确意图，正常走 dispatch
+    this.handleIntent({ type: 'reset' });
+  }
+
+  private cancelReset(): void {
+    this.dialogOpen = false;
+    this.confirmDialog?.hide();
+  }
+
+  /** 工具栏「提示」→ 用 core 的 `suggestNextPlacement` 高亮下一步落点（UI Spec 152 免费提示） */
+  private showHint(): void {
+    const session = this.gameSession;
+    if (session === null) return;
+    const suggestion = suggestNextPlacement(session.level, session.getState());
+    if (suggestion === null) return;
+
+    this.boardView?.showHint(suggestion.cells);
+    this.trayView?.highlightHint(suggestion.itemId);
+    if (DEBUG) {
+      console.log(
+        `[GameController] 提示：${suggestion.itemId} → (${suggestion.row},${suggestion.col})` +
+          ` rot=${suggestion.rotation}`,
+      );
+    }
+
+    // 兜底自动清除（玩家一有状态变更也会在 afterDispatch 立即清除）
+    if (this.hintClearCallback !== null) this.unschedule(this.hintClearCallback);
+    this.hintClearCallback = () => this.clearHint();
+    this.scheduleOnce(this.hintClearCallback, UI_HINT_AUTO_CLEAR_MS / 1000);
+  }
+
+  /** 清除提示高亮（棋盘格 + 托盘槽位），并取消待执行的自动清除超时 */
+  private clearHint(): void {
+    this.boardView?.clearHint();
+    this.trayView?.clearHint();
+    if (this.hintClearCallback !== null) {
+      this.unschedule(this.hintClearCallback);
+      this.hintClearCallback = null;
+    }
   }
 }

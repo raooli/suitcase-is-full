@@ -280,6 +280,21 @@ describe('GameSession：撤回', () => {
     expect(session.getState().placements.get('A')!.rotation).toBe(0);
   });
 
+  it('R-08：放置后连续旋转，撤回只回退一步、朝向精确还原', () => {
+    // 强调「撤回保留当时朝向」：不是回退到 0，而是回到撤销前那一刻的朝向
+    const session = new GameSession(roomyLevel);
+    session.dispatch({ type: 'grab', itemId: 'A', anchor: [0, 0] });
+    session.dispatch({ type: 'drop' });
+    session.dispatch({ type: 'rotate', itemId: 'A' }); // 0 → 1
+    session.dispatch({ type: 'rotate', itemId: 'A' }); // 1 → 2
+    expect(session.getState().placements.get('A')!.rotation).toBe(2);
+
+    session.dispatch({ type: 'undo' });
+    expect(session.getState().placements.get('A')!.rotation).toBe(1);
+    session.dispatch({ type: 'undo' });
+    expect(session.getState().placements.get('A')!.rotation).toBe(0);
+  });
+
   it('连续撤回可以一路退回初始状态', () => {
     const session = new GameSession(roomyLevel);
     session.dispatch({ type: 'grab', itemId: 'A', anchor: [0, 0] });

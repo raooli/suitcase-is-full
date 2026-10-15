@@ -98,9 +98,10 @@ export {
   itemAtCell,
   removeToTray,
   rotateInPlace,
+  suggestNextPlacement,
   trayRotationOf,
 } from './rules/placement';
-export type { RotateResult } from './rules/placement';
+export type { HintSuggestion, RotateResult } from './rules/placement';
 
 // 会话
 export { GameSession } from './session/GameSession';

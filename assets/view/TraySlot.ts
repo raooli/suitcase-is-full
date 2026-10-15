@@ -25,8 +25,8 @@ import {
 
 const { ccclass } = _decorator;
 
-/** 槽位视觉态。`drop-target` 是取出拖拽时的目标高亮（M1-5/M2 接） */
-export type SlotVisual = 'normal' | 'selected' | 'drop-target';
+/** 槽位视觉态。`drop-target` 是取出拖拽时的目标高亮；`hint` 是提示高亮（M2-2） */
+export type SlotVisual = 'normal' | 'selected' | 'drop-target' | 'hint';
 
 @ccclass('TraySlot')
 export class TraySlot extends Component {
@@ -154,19 +154,28 @@ export class TraySlot extends Component {
 
     const half = this.side / 2;
     const radius = Math.min(UI_TRAY_SLOT_RADIUS, half);
-    const selected = this.visual !== 'normal';
 
     g.clear();
     g.fillColor = Color.fromHEX(new Color(), UI_PALETTE.surfaceWhite);
     g.roundRect(-half, -half, this.side, this.side, radius);
     g.fill();
 
-    // 选中态只靠描边区分（不依赖颜色单通道：形状 + 线宽同时变化）
-    g.strokeColor = Color.fromHEX(
-      new Color(),
-      this.visual === 'drop-target' ? UI_PALETTE.valid : selected ? UI_PALETTE.accentPink : UI_PALETTE.border,
-    );
-    g.lineWidth = selected ? UI_TRAY_SELECT_BORDER : 1;
+    // 视觉态只靠描边区分（不依赖颜色单通道：形状 + 线宽同时变化）
+    let strokeHex: string = UI_PALETTE.border;
+    let lineWidth = 1;
+    if (this.visual === 'drop-target') {
+      strokeHex = UI_PALETTE.valid;
+      lineWidth = UI_TRAY_SELECT_BORDER;
+    } else if (this.visual === 'hint') {
+      // 提示高亮：蓝色描边（与棋盘蓝一致，UI Spec 152 免费提示）
+      strokeHex = UI_PALETTE.surfaceBlue;
+      lineWidth = UI_TRAY_SELECT_BORDER;
+    } else if (this.visual === 'selected') {
+      strokeHex = UI_PALETTE.accentPink;
+      lineWidth = UI_TRAY_SELECT_BORDER;
+    }
+    g.strokeColor = Color.fromHEX(new Color(), strokeHex);
+    g.lineWidth = lineWidth;
     g.roundRect(-half, -half, this.side, this.side, radius);
     g.stroke();
   }

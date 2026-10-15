@@ -60,6 +60,8 @@ export interface TrayHit {
 @ccclass('TrayView')
 export class TrayView extends Component {
   private slots: TraySlot[] = [];
+  /** 最近一次 `applyState` 的状态（提示高亮清除后据此还原选中/普通态） */
+  private lastState: LevelState | null = null;
 
   override onLoad(): void {
     const transform = this.node.getComponent(UITransform) ?? this.node.addComponent(UITransform);
@@ -109,9 +111,33 @@ export class TrayView extends Component {
 
   /** 只刷新选中态（不重建节点）。点选后的常规路径走这里 */
   applyState(state: LevelState): void {
+    this.lastState = state;
     for (const slot of this.slots) {
       slot.setVisual(slot.getItemId() === state.selectedId ? 'selected' : 'normal');
     }
+  }
+
+  /**
+   * 提示高亮：把某件托盘物品所在的槽位染成 `hint` 态（蓝色描边）。
+   * 与 `BoardView.showHint` 配合，提示「这件该放到那几格」。
+   * 非目标但处于选中的槽位保留选中态（提示不抹掉选中高亮）。
+   */
+  highlightHint(itemId: string): void {
+    const selectedId = this.lastState?.selectedId ?? null;
+    for (const slot of this.slots) {
+      const id = slot.getItemId();
+      if (id === itemId) slot.setVisual('hint');
+      else if (id === selectedId) slot.setVisual('selected');
+      else slot.setVisual('normal');
+    }
+  }
+
+  /**
+   * 清除提示高亮，还原到提示前的选中/普通态（依据 `lastState`）。
+   * 不靠重建节点——否则会丢掉当前缩略图。
+   */
+  clearHint(): void {
+    if (this.lastState !== null) this.applyState(this.lastState);
   }
 
   /**

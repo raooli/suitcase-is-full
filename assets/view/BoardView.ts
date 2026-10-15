@@ -36,6 +36,7 @@ import {
 } from '../core';
 import type { BoardSpec, RC } from '../core';
 import { GridCellView } from './GridCellView';
+import type { CellVisual } from './GridCellView';
 import type { ShapeMetrics } from './ItemView';
 
 const { ccclass } = _decorator;
@@ -52,6 +53,8 @@ export class BoardView extends Component {
   /** 当前格边长（设计单位）。**只有本文件与 core/config.ts 能碰这个量** */
   private cellPx = 0;
   private cellNodes: Node[] = [];
+  /** 提示高亮中、且记录其高亮前视觉态的格（index → prev visual） */
+  private hinted = new Map<number, CellVisual>();
 
   // ───────────────────────── 渲染 ─────────────────────────
 
@@ -101,12 +104,41 @@ export class BoardView extends Component {
     return this.cellNodes[index]?.getComponent(GridCellView) ?? null;
   }
 
+  /**
+   * 提示高亮：把若干格染成 `hint` 态（蓝色），用于免费提示下一步落点
+   * （UI Spec 152）。记录每格原态，便于 `clearHint()` 还原。
+   */
+  showHint(cells: readonly RC[]): void {
+    this.clearHint();
+    const cols = this.board?.cols ?? 0;
+    for (const [row, col] of cells) {
+      const view = this.cellViewAt(row, col);
+      if (view === null) continue;
+      const index = toIndex(row, col, cols);
+      if (!this.hinted.has(index)) this.hinted.set(index, view.getVisual());
+      view.setState('hint');
+    }
+    if (DEBUG) console.log(`[BoardView] 提示高亮 ${cells.length} 格`);
+  }
+
+  /** 清除提示高亮，还原到高亮前的视觉态 */
+  clearHint(): void {
+    const cols = this.board?.cols ?? 0;
+    for (const [index, prev] of this.hinted) {
+      const row = Math.floor(index / Math.max(cols, 1));
+      const col = index % Math.max(cols, 1);
+      this.cellViewAt(row, col)?.setState(prev);
+    }
+    this.hinted.clear();
+  }
+
   private clearCells(): void {
     for (const node of this.cellNodes) {
       node.removeFromParent();
       node.destroy();
     }
     this.cellNodes = [];
+    this.hinted.clear();
   }
 
   // ───────────────────────── 唯一的坐标转换（R-A6） ─────────────────────────
