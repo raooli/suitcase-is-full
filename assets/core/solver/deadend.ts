@@ -16,17 +16,18 @@
  * 死代码（M2-4 推进时实测发现）。
  *
  * 新判据改为：**若每件剩余物品都在当前空格里找不到任何（含旋转）合法落点，则当前
- * 局面确定装不下**。这是真正反映「玩家把局面走死」的必要条件，且
- * O(物品 × 旋转 × 格) 足够廉价（36 格规模下可忽略）。
+ * 局面确定装不下**。这是真正反映「玩家把局面走死」的必要条件。实现上**直接复用
+ * rules 层既有的 `suggestNextPlacement`**（`stuck = suggestNextPlacement(...) === null`）
+ * ——「有无合法落点」的真相源只能有一处，另写一遍扫描必与工具栏 `canHint` 分叉。
  *
  * ⚠️ **仍是单向断言**：`stuck=false` 只说明「至少有一件能放下」，不代表最终装得下
  * （形状 / 邻域约束可能仍无解）。所以它**绝不**用来触发失败态或禁用操作。
  */
 
 import { buildIndex, usableCellCount } from '../rules/board';
-import { canPlace } from '../rules/placement';
+import { suggestNextPlacement } from '../rules/placement';
 import { rotateBy } from '../geometry/shape';
-import type { LevelSpec, LevelState, Rotation } from '../model/types';
+import type { LevelSpec, LevelState } from '../model/types';
 
 export interface DeadendReport {
   /** 当前局面是否**确定**装不下：任何剩余物品都找不到合法落点 */
@@ -40,7 +41,8 @@ export interface DeadendReport {
 /**
  * 判定「一定装不下」（UI Spec 13 / PRD R-10 / TDD 8.4）。
  *
- * 见文件头注释：用「无合法落点」取代退化（放置无关）的面积守恒快检。
+ * 见文件头注释：用「无合法落点」取代退化（放置无关）的面积守恒快检；
+ * 该判据复用 rules 层的 `suggestNextPlacement`，不另写扫描。
  * `freeCells` / `requiredCells` 仍计算出来供调试日志与事件透传，但不作为判据。
  */
 export function checkDeadend(level: LevelSpec, state: LevelState): DeadendReport {
@@ -67,36 +69,12 @@ export function checkDeadend(level: LevelSpec, state: LevelState): DeadendReport
   // 空托盘（已通关）→ 不提示
   if (state.tray.length === 0) return { stuck: false, freeCells, requiredCells };
 
-  // 关键判据：剩余物品中是否**至少有一件**能找到合法落点（含旋转）。
-  // 找不到任何一件 → 当前局面确定装不下。
-  const stuck = !hasAnyLegalPlacement(level, state);
+  // 关键判据：是否**还有至少一件**剩余物品能找到合法落点（含旋转）。
+  // 一件都找不到 → 当前局面确定装不下。复用 rules 层 `suggestNextPlacement`
+  // （返回 null 即「没有任何托盘物品放得下」），不另写一遍扫描。
+  const stuck = suggestNextPlacement(level, state) === null;
 
   return { stuck, freeCells, requiredCells };
-}
-
-/**
- * 是否存在「至少一件剩余物品能在当前空格里合法落位（含旋转）」。
- * 找到第一件的第一处合法落点即返回，通常很快（首件在空棋盘上立即命中）。
- */
-function hasAnyLegalPlacement(level: LevelSpec, state: LevelState): boolean {
-  const itemById = new Map(level.items.map((it) => [it.id, it]));
-  for (const id of state.tray) {
-    const item = itemById.get(id);
-    if (item === undefined) continue;
-    const rotations: readonly Rotation[] = item.rotatable ? ([0, 1, 2, 3] as const) : ([0] as const);
-    for (const rotation of rotations) {
-      const shape = rotateBy(item.cells, rotation);
-      // 锚点取物品包围盒左上角，逐格试探落点
-      for (let r = 0; r < level.board.rows; r++) {
-        for (let c = 0; c < level.board.cols; c++) {
-          if (canPlace(level, state, { itemId: id, row: r, col: c, rotation }).ok) {
-            return true;
-          }
-        }
-      }
-    }
-  }
-  return false;
 }
 
 /** 只需要一个布尔的便捷重载 */
