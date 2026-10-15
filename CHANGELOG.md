@@ -23,6 +23,17 @@
 
 ## 提交记录（倒序）
 
+### `a8b6548` · refactor: M2-4 deadend 判据复用 suggestNextPlacement（消除与 canHint 的同谓词两实现）
+
+| 项 | 内容 |
+| --- | --- |
+| 日期 | 2026-10-15 19:11 |
+| 类型 | 重构（M2-4 审查采纳的 [中] 建议项；不改行为，收窄真相源） |
+| 文件 | `assets/core/solver/deadend.ts`（+11/−33） |
+| 要点 | ① **审查发现**：`fbe7d27` 引入的 `checkDeadend` 用本地 `hasAnyLegalPlacement` 扫描「有无合法落点」，与 rules 层 `suggestNextPlacement`（M2-2 加）**语义等价**（`hasAnyLegalPlacement(l,s) === (suggestNextPlacement(l,s) !== null)`，唯一差异是锚点遍历范围，越界锚都被 `canPlace` 拒）。两份实现算同一谓词，违背「两份真相必然分叉」——工具栏 `canHint` 与 Toast `!stuck` 是同一谓词的正反两面，一旦 `suggestNextPlacement` 算法变（旋转集/剪枝/顺序）会「提示按钮说能放、Toast 同时说装不下」，而玩家同时看得见两者 ② **改法**：`stuck = suggestNextPlacement(level, state) === null`，删本地 `hasAnyLegalPlacement` 及 deadend.ts 的 `canPlace` / `Rotation` import（`rotateBy` 仍被 `occupiedCellsOf` 用故保留）；文件头 / JSDoc 补注「复用 rules 层真相源」③ **架构**：solver→rules 已是既有边（deadend 原本就 import `canPlace`），无新依赖边；顺带因 `suggestNextPlacement` 的 bbox 剪枝略快 |
+| 验收 | **`npm run check` 234/234**（语义等价，用例不变全绿）；**重跑 L1 死局** `--drag 47,658,71,230 --drag 47,658,185,344`（A@(0,0)+B@(1,1) 搁浅 C、D）→ `[Toast] 显示：剩下的空间装不下啦…` 仍正确弹出、零 Console 错误（此例 freeCells=5=requiredCells，旧面积判据会漏判，again 印证重写必要） |
+| 关联 | 收窄 `fbe7d27` 的实现（**不推翻**其结论：判据语义不变，只把「另写一遍扫描」改为「复用唯一真相源」） |
+
 ### `fbe7d27` · feat: M2-4 「装不下」非阻断 Toast（deadend 判据从面积守恒改为无合法落点）
 
 | 项 | 内容 |
