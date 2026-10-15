@@ -23,6 +23,16 @@
 
 ## 提交记录（倒序）
 
+### `30a0f14` · fix: 托盘滚动偏移不再被每次重建归零（M2-11×M2-5 交互缺陷）
+
+| 项 | 内容 |
+| --- | --- |
+| 日期 | 2026-10-16 00:03 |
+| 文件 | `assets/view/TrayView.ts`、`assets/view/GameController.ts`（2 文件，+42/−3） |
+| 要点 | ① **缺陷（复审 M2-11 + M2-5 时实测量到，属两特性交互面）**：`TrayView.render()` 无条件 `scrollOffsetValue = 0` → **任何**状态变更（放入 / 取出 / 旋转 / 撤回）都把托盘弹回开头。L7–L10（正是 M2-11 的目标关）最坑：取出高 `trayOrder` 物品时，拖拽中 `highlightReturnTarget → ensureSlotVisible` 已把目标槽滚进窗口并高亮，**松手提交后 render 归零 → 刚回巢、且处于 selected 的物品直接滚出视野**，M2-5 的目标位反馈自相矛盾（实证：日志 `托盘 8 件（可滚 66px，窗内 7）`，截图只剩 7 件、L07_H 不见）② **`TrayView.render`：保留偏移**，交给 `applyScrollLayout` 按**新的** `maxScroll` 夹取——件数变化时自动收敛到合法区间，不需要归零兜底（`trayClampScroll` 本就保证越界值被夹回）③ **新增 `TrayView.resetScroll()`**：把"从头开始"变成**调用方显式声明**，不再搭 render 的便车 ④ **提交后保证选中件完整可见**：`render` 末尾若 `state.selectedId` 有值，`ensureSlotVisible(state.tray.indexOf(id))` 把它挪进窗口。只在此处做——`render` 发生在提交后、无进行中手势；`applyState` 刻意不做，免得拖拽中把托盘在手指底下平移（会与 DragController 的"滑托盘 vs 抓物品"互斥仲裁打架）⑤ **`GameController.startLevel`**：换关 / 重开（含「再来一次」「下一关」）显式 `resetScroll()` ⑥ **`GameController.afterDispatch`**：`level-reset`（工具栏「重置」）也归零，且**放在 `refreshAll` 之前**，让重建本身就按 0 布局（放之后会先按保留偏移建一遍再跳回开头）⑦ `TrayView` DEBUG 日志补打印**当前偏移**（滚动类问题取证用） |
+| 验收 | **`npm run check` 258/258**（纯 view 改动，core 未动）；**无头预览零 Console 错误**，L7（临时置场景 `levelId=7`，验完 `git checkout --` 还原）三条路径全实证：初始 `托盘 8 件 偏移 0px` → 横向拖动 `滑托盘开始：起始 offset=0px` → 放入 H 后 `托盘 7 件（可滚 14px，**偏移 14px**）`（**保留 + 夹取**，不再归零）→ 重置 + 确定后 `托盘 8 件（可滚 66px，**偏移 0px**）`（显式归零）；取出 H 后 `偏移 66px`，截图确认 L07_H **完整可见**且带选中环（修前该件整体滚出视野）；**L1 四拖通关无回归**（`放入 L01_A→(1,1) B→(1,0) C→(2,1) D→(0,0)` → 「整理完成！第 1 关 4 步」），L1–L6 不可滚关行为零变化 |
+| 关联 | 修正 **`d95a2f7`** 的「`render` 归零偏移」设计（该写法在 M2-5 落地后才暴露交互缺陷——两条特性各自单测都过，缺的是组合面）；M2-5 的 `ensureSlotVisible` / 目标位高亮自此真正可被玩家看见；无 core 契约变化，仍受 R-A6 约束（滚动算术只在 `core/geometry/trayScroll.ts`） |
+
 ### `f2bca99` · feat: M2-5 取出交互（PRD R-06b：拖出棋盘回原 trayOrder 位，可撤回）
 
 | 项 | 内容 |
