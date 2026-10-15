@@ -23,6 +23,17 @@
 
 ## 提交记录（倒序）
 
+### `5f80c34` · feat: M2-2 底部工具栏（撤回 / 旋转 / 重置 / 提示）+ M2-3 ConfirmDialog 提前建
+
+| 项 | 内容 |
+| --- | --- |
+| 日期 | 2026-10-15 11:12 |
+| 类型 | 新功能（M2 第二个任务：G1-5 撤销缺口的规格归属地）+ 文档（G1 报告 G1-5 ⚠️→✅） |
+| 文件 | `assets/view/ToolbarView.ts`(+.meta)、`assets/view/ConfirmDialog.ts`(+.meta)、`assets/core/rules/placement.ts`、`assets/core/index.ts`、`assets/core/config.ts`、`assets/view/GridCellView.ts`、`assets/view/BoardView.ts`、`assets/view/TraySlot.ts`、`assets/view/TrayView.ts`、`assets/view/GameController.ts`、`test/session.spec.ts`、`test/hint.spec.ts`（12 文件，+941/−15） |
+| 要点 | ① **`ToolbarView`（新组件，代码注入 `SafeAreaRoot` 而不是手改场景 JSON）**：底部四按钮「撤回 / 旋转 / 重置 / 提示」。每个按钮 = Graphics 画底 + 子节点 Label（同 `SuccessOverlay` 范式）；可用态用 `UIOpacity` 控（置灰 110/255），不新增 Graphics。按钮节点 `propagationStopped = true` 隔离触摸（**Cocos 3.8.8 类型声明无 `EventTouch.stopPropagation` 方法**，只有 `propagationStopped` 标志位——已查 `cc.d.ts` 确认）。`updateState` 每次重算可用态（防 M1-7 懒加载 `built` 提前 return 吞差异）② **撤回含朝向（R-08）**：core `History` 早已存完整 `LevelState` 快照含 `rotation`，本次只补单测断言（放置 A → 连旋两次 0→1→2 → 两次 undo 精确回退 2→1→0）；view 撤回按钮直接 `dispatch({type:'undo'})` ③ **旋转仅「选中且可旋转物品」时可用**：`canRotate = selectedId != null && findItem(level, selectedId).rotatable === true`，否则置灰（UI Spec 5.2「可在已选中时点击按钮」+ 与 M1-8 双击入口刻意不对称：旋转有规格授权、非破坏性、作用于被选中对象）④ **重置走 `ConfirmDialog` 二次确认**（UI Spec 5.3：重置是破坏性操作，不能直接生效）——`requestReset` 置 `dialogOpen=true` + `show()`，`confirmReset` 才 `handleIntent({type:'reset'})`，`cancelReset` 只关弹窗。`isFrozen()` 纳入 `dialogOpen`，弹窗期间冻结一切手势（含工具栏自身）⑤ **提示是免费提示，不可伪装成可用空按钮（UI Spec 152）**：由 core 新纯函数 `suggestNextPlacement(level, state)` 驱动——按 `tray` 顺序取首件能放下（任一合法落点）的物品，不可旋转只试 rotation 0、可旋转试 0/1/2/3，行主序扫描首个合法落点，返回 `{itemId,row,col,rotation,cells}` 或 `null`；`canHint = suggestion != null`，全放完即不可用（不假装能用）。高亮由 `BoardView.showHint(cells)`（蓝填充+蓝描边）与 `TrayView.highlightHint(itemId)`（目标槽 hint 描边、选中槽保留 selected、其余 normal）呈现 ⑥ **提示高亮 auto-clear 双重保险**：`afterDispatch` 开头 `clearHint()`（任何状态变更立即清）+ `UI_HINT_AUTO_CLEAR_MS=3500` 超时兜底（`scheduleOnce` + 可取消 `hintClearCallback`）⑦ **布局与接线**：`config.ts` 加 `UI_TOOLBAR_BAND_CENTER_Y = -(UI_DESIGN_HEIGHT/2 - UI_TOOLBAR_HEIGHT/2)`（设计坐标）、按钮区 `UI_TOOLBAR_BUTTON_WIDTH=72 / HEIGHT=56 / GAP=18`（4×72+3×18=342=内容宽 390−2×24）、`UI_HINT_AUTO_CLEAR_MS=3500`；`GameController.buildToolbar` 用 `dragController?.gestureRoot`（= SafeAreaRoot）作父节点 `new Node()` + `addComponent(ToolbarView)`，`setSiblingIndex(0)` 置最底层，`onLoad` 末尾调 + `startLevel`/`afterDispatch` 末尾调 `updateToolbarState`；`buildDialog` 末尾追加置顶遮罩 ⑧ **R-08 在 core 早已满足**（History 存完整快照含 rotation），本任务只补单测；G1-5 撤销缺口由此闭合（G1 报告 V1.1 的 ⚠️→✅ 见 `docs/08`） |
+| 验收 | **单测 6 条新**（新 `test/hint.spec.ts`）：未放置提示首件且落点合法；逐步放置依次提示后续；全放完返回 null（UI Spec 152 不伪装空按钮）；不可旋转只试 rotation=0；可旋转「竖放不下、横放得下」返回 rotation=1；与 `canPlace` 交叉验证。`test/session.spec.ts` 补 R-08 撤回含朝向用例。**`npm run check` 233/233**（+6）；**`npm run preview:game` 无 Console 错误**：日志含 `[GameController] 工具栏已注入 SafeAreaRoot`；点按「提示」按钮（页面 330,796）实证提示链：`[ToolbarView] 点击「提示」` → `[BoardView] 提示高亮 2 格` → `[GameController] 提示：L01_A → (0,0) rot=0`。M1 遗留缺口（G1-5）全清 |
+| 推翻 | 推翻 `8bc7940`（`docs/08` V1.1）里「G1-5 撤销 ⚠️ 顺延 M2-2」的待定状态——M2-2 落地后改为 ✅（入口形式=底部工具栏四按钮，与旋转刻意不对称的原因见本条目要点③，与 `c52bbd2` 的裁定一致） |
+
 ### `beb68b1` · feat: M2-1 关卡加载（10 关可切换 + 「下一关」主按钮）
 
 | 项 | 内容 |
@@ -448,17 +459,3 @@
 | 文件 | `README.md`（+1） |
 
 **要点：** 创建仓库与占位 README。
-
----
-
-## 待追加（本次会话·尚未提交）
-
-以下为**工作区已改动但还没 commit** 的内容，提交时请把本段替换成正式条目，并移到上方倒序列表。
-
-| 文件 | 改动性质 |
-| --- | --- |
-| `CHANGELOG.md` | 新增：本文件 |
-| `docs/01-PRD-v1.0.md` | 升 V1.2：配套文档版本对齐、触控热区口径统一、美术规模风险、引擎版本结论 |
-| `docs/02-GDD-v1.0.md` | 升 V1.2：新增物品命名与形状一致性规范、itemType/spriteKey 规范、美术映射契约、G-24/G-25 |
-| `docs/04-TDD-v1.0.md` | 升 V1.2：引擎版本结论更新（3.8.9 / COCOS 4）、架构评审结论 0.4、资源规格、口径修正 |
-| `README.md` | 记录引擎版本锁定（T-01 落地）、指向 CHANGELOG |
