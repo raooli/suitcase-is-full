@@ -282,6 +282,20 @@ export const UI_PALETTE = {
   invalid: '#E56B77',
 } as const;
 
+// ───────────────────────── Toast（M2-4：装不下非阻断提示条） ─────────────────────────
+
+/** Toast 提示条尺寸（UI Spec HintToast：非阻断轻提示条，约 2s 自动淡出） */
+export const UI_TOAST_WIDTH = 320;
+export const UI_TOAST_HEIGHT = 44;
+export const UI_TOAST_RADIUS = 22;
+
+/**
+ * Toast 中心 y（画布中心为原点，+y 向上）。置于顶部信息带内、棋盘之上方——
+ * 棋盘带中心 `UI_BOARD_BAND_CENTER_Y = +68`、最高棋盘半高 ≈ +171（L3/L4 5×4 时约 +210），
+ * 棋盘顶最高 ≈ +278；`+330` 始终在棋盘上方，不遮挡棋盘（UI Spec 13）。
+ */
+export const UI_TOAST_Y = 330;
+
 // ───────────────────────── 通关浮层（UI Spec 5.3） ─────────────────────────
 
 /**

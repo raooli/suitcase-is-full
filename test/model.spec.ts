@@ -236,9 +236,11 @@ describe('deadend：面积守恒快检', () => {
       levelId: 3,
       title: 'blocked',
       board: { rows: 2, cols: 2, blockedCells: [[0, 0], [0, 1]] },
+      // 两件均为 2×2，但 2×2 棋盘上唯一落点锚 [0,0] 已被障碍占住，
+      // 其余锚点越界 → 任何一件都放不进 → 确定装不下（新的「无合法落点」判据）
       items: [
-        { id: 'A', name: 'a', itemType: 't', spriteKey: 'k', cells: [[0, 0], [0, 1]], rotatable: true, trayOrder: 1 },
-        { id: 'B', name: 'b', itemType: 't', spriteKey: 'k', cells: [[0, 0], [0, 1]], rotatable: true, trayOrder: 2 },
+        { id: 'A', name: 'a', itemType: 't', spriteKey: 'k', cells: [[0, 0], [0, 1], [1, 0], [1, 1]], rotatable: false, trayOrder: 1 },
+        { id: 'B', name: 'b', itemType: 't', spriteKey: 'k', cells: [[0, 0], [0, 1], [1, 0], [1, 1]], rotatable: false, trayOrder: 2 },
       ],
     };
     const state = {
@@ -249,9 +251,34 @@ describe('deadend：面积守恒快检', () => {
       selectedId: null,
     };
     const report = checkDeadend(level, state);
-    expect(report.freeCells).toBe(2); // 4 - 2 障碍
-    expect(report.requiredCells).toBe(4);
+    expect(report.freeCells).toBe(2); // 4 - 2 障碍（障碍不计入剩余空间）
+    expect(report.requiredCells).toBe(8); // 2 件 × 4 格
     expect(report.stuck).toBe(true);
+  });
+
+  it('面积够但碎片化为「装不下」仍能检出（旧面积守恒快检的盲区）', () => {
+    // 旧实现用 `freeCells < requiredCells` 做快检，与此局无关（面积恒守恒），
+    // 对「玩家把局面走死」毫无作用；此处用中心障碍切断棋盘来构造：剩余 8 格
+    // 面积足够放一件 2×2（4 格），但中心障碍使任何 2×2 都越不过 [1,1] → 真·装不下。
+    const level: LevelSpec = {
+      levelId: 4,
+      title: 'fragmented',
+      board: { rows: 3, cols: 3, blockedCells: [[1, 1]] },
+      items: [
+        { id: 'A', name: 'a', itemType: 't', spriteKey: 'k', cells: [[0, 0], [0, 1], [1, 0], [1, 1]], rotatable: false, trayOrder: 1 },
+      ],
+    };
+    const state = {
+      levelId: 4,
+      placements: new Map<string, { row: number; col: number; rotation: 0 }>(),
+      tray: ['A'],
+      trayRotations: new Map(),
+      selectedId: null,
+    };
+    const report = checkDeadend(level, state);
+    expect(report.freeCells).toBe(8); // 9 - 1 障碍
+    expect(report.requiredCells).toBe(4); // 一件 2×2
+    expect(report.stuck).toBe(true); // 面积够但中心障碍切断，2×2 无处落
   });
 });
 

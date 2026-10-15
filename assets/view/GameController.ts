@@ -45,6 +45,7 @@ import { ItemLayer } from './ItemLayer';
 import { PreviewLayer } from './PreviewLayer';
 import { SuccessOverlay } from './SuccessOverlay';
 import { ToolbarView } from './ToolbarView';
+import { Toast } from './Toast';
 import { TrayView } from './TrayView';
 
 const { ccclass, property } = _decorator;
@@ -94,6 +95,9 @@ export class GameController extends Component {
   /** 重置二次确认框（M2-3）：运行时代码注入 SafeAreaRoot，置于最顶层 */
   private confirmDialog: ConfirmDialog | null = null;
 
+  /** 「装不下」非阻断提示条（M2-4）：运行时代码注入 SafeAreaRoot，置于最顶层 */
+  private toastView: Toast | null = null;
+
   /** 确认框是否打开（期间冻结拖拽手势，双保险） */
   private dialogOpen = false;
 
@@ -119,6 +123,7 @@ export class GameController extends Component {
     // `__type__` 编码易碎，故不手改场景，改由代码建节点 + addComponent）
     this.buildToolbar();
     this.buildDialog();
+    this.buildToast();
   }
 
   /**
@@ -374,11 +379,10 @@ export class GameController extends Component {
           this.itemLayer?.shakeItem(event.itemId);
           break;
         case 'deadlock-warning':
-          // M1 仅 Console.warn（实施计划原文）；M2-4 换 Toast
-          console.warn(
-            `[GameController] 面积快检：一定装不下（剩余 ${event.freeCells} 格 /` +
-              ` 还需 ${event.requiredCells} 格）`,
-          );
+          // M2-4：非阻断 Toast（UI Spec 13「提示出现时棋盘仍可操作」，文案指向
+          // 「挪一挪 / 撤回一步」，**绝不**触发失败态或禁用操作）。这是设计内行为，
+          // 不是异常，故不在此 console.error / warn。
+          this.toastView?.show('剩下的空间装不下啦，试试挪一挪或者撤回一步');
           break;
         case 'level-cleared':
           // M1-7：进通关浮层。输入此刻已由 phase（WinAnimating）冻结，
@@ -525,6 +529,24 @@ export class GameController extends Component {
     dialog.onConfirm = () => this.confirmReset();
     dialog.onCancel = () => this.cancelReset();
     this.confirmDialog = dialog;
+  }
+
+  /**
+   * 创建「装不下」非阻断提示条节点并挂到 `SafeAreaRoot`，置于最顶层。
+   *
+   * 与 `buildDialog` 同构但**刻意不注册任何触摸监听、不 `propagationStopped`**
+   * （见 `Toast.ts` 头部约束）：Cocos 把触摸派发给所有命中节点，整屏手势根
+   * `SafeAreaRoot` 始终会收到事件，所以提示条出现的瞬间棋盘 / 托盘仍可拖拽
+   * （UI Spec 13「提示出现时棋盘仍可操作」）。节点初始 `active=false`
+   * （`Toast.onLoad`），`show()` 时才浮现。
+   */
+  private buildToast(): void {
+    const root = this.dragController?.gestureRoot ?? this.node;
+    const node = new Node('Toast');
+    node.layer = root.layer;
+    root.addChild(node); // 末尾追加 → 最顶层（盖住成功浮层与确认框，且不挡手势）
+    this.toastView = node.addComponent(Toast);
+    if (DEBUG) console.log('[GameController] 装不下提示条已注入 SafeAreaRoot');
   }
 
   /** 重算工具栏四个按钮的可用态（由当前 session 状态推出） */
