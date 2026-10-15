@@ -47,11 +47,16 @@ export class TraySlot extends Component {
   private shapeRows = 0;
   private shapeCols = 0;
   /**
-   * 溢出标记（M1-3：一行放不下时缩槽位仍放不下 → 隐藏）。
-   * 与 M1-6 的「拖拽中排除」是两个独立的显隐理由，必须分开记——
-   * 否则拖拽结束恢复显示时，会把本应隐藏的溢出 slot 一起放出来。
+   * 两个**独立**的显隐理由，必须分开记（M2-11 起）：
+   * - `inWindow`：横向滚动是否把这个槽位带进可见窗口（M2-11 取代 M1-3 的
+   *   `markOverflow`——现在所有槽位都建，靠滚动露出，溢出件不再永久隐藏）；
+   * - `dragHidden`：拖拽中排除（M1-6，物品被拖起时槽位跟着藏，防幽灵）。
+   *
+   * 合成规则 `active = inWindow && !dragHidden`。分开记的理由：滚动时不该把
+   * "正在被拖"的槽位放出来，拖拽结束也不该把"滚出窗外"的槽位放回来。
    */
-  private overflow = false;
+  private inWindow = true;
+  private dragHidden = false;
 
   /**
    * 本槽位**不注册任何触摸监听**（M1-4 起）。
@@ -117,19 +122,29 @@ export class TraySlot extends Component {
     return this.itemNode;
   }
 
-  /** 溢出槽位（M1-3）：本行放不下，先隐藏，等 M2 的横向滚动 */
-  markOverflow(): void {
-    this.overflow = true;
-    this.node.active = false;
+  /**
+   * 是否落在可见窗口内（M2-11 横向滚动）。滚出窗外的槽位整块隐藏——
+   * 既不可见也不可命中（`TrayView.hitTest` 跳过 `active=false` 的槽位）。
+   */
+  setInWindow(inWindow: boolean): void {
+    if (this.inWindow === inWindow) return;
+    this.inWindow = inWindow;
+    this.updateActive();
   }
 
   /**
    * 拖拽中排除 / 恢复（M1-6）。`hidden === true` 时物品被拖起，
    * 槽位跟着藏——拖拽中被拖物品还显示在托盘里 = 幽灵物品。
-   * 溢出的槽位不受影响（它本来就该藏着）。
+   * 与"滚出窗外"是两个独立理由，合成见 `updateActive`。
    */
   setHidden(hidden: boolean): void {
-    this.node.active = !hidden && !this.overflow;
+    this.dragHidden = hidden;
+    this.updateActive();
+  }
+
+  /** 合成最终显隐：在窗内 且 未被拖拽排除 */
+  private updateActive(): void {
+    this.node.active = this.inWindow && !this.dragHidden;
   }
 
   /** 物品的格数 `{rows, cols}`；还没装物品时是 `{0,0}` */

@@ -26,6 +26,11 @@
  * `onTap`。**仲裁只此一处**——若拆到两个组件各判一次，拖完松手会顺带选中一下，
  * 而"点选"和"起拖"共用 touchstart 决定了这种双发必然发生。
  *
+ * M2-11 起多出第三种手势：**托盘横向滚动**（滑）。三者仍共用同一次 touchstart、
+ * 仲裁仍只此一处：过阈值后按**主轴方向**分——水平为主、在托盘带内起手且托盘可滚
+ * → 滑托盘（一个意图都不发）；否则维持原来的"起拖 / 点选"。托盘在底部、把物品
+ * 拖上棋盘天然是纵向为主，故"滑"与"抓"方向不冲突。
+ *
  * 同理，触摸监听也只挂在本组件的 `gestureRoot` 上（`TraySlot`/`TrayView` 都不挂）：
  * 谁认领触摸，谁就得在松手时还能被手指命中，否则引擎给的是 `TOUCH_CANCEL`
  * （见 `gestureRoot` 的注释）。
@@ -147,6 +152,14 @@ export class DragController extends Component {
   private gestureFrozen = false;
   /** 最近一次喂给 `onPreview` 的预览（松手时据此判要不要抖） */
   private lastPreview: DragPreview | null = null;
+  /**
+   * 横向滚动中（M2-11）：本段手势已定性为"滑托盘"——不发任何意图、松手不算点击。
+   * 与 `dragging`（抓物品）互斥，任一为真另一个必为假。
+   */
+  private scrolling = false;
+  /** 滚动起始：按下点的 x 与该刻托盘偏移（据此算增量平移） */
+  private scrollStartX = 0;
+  private scrollStartOffset = 0;
 
   /**
    * 监听挂在 `gestureRoot`（覆盖整屏的 SafeAreaRoot）上。
@@ -238,19 +251,32 @@ export class DragController extends Component {
     this.lastAnchor = null;
     this.lastPreview = null;
     this.gestureFrozen = false;
+    this.scrolling = false;
+    this.scrollStartX = 0;
+    this.scrollStartOffset = 0;
   }
 
   private onTouchMove(event: EventTouch): void {
     if (this.gestureFrozen) return;
-    if (this.pending === null && !this.dragging) return;
 
     const ui = event.getUILocation();
 
+    // 已在横向滚动中（M2-11）：只更新托盘偏移，一个意图都不发
+    if (this.scrolling) {
+      this.applyScroll(ui.x);
+      return;
+    }
+
+    const dx = ui.x - this.startX;
+    const dy = ui.y - this.startY;
+
     // 阈值仲裁：没过阈值就还是"点击"，一个意图都不发
     if (!this.dragging) {
-      const dx = ui.x - this.startX;
-      const dy = ui.y - this.startY;
       if (Math.hypot(dx, dy) < UI_DRAG_THRESHOLD_PX) return;
+      // 滑托盘 vs 抓物品（M2-11）：过阈值后按主轴方向分。放在 pending 判定之前，
+      // 托盘空白处也能滑（手机上滑一排卡片不看卡片本身）。见文件头"点/拖/滑仲裁"
+      if (this.tryBeginScroll(dx, dy, ui.x)) return;
+      if (this.pending === null) return;
       this.beginDrag(ui.x, ui.y);
     }
 
@@ -261,6 +287,12 @@ export class DragController extends Component {
   private onTouchEnd(event: EventTouch): void {
     // 冻结期起的手势：一个意图都不发（见 `gestureFrozen` 的说明）
     if (this.gestureFrozen) {
+      this.reset();
+      return;
+    }
+
+    // 滑托盘收尾（M2-11）：滚动不产生任何意图，也不该被当成一次点击
+    if (this.scrolling) {
       this.reset();
       return;
     }
@@ -296,6 +328,11 @@ export class DragController extends Component {
    */
   private onTouchCancel(): void {
     if (this.gestureFrozen) return;
+    // 滑托盘被 cancel：没有物品在拖，直接收尾（不发 cancel 意图、不当点击）
+    if (this.scrolling) {
+      this.reset();
+      return;
+    }
     if (DEBUG) console.warn('[DragController] 收到 TOUCH_CANCEL：本次拖拽按取消处理');
     if (this.dragging) this.emit({ type: 'cancel' });
     this.onPreviewEnd?.(false);
@@ -382,6 +419,46 @@ export class DragController extends Component {
     return grabOffsetFromRatio(local.x / size.width, -local.y / size.height, hit.rows, hit.cols);
   }
 
+  // ───────────────────────── 托盘横向滚动（M2-11） ─────────────────────────
+
+  /**
+   * 过阈值后尝试把本段手势定性为"滑托盘"。返回 `true` = 已进入滚动（调用方应直接
+   * return，不再起拖、不发任何意图）。
+   *
+   * 三个条件同时满足才滚：
+   * 1. 按下点在**托盘带内**（`overTray(startX, startY)`）——棋盘上的横向拖动仍是
+   *    "抓已放物品"，不滚托盘；
+   * 2. 位移以**水平为主**（`|dx| > |dy|`）——托盘在底部、把物品拖上棋盘是纵向为主，
+   *    两个手势方向天然可分；
+   * 3. 托盘**确有可滚范围**（`canScroll()`）——L1–L6 放得下，横向拖动仍按老规矩
+   *    抓物品，行为零变化。
+   */
+  private tryBeginScroll(dx: number, dy: number, uiX: number): boolean {
+    if (!this.overTray(this.startX, this.startY)) return false;
+    if (Math.abs(dx) <= Math.abs(dy)) return false;
+    if (this.trayView?.canScroll() !== true) return false;
+
+    this.scrolling = true;
+    // 与起拖同义：本段手势已定性，松手不再走 emitTap（不会误选中/取消选中）
+    this.consumedByDrag = true;
+    this.scrollStartX = this.startX;
+    this.scrollStartOffset = this.trayView?.scrollOffset ?? 0;
+    this.applyScroll(uiX);
+
+    if (DEBUG) console.log(`[DragController] 滑托盘开始：起始 offset=${this.scrollStartOffset}px`);
+    return true;
+  }
+
+  /**
+   * 按手指水平位移平移托盘。手指左移（`dx<0`）露出后面的物品 → offset 增大
+   * （容器 `content.x = -offset`）；越界由 `TrayView.setScrollOffset` 夹取。
+   */
+  private applyScroll(uiX: number): void {
+    const tray = this.trayView;
+    if (tray === null) return;
+    tray.setScrollOffset(this.scrollStartOffset - (uiX - this.scrollStartX));
+  }
+
   /** 过了阈值：正式起拖，发出 `grab` */
   private beginDrag(uiX: number, uiY: number): void {
     const pending = this.pending;
@@ -466,5 +543,8 @@ export class DragController extends Component {
     this.dragging = false;
     this.lastAnchor = null;
     this.lastPreview = null;
+    this.scrolling = false;
+    this.scrollStartX = 0;
+    this.scrollStartOffset = 0;
   }
 }

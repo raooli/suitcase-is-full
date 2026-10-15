@@ -18,10 +18,17 @@
  * 所以监听整体交给挂在覆盖整屏 `SafeAreaRoot` 上的 `DragController`，
  * "点 vs 拖"的仲裁也一并收在那里（本组件只保留 `hitTest` 供它查询命中）。
  *
- * 已知缺口（明确留给 M2，不假装完成）：物品多于一行放得下时，超出的槽位
- * 暂时 `active = false` 并告警。UI Spec 5.2 要的是**横向滚动**，
- * 而滚动与"从托盘拖起"共享同一套手势仲裁（点 vs 拖 vs 滑），
- * 那是 M1-4 `DragController` 的活（仲裁点已就位，滚动本体仍在 M2）。
+ * ## 横向滚动（M2-11，UI Spec 5.2「物品数量多时横向滚动」）
+ *
+ * 物品多到一行放不下时（L7–L10 有 7–9 件、槽位夹到 `UI_TRAY_SLOT_MIN=44px` 后
+ * 只显 6 个），全部槽位仍**照建**，改挂在 `TrayContent` 子容器上，靠 `scrollOffset`
+ * 平移露出不同区段；只有与可见窗口**相交**的槽位才 `active`（`TraySlot.setInWindow`，
+ * 取代 M1-3 的 `markOverflow`——溢出件不再永久隐藏，而是滚出来够到）。
+ *
+ * 滚动手势（滑 vs 抓物品）由 `DragController` 按**主轴方向**仲裁：托盘在底部、
+ * 把物品拖上棋盘是纵向为主、横向是滑托盘，两者天然可分。本组件自己不挂任何触摸
+ * 监听（沿用 M1-4 的决定），只提供 `setScrollOffset` / `canScroll` / `scrollOffset`
+ * 供它驱动。布局算术（夹取 / 可见性 / 排布）在 core 的 `geometry/trayScroll.ts`。
  */
 
 import { Component, Node, UITransform, Vec3, _decorator } from 'cc';
@@ -39,7 +46,12 @@ import {
   bboxOf,
   findItem,
   rotateBy,
+  trayClampScroll,
+  trayContentWidth,
+  trayMaxScroll,
   trayRotationOf,
+  traySlotCenterX,
+  traySlotInWindow,
 } from '../core';
 import type { ItemSpec, LevelSpec, LevelState } from '../core';
 import { ItemView } from './ItemView';
@@ -63,19 +75,32 @@ export class TrayView extends Component {
   /** 最近一次 `applyState` 的状态（提示高亮清除后据此还原选中/普通态） */
   private lastState: LevelState | null = null;
 
+  /** 横向滚动偏移（设计单位，∈[0, maxScroll]）。容器 `content.x = −offset`（M2-11） */
+  private scrollOffsetValue = 0;
+  /** 全部槽位的滚动容器；本节点（TrayView）保持固定尺寸 = 可见窗口（见 onLoad） */
+  private contentNode: Node | null = null;
+  /** 最近一次 render 的槽位边长与件数（可见性 / 滚动范围据此重算） */
+  private slotSize = UI_TRAY_SLOT;
+  private itemCount = 0;
+
   override onLoad(): void {
     const transform = this.node.getComponent(UITransform) ?? this.node.addComponent(UITransform);
     transform.setContentSize(TrayView.contentWidth(), UI_TRAY_HEIGHT - UI_TRAY_PADDING * 2);
     this.node.setPosition(0, UI_TRAY_BAND_CENTER_Y, 0);
+    // 滚动容器先建好：它固定为"可见窗口"，槽位全挂它下面，靠 x 平移露出不同区段。
+    // 本节点自身不动 → `containsPoint` / `hitTest` 的窗口口径与滚动前完全一致
+    this.ensureContentNode();
   }
 
   /** 按 `state.tray` 重建全部槽位。MVP 不做增量 diff（与 `BoardView` 同策略） */
   render(state: LevelState, level: LevelSpec, source: ShapeSource): void {
     this.clear();
+    this.ensureContentNode();
 
     const count = state.tray.length;
     const slotSize = TrayView.slotSizeFor(count);
-    const visible = TrayView.visibleCount(slotSize);
+    this.slotSize = slotSize;
+    this.itemCount = count;
     const cellPx = source.getCellPx();
 
     let index = 0;
@@ -84,27 +109,26 @@ export class TrayView extends Component {
       if (item === undefined) continue;
 
       const slot = this.createSlot(itemId, slotSize, index);
-      if (index >= visible) {
-        // 溢出：先不画（否则会越出托盘压到工具栏上），等 M2 的横向滚动
-        slot.markOverflow();
-      }
       this.mountItem(slot.node, item, state, source, cellPx);
       index++;
     }
 
+    // 换关 / 状态变更都会整体重建：滚动偏移归零，再按可见窗口算每槽显隐（M2-11）。
+    // 溢出件不再永久隐藏——建全部、靠滚动露出来够到（取代 M1-3 的 markOverflow）
+    this.scrollOffsetValue = 0;
+    this.applyScrollLayout();
+
     this.applyState(state);
 
     if (DEBUG) {
-      const shown = Math.min(count, visible);
+      const max = this.maxScroll();
+      const inWindow = this.slots.filter((s) => s.node.active).length;
       console.log(
-        `[TrayView] 托盘 ${count} 件（槽位 ${slotSize}px，可见 ${shown}/${count}）：` +
+        `[TrayView] 托盘 ${count} 件（槽位 ${slotSize}px，可滚 ${max}px，窗内 ${inWindow}）：` +
           this.slots.map((s) => s.describe()).join(' '),
       );
-      if (count > visible) {
-        console.warn(
-          `[TrayView] 托盘溢出：${count} 件放不下（槽位已压到 ${slotSize}px，热区下限 ${UI_TRAY_SLOT_MIN}px）` +
-            ` —— UI Spec 5.2 要求横向滚动，留给 M2（与 M1-4 拖起手势合并实现）`,
-        );
+      if (max > 0) {
+        console.log(`[TrayView] 横向滚动就绪：${count} 件超出可见区 ${max}px，左右滑托盘露出其余（UI Spec 5.2）`);
       }
     }
   }
@@ -153,9 +177,9 @@ export class TrayView extends Component {
     }
   }
 
-  /** 槽位在托盘内的中心 x：左对齐逐个排开 */
+  /** 槽位在内容坐标系里的中心 x：左对齐逐个排开（算术在 core `traySlotCenterX`） */
   static slotCenterX(index: number, slotSize: number): number {
-    return -TrayView.contentWidth() / 2 + slotSize / 2 + index * (slotSize + UI_TRAY_GAP);
+    return traySlotCenterX(index, slotSize, UI_TRAY_GAP, TrayView.contentWidth());
   }
 
   /**
@@ -168,19 +192,73 @@ export class TrayView extends Component {
     return Math.max(UI_TRAY_SLOT_MIN, Math.min(UI_TRAY_SLOT, Math.floor(even)));
   }
 
-  /** 一行放得下几个（含间距） */
-  static visibleCount(slotSize: number): number {
-    return Math.floor((TrayView.contentWidth() + UI_TRAY_GAP) / (slotSize + UI_TRAY_GAP));
-  }
-
   private static contentWidth(): number {
     return UI_DESIGN_WIDTH - UI_SAFE_MARGIN * 2;
+  }
+
+  // ───────────────────────── 横向滚动（M2-11） ─────────────────────────
+
+  /** 滚动容器（懒建）。所有槽位挂它下面；本节点自身保持固定窗口尺寸、不参与平移 */
+  private ensureContentNode(): Node {
+    if (this.contentNode === null) {
+      const content = new Node('TrayContent');
+      content.layer = this.node.layer;
+      this.node.addChild(content);
+      this.contentNode = content;
+    }
+    return this.contentNode;
+  }
+
+  /** 内容总宽（全部槽位 + 间距） */
+  private contentTotalWidth(): number {
+    return trayContentWidth(this.itemCount, this.slotSize, UI_TRAY_GAP);
+  }
+
+  /** 当前滚动偏移（设计单位，只读） */
+  get scrollOffset(): number {
+    return this.scrollOffsetValue;
+  }
+
+  /** 可滚动的最大偏移。内容放得下时为 0（= 不可滚，L1–L6 即此） */
+  maxScroll(): number {
+    return trayMaxScroll(this.contentTotalWidth(), TrayView.contentWidth());
+  }
+
+  /** 是否可横向滚动（供 `DragController` 判"滑托盘"还是"抓物品"） */
+  canScroll(): boolean {
+    return this.maxScroll() > 0;
+  }
+
+  /**
+   * 设置滚动偏移（由 `DragController` 的手势驱动）。自动夹取、平移容器、
+   * 并按可见窗口重算每槽显隐。越界值被夹回 `[0, maxScroll]`。
+   */
+  setScrollOffset(offset: number): void {
+    this.scrollOffsetValue = offset;
+    this.applyScrollLayout();
+  }
+
+  /** 夹取偏移 → 平移容器 → 逐槽显隐。`setScrollOffset` / `render` 共用 */
+  private applyScrollLayout(): void {
+    const clamped = trayClampScroll(this.scrollOffsetValue, this.contentTotalWidth(), TrayView.contentWidth());
+    this.scrollOffsetValue = clamped;
+
+    const content = this.contentNode;
+    if (content !== null) content.setPosition(-clamped, 0, 0);
+
+    // 只有与可见窗口相交的槽位才 active（可渲染 + 可命中）；滚出窗外的整块藏起。
+    // 拖拽排除态由 TraySlot 与 inWindow 合成，不会被这里覆盖（见 TraySlot.updateActive）
+    for (let i = 0; i < this.slots.length; i++) {
+      const centerX = TrayView.slotCenterX(i, this.slotSize);
+      this.slots[i].setInWindow(traySlotInWindow(centerX, this.slotSize, clamped, TrayView.contentWidth()));
+    }
   }
 
   private createSlot(itemId: string, slotSize: number, index: number): TraySlot {
     const node = new Node(`Slot_${itemId}`);
     node.layer = this.node.layer;
-    this.node.addChild(node);
+    // 挂到滚动容器（而非本节点）：本节点是固定可见窗口，槽位随容器一起平移（M2-11）
+    this.ensureContentNode().addChild(node);
     node.setPosition(TrayView.slotCenterX(index, slotSize), 0, 0);
 
     // 槽位不带触摸监听：命中查询统一走 `hitTest()`，由 DragController 调用
