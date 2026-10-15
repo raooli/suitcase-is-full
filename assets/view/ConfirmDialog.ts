@@ -167,6 +167,10 @@ export class ConfirmDialog extends Component {
     label.string = text;
     label.fontSize = fontSize;
     label.lineHeight = fontSize + 6;
+    // 长文案按面板宽度换行（默认 NONE 会把文字画出面板外——实测
+    // 「已放入的物品会全部退回托盘，确定吗？」18 字 ≈324px > 面板 280px）。
+    // RESIZE_HEIGHT：宽度锁定 contentSize、高度自适应，锚点 0.5 保持居中
+    label.overflow = Label.Overflow.RESIZE_HEIGHT;
     label.color = Color.fromHEX(new Color(), hex);
     label.horizontalAlign = Label.HorizontalAlign.CENTER;
     label.verticalAlign = Label.VerticalAlign.CENTER;
