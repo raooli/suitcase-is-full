@@ -236,6 +236,57 @@ describe('GameSession：cancel 与 removeToTray 是两条不同路径', () => {
     expect(findEvent(result.events, 'item-returned')).toBeUndefined();
     expect(session.canUndo).toBe(false);
   });
+
+  it('真实手势流 grab→removeToTray 后 phase 回 Selected，不卡 Dragging（M2-5 回归）', () => {
+    // view 的真实序列是 grab → move* → removeToTray，中间**没有** drop/cancel。
+    // handleRemoveToTray 若不做生命周期收尾，phase 会卡在 Dragging——
+    // 随后 handleUndo 的 phase === 'Dragging' 门会挡住撤回（R-06b 第 4 条失效）。
+    // 旧测试里那句 dispatch({type:'cancel'}) // 清理拖动态 正是在绕过这个缺陷。
+    const session = new GameSession(roomyLevel);
+    session.dispatch({ type: 'grab', itemId: 'A', anchor: [0, 0] });
+    session.dispatch({ type: 'drop' });
+    expect(session.getPhase()).toBe('Selected');
+
+    session.dispatch({ type: 'grab', itemId: 'A', anchor: [0, 1] });
+    expect(session.getPhase()).toBe('Dragging');
+    const result = session.dispatch({ type: 'removeToTray', itemId: 'A' });
+
+    expect(result.state.placements.size).toBe(0);
+    expect(result.state.tray).toEqual(['A', 'B', 'C']);
+    expect(session.getPhase()).toBe('Selected'); // 不是 'Dragging'
+    expect(session.getPreview()).toBeNull(); // 预览不残留
+  });
+
+  it('取出后可直接撤回，回到取出前的位置与朝向（R-06b 第 4 条「可单独撤回」）', () => {
+    const session = new GameSession(roomyLevel);
+    session.dispatch({ type: 'grab', itemId: 'A', anchor: [0, 0] });
+    session.dispatch({ type: 'drop' });
+    session.dispatch({ type: 'rotate', itemId: 'A' }); // 棋盘内旋转 0→1
+    expect(session.getState().placements.get('A')).toEqual({ row: 0, col: 0, rotation: 1 });
+
+    session.dispatch({ type: 'grab', itemId: 'A', anchor: [0, 0] });
+    session.dispatch({ type: 'removeToTray', itemId: 'A' });
+    expect(session.getState().placements.size).toBe(0);
+
+    // 取出是一次成功操作 → 入栈 → 可单独撤回，且回到取出前的位置与朝向
+    expect(session.canUndo).toBe(true);
+    const result = session.dispatch({ type: 'undo' });
+    expect(findEvent(result.events, 'undo-applied')).toBeDefined();
+    expect(result.state.placements.get('A')).toEqual({ row: 0, col: 0, rotation: 1 });
+    expect(result.state.tray).toEqual(['B', 'C']);
+  });
+
+  it('拖拽中对托盘物品 removeToTray：无变化，但 phase 照常收尾', () => {
+    const session = new GameSession(roomyLevel);
+    session.dispatch({ type: 'grab', itemId: 'A', anchor: [0, 0] }); // 抓起托盘物品
+    expect(session.getPhase()).toBe('Dragging');
+    const result = session.dispatch({ type: 'removeToTray', itemId: 'A' });
+
+    expect(findEvent(result.events, 'item-returned')).toBeUndefined();
+    expect(result.state.tray).toEqual(['A', 'B', 'C']);
+    expect(session.getPhase()).toBe('Selected');
+    expect(session.canUndo).toBe(false);
+  });
 });
 
 // ─────────────────────── 撤回语义（V1.1 R-09） ───────────────────────

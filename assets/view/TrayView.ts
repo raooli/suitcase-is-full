@@ -29,6 +29,14 @@
  * 把物品拖上棋盘是纵向为主、横向是滑托盘，两者天然可分。本组件自己不挂任何触摸
  * 监听（沿用 M1-4 的决定），只提供 `setScrollOffset` / `canScroll` / `scrollOffset`
  * 供它驱动。布局算术（夹取 / 可见性 / 排布）在 core 的 `geometry/trayScroll.ts`。
+ *
+ * ## 取出目标位高亮（M2-5，PRD R-06b / UI Spec 7 节）
+ *
+ * 把已放物品拖向托盘时，`DragController` 判定进入「取出态」后会调
+ * `highlightReturnTarget(itemId)`：按 core `trayInsertIndex`（与 `removeToTray`
+ * 同源的插入判据）算出这件物品回托盘后的落点槽位，染成 `drop-target`
+ * （`TraySlot` 自 M1-3 起就留着这个视觉态，此前无人使用）。拖拽结束由
+ * `clearReturnTarget()` 还原。
  */
 
 import { Component, Node, UITransform, Vec3, _decorator } from 'cc';
@@ -50,6 +58,7 @@ import {
   trayContentWidth,
   trayMaxScroll,
   trayRotationOf,
+  trayInsertIndex,
   traySlotCenterX,
   traySlotInWindow,
 } from '../core';
@@ -74,6 +83,8 @@ export class TrayView extends Component {
   private slots: TraySlot[] = [];
   /** 最近一次 `applyState` 的状态（提示高亮清除后据此还原选中/普通态） */
   private lastState: LevelState | null = null;
+  /** 最近一次 `render` 的关卡（M2-5：算取出目标位要查 `trayOrder`） */
+  private lastLevel: LevelSpec | null = null;
 
   /** 横向滚动偏移（设计单位，∈[0, maxScroll]）。容器 `content.x = −offset`（M2-11） */
   private scrollOffsetValue = 0;
@@ -97,6 +108,7 @@ export class TrayView extends Component {
     this.clear();
     this.ensureContentNode();
 
+    this.lastLevel = level;
     const count = state.tray.length;
     const slotSize = TrayView.slotSizeFor(count);
     this.slotSize = slotSize;
@@ -162,6 +174,65 @@ export class TrayView extends Component {
    */
   clearHint(): void {
     if (this.lastState !== null) this.applyState(this.lastState);
+  }
+
+  // ───────────────────────── 取出目标位高亮（M2-5） ─────────────────────────
+
+  /**
+   * 取出拖拽时的**目标位高亮**（UI Spec 7 节 TraySlot「取出目标位高亮」：
+   * 高亮目标空位，让玩家能预期落点）。
+   *
+   * 落点下标问 core 的 `trayInsertIndex`（与 `removeToTray` 的插入判据同源）——
+   * **本组件不自己重排顺序**（纪律①：顺序只认 `state.tray`，这里再排一次，
+   * 两份真相就会在撤销/取出后分叉）。
+   *
+   * 追加到末尾（下标 = 托盘长度）时高亮**末槽**：落点在它右边，视觉上
+   * "排在最后"仍然读得出来。目标槽滚出窗外（L7+ 可滚托盘）时先把窗口挪过去
+   * ——高亮一个看不见的槽位等于没有反馈；拖拽进行中不存在滚动手势
+   * （`DragController` 仲裁互斥），这次平移不会和玩家操作打架。
+   */
+  highlightReturnTarget(itemId: string): void {
+    const level = this.lastLevel;
+    const state = this.lastState;
+    if (level === null || state === null) return;
+
+    const index = trayInsertIndex(level, state.tray, itemId);
+    this.ensureSlotVisible(index);
+
+    const target = Math.min(index, Math.max(this.slots.length - 1, 0));
+    for (let i = 0; i < this.slots.length; i++) {
+      const slot = this.slots[i];
+      const id = slot.getItemId();
+      if (i === target) slot.setVisual('drop-target');
+      else if (id === state.selectedId) slot.setVisual('selected');
+      else slot.setVisual('normal');
+    }
+
+    if (DEBUG) {
+      const at = index < this.slots.length ? `第 ${index} 槽` : '末尾（高亮末槽）';
+      console.log(`[TrayView] 取出目标位：${itemId} → tray ${at}`);
+    }
+  }
+
+  /** 清除取出目标位高亮，还原到选中/普通态（与 `clearHint` 同构） */
+  clearReturnTarget(): void {
+    if (this.lastState !== null) this.applyState(this.lastState);
+  }
+
+  /**
+   * 把第 `index` 个槽位挪进可见窗口（M2-5 取出高亮的前置）。
+   * 已在窗内则不动（幂等）；下标越界（追加位的右侧）安全返回。
+   */
+  private ensureSlotVisible(index: number): void {
+    if (index < 0 || index >= this.slots.length) return;
+    const centerX = TrayView.slotCenterX(index, this.slotSize);
+    const half = TrayView.contentWidth() / 2;
+    const slotHalf = this.slotSize / 2;
+    // 窗口坐标 = 内容坐标 − offset；右越界增大 offset（内容左移），左越界减小
+    let target = this.scrollOffsetValue;
+    if (centerX - target + slotHalf > half) target = centerX + slotHalf - half;
+    else if (centerX - target - slotHalf < -half) target = centerX - slotHalf + half;
+    if (target !== this.scrollOffsetValue) this.setScrollOffset(target);
   }
 
   /**
@@ -292,7 +363,11 @@ export class TrayView extends Component {
     return null;
   }
 
-  /** 世界坐标是否落在托盘带内（松手位置判定：拖回托盘 → `removeToTray`） */
+  /**
+   * 世界坐标是否落在托盘带内（M2-5 取出态判定的两个条件之一：
+   * 「手指在托盘带内」= 玩家拖回托盘的明确意图；另一个条件是物品中心出棋盘
+   * 外扩半格，由 `DragController.outsideBoard` 经 `BoardView.isTakeout` 判定）。
+   */
   containsPoint(worldPos: Vec3): boolean {
     const transform = this.node.getComponent(UITransform);
     if (transform === null) return false;

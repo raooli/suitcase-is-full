@@ -150,18 +150,34 @@ export function removeToTray(level: LevelSpec, state: LevelState, itemId: string
   return { ...state, placements, tray, trayRotations };
 }
 
+/**
+ * `itemId` 插回有序托盘时应处的**下标**（M2-5：取出目标位高亮用）。
+ *
+ * 从 `insertByTrayOrder` 提取的理由：TrayView 要给「取出落点」画高亮，
+ * 需要知道这个下标，但**视图层不许自己重排顺序**（TrayView 纪律①：顺序只认
+ * `state.tray`，本组件不再排序——一旦这里也排一次，两份真相就会分叉）。
+ * 所以把"该插哪"提成 core 的纯函数，插入与查询共用同一份判据。
+ */
+export function trayInsertIndex(
+  level: LevelSpec,
+  tray: readonly string[],
+  itemId: string,
+): number {
+  const orderOf = (id: string) => findItem(level, id)?.trayOrder ?? Number.MAX_SAFE_INTEGER;
+  const target = orderOf(itemId);
+  let i = 0;
+  while (i < tray.length && orderOf(tray[i]) < target) i++;
+  return i;
+}
+
 /** 按 `trayOrder` 把 id 插回有序托盘数组 */
 export function insertByTrayOrder(
   level: LevelSpec,
   tray: readonly string[],
   itemId: string,
 ): string[] {
-  const orderOf = (id: string) => findItem(level, id)?.trayOrder ?? Number.MAX_SAFE_INTEGER;
-  const target = orderOf(itemId);
   const out = Array.from(tray);
-  let i = 0;
-  while (i < out.length && orderOf(out[i]) < target) i++;
-  out.splice(i, 0, itemId);
+  out.splice(trayInsertIndex(level, tray, itemId), 0, itemId);
   return out;
 }
 

@@ -8,8 +8,15 @@
  * - **非法**（`ok === false`）→ 红色**虚线**轮廓（无填充）。**不靠颜色单通道**：
  *   合法是实心块、非法是空心虚线，形状本身就能区分（TDD 17.5 无障碍要求）。
  *   且不自动纠偏（TDD 6.3 裁决 D-04）：只提示，不代劳。
- * - **取出**（手指在托盘带内）→ ghost 隐藏。这一态由 `DragController.overTray`
- *   判定（几何事实，不是碰撞），本层只据此决定画不画。
+ * - **取出**（`takeout === true`：手指在托盘带内，或物品中心出棋盘外扩半格）→
+ *   物品**半透明**中立色实心块（白填充 + 棕描边），跟随手指；与 `TrayView` 的
+ *   取出目标位高亮配合。**禁止红色非法**（UI Spec 6：拖到棋盘外还显示红，
+ *   玩家会以为松手失败而缩回去，这条规则就形同不存在）。
+ *
+ *   M1-5 时这一态是"直接隐藏 ghost"——V1.1 取出规格（PRD R-06b）落地后改为
+ *   半透明：「藏掉」不等于「半透明」，玩家看不到自己在拖什么，就谈不上
+ *   "预期落点"。三态因此全部靠**形状 + 颜色双通道**区分：实心绿 / 空心红虚线 /
+ *   半透明白。
  *
  * ## 边界
  *
@@ -73,6 +80,8 @@ const { ccclass, property } = _decorator;
 const VALID_FILL_ALPHA = 0.4;
 /** 非法态描边透明度 */
 const INVALID_STROKE_ALPHA = 0.85;
+/** 取出态填充透明度（M2-5：物品半透明，中立色——不是红也不是绿） */
+const TAKEOUT_FILL_ALPHA = 0.45;
 
 /** 圆角：占短边比例，且不超过短边一半（短边退化时不会变成胶囊） */
 function radiusOf(r: Rect): number {
@@ -109,23 +118,22 @@ export class PreviewLayer extends Component {
   }
 
   /**
-   * 显示预览。`preview === null` 或 `overTray === true` → 隐藏（取出态 / 无拖拽）。
+   * 显示预览。`preview === null` → 隐藏（无拖拽）。
    *
-   * `overTray` 是「手指在托盘带内」的几何判定，由 `DragController` 给——
-   * 本组件不碰 `TrayView` 的命中，只据此决定画不画。
+   * `takeout === true` = **取出态**（M2-5：手指在托盘带内或物品中心出棋盘
+   * 外扩半格，由 `DragController.isTakeoutState` 判定）：画半透明中立色，
+   * **不画红**。本组件不碰 `TrayView` 的命中、也不算几何，只据此决定画什么。
    */
-  show(preview: DragPreview | null, overTray: boolean): void {
+  show(preview: DragPreview | null, takeout: boolean): void {
     this.stopShake();
-    if (preview === null || overTray) {
-      if (DEBUG) {
-        console.log(`[PreviewLayer] ghost 隐藏（${overTray ? '取出态：手指在托盘带内' : '无预览'}）`);
-      }
+    if (preview === null) {
+      if (DEBUG) console.log('[PreviewLayer] ghost 隐藏（无预览）');
       this.clear();
       this.current = null;
       return;
     }
     this.current = preview;
-    this.drawGhost(preview);
+    this.drawGhost(preview, takeout);
   }
 
   /**
@@ -163,7 +171,7 @@ export class PreviewLayer extends Component {
 
   // ───────────────────────── 绘制 ─────────────────────────
 
-  private drawGhost(preview: DragPreview): void {
+  private drawGhost(preview: DragPreview, takeout: boolean): void {
     const g = this.graphics;
     const board = this.boardView;
     const level = this.level;
@@ -210,7 +218,22 @@ export class PreviewLayer extends Component {
       g.fill();
     }
 
-    if (preview.check.ok) {
+    if (takeout) {
+      // 取出态（M2-5）：半透明中立色实心块 + 棕色细实线。**没有红色**——
+      // UI Spec 6：拖到棋盘外还显示非法红，玩家会以为松手失败而缩回去。
+      // 与合法（实心绿）/ 非法（空心红虚线）双通道可分
+      const fill = Color.fromHEX(new Color(), UI_PALETTE.surfaceWhite);
+      fill.a = Math.round(255 * TAKEOUT_FILL_ALPHA);
+      g.fillColor = fill;
+      g.strokeColor = Color.fromHEX(new Color(), UI_PALETTE.brown);
+      g.lineWidth = 2;
+      for (const r of lifted) {
+        g.roundRect(r.x, r.y, r.w, r.h, radiusOf(r));
+        g.fill();
+        g.roundRect(r.x, r.y, r.w, r.h, radiusOf(r));
+        g.stroke();
+      }
+    } else if (preview.check.ok) {
       // 合法：半透明实心块 + 实线描边
       const fill = Color.fromHEX(new Color(), UI_PALETTE.valid);
       fill.a = Math.round(255 * VALID_FILL_ALPHA);
@@ -236,7 +259,7 @@ export class PreviewLayer extends Component {
     }
 
     if (DEBUG) {
-      const reason = preview.check.ok ? 'ok' : preview.check.reason;
+      const reason = takeout ? '取出态' : preview.check.ok ? 'ok' : preview.check.reason;
       const p = this.node.position;
       console.log(
         `[PreviewLayer] ghost ${preview.itemId}@(${preview.anchor[0]},${preview.anchor[1]})` +

@@ -86,6 +86,7 @@ export {
   traySlotCenterX,
   traySlotInWindow,
 } from './geometry/trayScroll';
+export { isTakeoutPosition } from './geometry/takeout';
 
 // 规则
 export {
@@ -106,6 +107,7 @@ export {
   removeToTray,
   rotateInPlace,
   suggestNextPlacement,
+  trayInsertIndex,
   trayRotationOf,
 } from './rules/placement';
 export type { HintSuggestion, RotateResult } from './rules/placement';

@@ -30,6 +30,7 @@ import {
   UI_TOOLBAR_HEIGHT,
   UI_TRAY_HEIGHT,
   bboxOf,
+  isTakeoutPosition,
   rcKey,
   toIndex,
   toRC,
@@ -211,6 +212,29 @@ export class BoardView extends Component {
       rows: box.height,
       cols: box.width,
     };
+  }
+
+  // ───────── 取出判定出口（M2-5，R-A6：格算术只出现在本文件） ─────────
+
+  /**
+   * 取出判定（PRD R-06b / TDD 7.3 / O11）：物品**中心**是否已出
+   * 「棋盘包围盒外扩半格」。
+   *
+   * 比较式在 core `geometry/takeout.ts`（纯函数、有单测）；本方法只做
+   * 格→像素换算（R-A6 唯一出口）：锚点是包围盒**左上角**（`gridToLocal`
+   * 口径，y 向上），中心 = 左上角 + 半个包围盒，故 y 要**减**——
+   * 与 `cellCenterLocal` 同一方向。
+   *
+   * `cells` 传**当前朝向**的形状（调用方 `rotateBy` 后传入）：旋转会改变
+   * 包围盒，中心随之移动，判定必须跟着转。
+   */
+  isTakeout(cells: readonly RC[], anchor: RC): boolean {
+    const corner = this.gridToLocal(anchor[0], anchor[1]);
+    const box = bboxOf(cells);
+    const unit = this.getCellPx();
+    const centerX = corner.x + (box.width * unit) / 2;
+    const centerY = corner.y - (box.height * unit) / 2;
+    return isTakeoutPosition(centerX, centerY, this.boardWidth(), this.boardHeight(), unit);
   }
 
   private boardWidth(): number {

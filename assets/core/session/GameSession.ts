@@ -261,15 +261,37 @@ export class GameSession {
     events.push({ type: 'rotate-blocked', itemId });
   }
 
-  /** 取出到托盘（PRD R-06b）。这是**一次成功操作**，计入撤回栈 */
+  /**
+   * 取出到托盘（PRD R-06b）。这是**一次成功操作**，计入撤回栈。
+   *
+   * **拖拽生命周期必须在这里收尾**（与 `handleDrop` / `handleCancel` 同构）：
+   * 真实手势流是 `grab → move* → removeToTray`，中间没有 drop/cancel，
+   * 而 grab 会把 phase 置为 `Dragging`。若这里不重置，phase 会卡在
+   * `Dragging`——`handleUndo` 的 `phase === 'Dragging'` 门随之挡住取出后的
+   * 撤回，R-06b 第 4 条「可单独撤回」直接失效（M2-5 实测：view 侧取出后
+   * 点工具栏「撤回」无反应，查下来是这里没收尾）。
+   */
   private handleRemoveToTray(itemId: string, events: GameEvent[]): void {
     if (this.isInputFrozen()) return;
-    if (!this.state.placements.has(itemId)) return; // 托盘物品拖到棋盘外 → 无变化、不入栈
+    if (!this.state.placements.has(itemId)) {
+      // 托盘物品拖到棋盘外 → 无变化、不入栈；生命周期照常收尾（同上）
+      this.preview = null;
+      this.dragFrom = null;
+      this.phase = this.state.selectedId ? 'Selected' : 'Idle';
+      return;
+    }
     this.history.push(this.state);
     this.state = removeToTray(this.level, this.state, itemId);
     this.moveCount++;
     events.push({ type: 'item-returned', itemId });
     this.afterCommit(events);
+    // 收尾放在 afterCommit 之后：与 handleDrop 同构，防 afterCommit 把 phase
+    // 推到 WinAnimating 后被无条件改写（取出不会通关，但结构上保持一致）
+    this.preview = null;
+    this.dragFrom = null;
+    if (!this.isInputFrozen()) {
+      this.phase = this.state.selectedId ? 'Selected' : 'Idle';
+    }
   }
 
   private handleUndo(events: GameEvent[]): void {

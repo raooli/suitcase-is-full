@@ -24,6 +24,7 @@ import {
   itemAtCell,
   levelIdsOf,
   parseLevelBundle,
+  rotateBy,
   suggestNextPlacement,
   UI_DESIGN_HEIGHT,
   UI_DESIGN_WIDTH,
@@ -239,8 +240,32 @@ export class GameController extends Component {
     // 预览只从 session 读（M1-5 的 canPlace 挂具已删）：grab/move 的 dispatch
     // 在 onIntent 里同步跑完，session 的 preview 就是最新的
     drag.previewSource = () => this.gameSession?.getPreview() ?? null;
-    drag.onPreview = (preview, overTray) => this.previewLayer?.show(preview, overTray);
-    drag.onPreviewEnd = (invalid) => this.previewLayer?.endPreview(invalid);
+
+    // 取出判定（M2-5，PRD R-06b）：物品中心是否出「棋盘外扩半格」。
+    // 格→像素换算走 BoardView.isTakeout（R-A6 唯一出口），形状按**当前朝向**
+    // 算（旋转改变包围盒，中心随之移动）；`from === 'tray' 也是取出态`的
+    // 另一半由 DragController 的「手指在托盘带内」补上（见 isTakeoutState）
+    drag.outsideBoard = (preview) => {
+      const session = this.gameSession;
+      const board = this.boardView;
+      if (session === null || board === null) return false;
+      const item = findItem(session.level, preview.itemId);
+      if (item === undefined) return false;
+      return board.isTakeout(rotateBy(item.cells, preview.rotation), preview.anchor);
+    };
+
+    drag.onPreview = (preview, takeout) => {
+      this.previewLayer?.show(preview, takeout);
+      // 取出态：高亮托盘目标位（UI Spec 7「取出目标位高亮」）；离开则还原
+      if (takeout && preview !== null) this.trayView?.highlightReturnTarget(preview.itemId);
+      else this.trayView?.clearReturnTarget();
+    };
+    drag.onPreviewEnd = (invalid) => {
+      this.previewLayer?.endPreview(invalid);
+      // 取消 / 取出的收尾都可能不触发重绘（cancel 无状态变化），
+      // 目标位高亮在这里统一清，不依赖 refreshAll
+      this.trayView?.clearReturnTarget();
+    };
 
     // 点击出口：点 vs 拖共用手势、仲裁必须只此一处（DragController 判），
     // 本组件只决定"点到物品"意味着 select 还是 rotate

@@ -17,6 +17,7 @@ import {
   insertByTrayOrder,
   removeToTray,
   rotateInPlace,
+  trayInsertIndex,
 } from '../assets/core/rules/placement';
 
 // ─────────────────────── 测试用关卡 ───────────────────────
@@ -197,6 +198,26 @@ describe('insertByTrayOrder', () => {
     expect(insertByTrayOrder(level, ['A', 'C'], 'B')).toEqual(['A', 'B', 'C']);
     expect(insertByTrayOrder(level, ['B', 'C'], 'A')).toEqual(['A', 'B', 'C']);
     expect(insertByTrayOrder(level, ['A', 'B'], 'C')).toEqual(['A', 'B', 'C']);
+  });
+
+  it('trayInsertIndex 与 insertByTrayOrder 同源（M2-5 取出目标位高亮靠它算落点）', () => {
+    // 同一个下标判据：插入结果里该物品所在位置必须等于 trayInsertIndex
+    for (const tray of [['A', 'C'], ['B', 'C'], ['A', 'B'], [], ['C']]) {
+      for (const itemId of ['A', 'B', 'C']) {
+        const index = trayInsertIndex(level, tray, itemId);
+        expect(insertByTrayOrder(level, tray, itemId)[index]).toBe(itemId);
+      }
+    }
+  });
+
+  it('物品已在托盘里时，下标 = 它当前的位置（高亮"自己的槽"）', () => {
+    expect(trayInsertIndex(level, ['A', 'B', 'C'], 'B')).toBe(1);
+    expect(trayInsertIndex(level, ['A', 'B', 'C'], 'A')).toBe(0);
+    expect(trayInsertIndex(level, ['A', 'B', 'C'], 'C')).toBe(2);
+  });
+
+  it('追加到末尾时下标 = 托盘长度（高亮最后一件之后的落点）', () => {
+    expect(trayInsertIndex(level, ['A', 'B'], 'C')).toBe(2);
   });
 });
 

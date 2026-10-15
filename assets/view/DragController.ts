@@ -31,6 +31,12 @@
  * → 滑托盘（一个意图都不发）；否则维持原来的"起拖 / 点选"。托盘在底部、把物品
  * 拖上棋盘天然是纵向为主，故"滑"与"抓"方向不冲突。
  *
+ * M2-5 起多出第四种**收尾语义**：取出（PRD R-06b）。起拖之后松手发什么意图，
+ * 由「取出态」谓词决定（`isTakeoutState`：手指在托盘带内 **或** 物品中心出
+ * 棋盘外扩半格）——盘上物品发 `removeToTray`（入撤回栈），托盘物品发 `cancel`
+ * （无操作回巢），其余发 `drop`。**预览与松手共用同一个谓词**：玩家看着
+ * 取出态松手就必须取出，否则"预览切换"这条规则形同不存在（UI Spec 6 原话）。
+ *
  * 同理，触摸监听也只挂在本组件的 `gestureRoot` 上（`TraySlot`/`TrayView` 都不挂）：
  * 谁认领触摸，谁就得在松手时还能被手指命中，否则引擎给的是 `TOUCH_CANCEL`
  * （见 `gestureRoot` 的注释）。
@@ -123,10 +129,25 @@ export class DragController extends Component {
   inputFrozen: (() => boolean) | null = null;
 
   /**
-   * 预览显示出口：锚点变化时调，把 `DragPreview` 与「手指是否在托盘带内」
-   * 一起交给 `PreviewLayer`。`overTray === true` 对应**取出态**（ghost 隐藏）。
+   * 取出判定（M2-5，PRD R-06b / TDD 7.3 / O11）：被拖物品的**中心**是否已出
+   * 「棋盘包围盒外扩半格」。由 `GameController` 接 `BoardView.isTakeout`——
+   * 格→像素换算是 BoardView 的独家职责（R-A6），本组件不做格算术。
+   *
+   * 与「手指在托盘带内」一起合成**取出态**（见 `isTakeoutState`）。两者取
+   * 并集而不是只用中心：
+   * - 中心出界是规格原文的判定（「物品中心越过棋盘外边界」）；
+   * - 手指进托盘带是玩家"拖回托盘"的明确意图，且**不受抓取偏移影响**——
+   *   抓小物品边角时中心会滞后于手指约一格，只看中心的话玩家得把物品拖到
+   *   托盘最底部才能取出，那是反直觉的。
    */
-  onPreview: ((preview: DragPreview | null, overTray: boolean) => void) | null = null;
+  outsideBoard: ((preview: DragPreview) => boolean) | null = null;
+
+  /**
+   * 预览显示出口：锚点变化**或手指位置变化**时调（后者也会改变取出态——
+   * 进/出托盘带不改变锚点）。第二个参数 `takeout === true` = **取出态**
+   * （UI Spec 6：物品半透明 + 托盘目标位高亮，禁止红色非法）。
+   */
+  onPreview: ((preview: DragPreview | null, takeout: boolean) => void) | null = null;
 
   /**
    * 松手收尾出口。`invalid === true` = 非法松手（放不下），`PreviewLayer` 据此
@@ -298,25 +319,32 @@ export class DragController extends Component {
     }
 
     const ui = event.getUILocation();
-    let overTray = false;
+    // 取出态（M2-5）：松手位置 + 当前预览一起判。预览与松手共用同一谓词，
+    // 保证"预览显示的态就是松手的结果"（UI Spec 6）
+    const takeout =
+      this.dragging &&
+      this.pending !== null &&
+      this.isTakeoutState(this.previewSource?.() ?? null, ui.x, ui.y);
+
     if (this.dragging && this.pending !== null) {
-      // 松手位置决定语义：拖回托盘 → 取出（原本在盘上的）/ 放弃（原本就在托盘）
-      overTray = this.overTray(ui.x, ui.y);
-      if (overTray) {
+      if (takeout) {
+        // 拖出棋盘：盘上物品 → 取出（PRD R-06b，入撤回栈、保留朝向）；
+        // 托盘物品 → 无操作回巢（PRD 4.4 表：不产生状态变化、不入栈、无动画）
         this.emit(
           this.pending.from === 'board'
             ? { type: 'removeToTray', itemId: this.pending.itemId }
             : { type: 'cancel' },
         );
       } else {
+        // 盘内（含外扩半格缓冲带）：合法 → 落位；非法 → core 拒收并回弹
         this.emit({ type: 'drop' });
       }
     } else if (!this.consumedByDrag) {
       // 没过阈值 → 这是一次点击，不是拖拽
       this.emitTap(ui.x, ui.y);
     }
-    // 预览收尾：非法松手（放不下）才抖一下；合法 / 取出 / 取消 / 纯点击都直接清
-    const invalid = !overTray && this.lastPreview !== null && !this.lastPreview.check.ok;
+    // 预览收尾：非法松手（盘内且放不下）才抖一下；取出 / 取消 / 合法 / 纯点击都直接清
+    const invalid = !takeout && this.lastPreview !== null && !this.lastPreview.check.ok;
     this.onPreviewEnd?.(invalid);
     this.reset();
   }
@@ -491,7 +519,13 @@ export class DragController extends Component {
     if (pending === null || this.lastAnchor === null) return;
 
     const anchor = this.anchorAt(uiX, uiY, pending.offset);
-    if (sameRC(anchor, this.lastAnchor)) return;
+    if (sameRC(anchor, this.lastAnchor)) {
+      // 锚点没变**也要刷预览**：取出态还看「手指是否进了托盘带」，那与锚点无关
+      // （拖着小物品往下走，锚点可以一格不变而手指已滑进托盘）。不刷就会出
+      // 「预览还是绿色、松手却取出」的预期违背——UI Spec 6 点名要避免的
+      this.emitPreview(uiX, uiY);
+      return;
+    }
 
     this.lastAnchor = anchor;
     this.emit({ type: 'move', anchor });
@@ -526,8 +560,8 @@ export class DragController extends Component {
   /**
    * 喂预览给 `PreviewLayer`：从 `previewSource` 读当前预览（M1-6 起是
    * `session.getPreview()`——grab/move 的 dispatch 已在 `emit` 里同步完成），
-   * 连同「手指是否在托盘带内」一起发出。grab/move 各调一次，锚点没变时不调
-   * （`emitMoveIfChanged` 已节流）。
+   * 连同「是否取出态」一起发出。grab / 每次 move 各调一次（锚点没变的 move
+   * 也调——手指进出托盘带不改变锚点，但会改变取出态）。
    */
   private emitPreview(uiX: number, uiY: number): void {
     const pending = this.pending;
@@ -535,7 +569,23 @@ export class DragController extends Component {
     if (pending === null || anchor === null) return;
     const preview = this.previewSource?.() ?? null;
     this.lastPreview = preview;
-    this.onPreview?.(preview, this.overTray(uiX, uiY));
+    this.onPreview?.(preview, this.isTakeoutState(preview, uiX, uiY));
+  }
+
+  /**
+   * **取出态**谓词（M2-5）：手指在托盘带内 **或** 物品中心出棋盘外扩半格。
+   *
+   * 预览（`emitPreview`）与松手（`onTouchEnd`）共用这一个谓词——两处判据
+   * 一旦分叉，就会出现"预览显示绿色能放、松手却取出"或反过来，玩家对规则
+   * 的信任一次就没了（UI Spec 6：否则这条规则形同不存在）。
+   *
+   * `preview === null`（没抓到东西）时只有手指位置还能判——但那种情况下
+   * 调用方本就不在拖拽中，谓词结果不影响任何意图。
+   */
+  private isTakeoutState(preview: DragPreview | null, uiX: number, uiY: number): boolean {
+    if (this.overTray(uiX, uiY)) return true;
+    if (preview === null) return false;
+    return this.outsideBoard?.(preview) === true;
   }
 
   private reset(): void {
