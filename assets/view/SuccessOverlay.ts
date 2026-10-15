@@ -20,9 +20,14 @@
  *
  * - **不持有玩法状态**：只消费 `level-cleared` 事件里的一次性数据
  *   （`levelId / elapsedMs / moves`），不读 `GameSession`；
- * - **输入冻结不是本组件职责**：遮罩只是视觉兜底，真正的冻结在
+ * - **输入隔离是双重兜底**：整屏遮罩在 `onLoad` 显式 `propagationStopped`
+ *   吸收所有触摸（Cocos 把触摸派发给**所有**命中节点，"整屏节点挡住触摸"
+ *   必须显式停，光有 UITransform 尺寸没用——与 ConfirmDialog 同构）；遮罩管
+ *   "背后的工具栏/棋盘/确认框收到手势"，真正的状态冻结仍在
  *   `session.isInputFrozen()`（WinAnimating/Completed 拒收一切 intent）+
- *   `DragController.inputFrozen` 双保险（UI Spec 5.3「禁止背景误触」）；
+ *   `DragController.inputFrozen` 双保险。两层各管一件事：遮罩管"看不见的输入"，
+ *   状态门管"改不了的状态"（P1 修复：此前遮罩只画不挡，WinAnimating 期重置能
+ *   穿透它打开确认框）；
  *
  * ## 两个入口的主次（M2-1，UI Spec 5.3）
  *
@@ -36,7 +41,7 @@
  * 本组件不数数组、不猜总数。
  */
 
-import { Color, Component, Graphics, Label, Node, Tween, UIOpacity, UITransform, Vec3, tween, _decorator } from 'cc';
+import { Color, Component, EventTouch, Graphics, Label, Node, Tween, UIOpacity, UITransform, Vec3, tween, _decorator } from 'cc';
 import { DEBUG } from 'cc/env';
 
 import {
@@ -134,6 +139,14 @@ export class SuccessOverlay extends Component {
     transform.setAnchorPoint(0.5, 0.5);
     // 初始不可见：未通关时浮层完全不参与渲染与命中
     this.node.active = false;
+
+    // 输入隔离（P1 修复）：整屏遮罩吸收所有触摸 `propagationStopped`，挡住背后的
+    // 工具栏 / 棋盘 / 确认框。Cocos 把触摸派发给**所有**命中节点，"整屏节点挡住
+    // 触摸"必须显式停（光有 UITransform 尺寸没用）。按钮是子节点、先被派发不受
+    // 影响（见 buildOnce 的 Next/Replay 按钮 TOUCH_END 回调）。节点 active=false
+    // 时不收事件，show()/hide() 显隐即自动启停本隔离
+    this.node.on(Node.EventType.TOUCH_START, (e: EventTouch) => (e.propagationStopped = true), this);
+    this.node.on(Node.EventType.TOUCH_END, (e: EventTouch) => (e.propagationStopped = true), this);
   }
 
   /**
