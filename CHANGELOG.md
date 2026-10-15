@@ -23,7 +23,18 @@
 
 ## 提交记录（倒序）
 
-### 未提交 · feat: M1-9 G1-1 手指遮挡补偿（拖起上浮 + 放大 + 浅阴影）+ G1 报告改判 Go
+### `beb68b1` · feat: M2-1 关卡加载（10 关可切换 + 「下一关」主按钮）
+
+| 项 | 内容 |
+| --- | --- |
+| 日期 | 2026-10-15 00:42 |
+| 类型 | 新功能（M2 首个任务：从"只有 L1"到"10 关可切换"） |
+| 文件 | `assets/core/model/level.ts`、`assets/core/index.ts`、`assets/core/config.ts`、`assets/view/GameController.ts`、`assets/view/SuccessOverlay.ts`、`test/levels.spec.ts`（新，65 行 / 15 条）（6 文件） |
+| 要点 | ① **core 新增 `levelIdsOf(raw)`**：包里有哪些关卡（`levelId` 升序、去重、跳过形状不像关卡的条目）。"有没有下一关"是**数据结构判断**，属于 core（执行纪律 #3）——view 不该自己数数组长度 ② **`GameController.startLevel(levelId)`：首启 / 再来一次 / 下一关三条路径共用一份实现**。三条路径要做的事完全一样，拆三份必然分叉——M1-7 的 `replayLevel` 就是先例，本次删掉它并入 `startLevel`。其中 **`wireDrag` 必须重挂**：`boardItemAt` 的闭包捕获了 `level`，换关不重挂会拿上一关的物品表查命中（症状是"点得到却抓不起来"）。顺带删掉 `renderTray`（与 `refreshAll` 里的托盘渲染完全重复的死代码）。`hasNextLevel()` 问 `levelIdsOf` 的最大值，不猜总数 ③ **`SuccessOverlay` 按 UI Spec 5.3 把主次调回**：主按钮「**下一关**」（粉实心 `accent.pink`）+ 次入口「**再来一次**」（白底 + 浅描边 + 次要色文字，热区仍 ≥44）。M1 只建「再来一次」并做成主按钮，是因为那时没有关卡推进机制、建「下一关」就是 UI Spec 禁止的空按钮；M2-1 接上关卡加载后按规格调回。**最后一关不显示「下一关」且不留空位**（次入口居中到主按钮位置）。面板 300 → 340 才装得下两个入口（340 = 文字区 + 48 主按钮 + 12 间距 + 44 次入口 + 30 留白） ④ **`show(event, hasNextLevel)`：按钮显隐与位置每次 `show()` 都重排**（`applyButtons`）——与 `applyEvent` 同理，懒加载的 `built` 提前 return 会静默吞掉差异，症状是"第 10 关还显示着下一关"（M1-7「复玩战绩不刷新」是同一个病） ⑤ 按钮**底与文字分层建**（文字挂子节点）：一个节点只允许一个 renderable 组件，M1-7 给面板加第二个 `Graphics` 画星光被引擎静默拒绝是同一个坑；两个按钮的构建抽成 `addButton` 一处 ⑥ **关卡加载方式保留 M1-0 的场景直挂 `JsonAsset`**，未改 `resources.load`：同步、构建期即可校验、10 关 JSON 仅几 KB。规格原文写的是 `resources.load`，这里按"不做无谓的异步化"取舍；装配逻辑（`parseLevelBundle`）与加载方式解耦，真要换随时可换 |
+| 验收 | **单测 15 条**（新 `test/levels.spec.ts`）：`levelIdsOf` 返回 1..10、非对象/缺 levels 降级为空数组、跳过缺 `levelId` 的条目；**10 关逐关 `parseLevelBundle` 取出且 `levelId` 对得上**（运行时载入口径，用**生产态** `assets/data/levels.json` 而非 GDD 源——运行时读的就是它）；越界取关抛 `LevelDataError`（否则「下一关」会把玩家送进不存在的关卡）。**可解性**由 `npm run verify:levels` 逐关跑 solver 保证（已编入 `check`）。→ `npm run check` **227/227**；`npm run preview:game` 无 Console 错误。**无头预览实证切关链路**：L1 四拖通关 → 点「下一关」（页面 195,482）→ `载入 L2《再装一件》 4×3 / 4 件物品 → 下一关 L3` → `放入 L02_A → (0,0)`；**最后一关**：临时把场景 `levelId` 置 10 重建 → `载入 L10《旅行收纳大师》 6×6 / 9 件物品 → 下一关 （已是最后一关）`（验完已回退场景）。**布局量化**：面板实测 278×338（= 280×340 减描边内缩），次入口 (195,540) 点击生效（`[SuccessOverlay] 点击「再来一次」`） |
+| 待定项 | 解锁门禁（未解锁关卡不可进）归 M2-7 的关卡选择页；进度持久化归 M2-8 的 `StorageAdapter`；完整庆祝动效（回弹→合盖→星光）归 M2-10 |
+
+### `8bc7940` · feat: M1-9 G1-1 手指遮挡补偿（拖起上浮 + 放大 + 浅阴影）+ G1 报告改判 Go
 
 | 项 | 内容 |
 | --- | --- |

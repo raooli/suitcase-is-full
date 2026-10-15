@@ -31,6 +31,8 @@
 
 - 构建/预览坑：`env -u ELECTRON_RUN_AS_NODE`、`ELECTRON_DISABLE_SANDBOX=1`；编辑器退出码恒 36（关闭期 SIGTERM），以日志 `build Task (web-mobile) Finished in` 判成功。
 - `node tools/preview-check.mjs --scene Game [--shot out.png] [--grep X]`；复现现有构建可省 `--scene`。
+- **不带 `--scene` 会复用上一次构建**（M2-1 实测：改了场景重建后忘带 `--scene`，日志还是上一关的数据，白跑一轮）。**重建场景后必须带 `--scene Game`**。
+- **本环境 `grep` 的 `\|`（BRE 交替）静默失效**：`grep -n "a\|b" f` 会返回空 + exit 1，看起来像"文件里没有这段代码"（M2-1 两次误判）。**一律用 `grep -E "a|b"` 或 Grep 工具**。
 - **Chrome 必须 `--no-sandbox --no-zygote`**：本环境外层（WorkBuddy）沙箱会拦截 Chrome 启动期系统调用，使其 **SIGTRAP 崩溃**、调试端口起了即死、`Runtime.enable` 超时（实测）。关掉 Chrome 内部沙箱后正常。注意 `dangerouslyDisableSandbox` 在本环境被拒、且一次性 escalation 过期后也会失效，**别依赖它兜预览**；`--no-sandbox` 才是稳的。`HOME` 重定向对 RLZ 拦截无效（macOS Chrome 硬编码真实 Application Support）。
 - **像素级核对**（比目测可靠）：写个纯 stdlib PNG 解码 + 扫描线找色块中心，比对格中心（例：色块中心 149.5/359.5/569.5 ↔ 格中心 150/360/570）。
 - **负向验证**：改阈值（如 `CELL_PX_MIN`）故意触发告警分支，确认它真的会报，然后回退。
@@ -61,5 +63,9 @@
 - **旋转入口 = 「再次点击已选中的物品」**（M1-8 定，`c52bbd2`）：M1 无工具栏（旋转按钮是 M2-2），按 M1.A 表「rotate = 旋转按钮或双击」取双击语义，但**用"已选中"判定而非计时器**（计时器有时间阈值竞态）。`DragController.emitTap` 复用 `pickAt`（托盘优先 + 棋盘已放物品），语义由 `GameController.handleTap` 判。**L1/L2 物品 `rotatable` 全 false**（教学关设计），旋转只能在 L3+ 端到端验；要验就把 `assets/data/levels.json` 的 L1 临时改成 true（形状/棋盘不变、已验证坐标全复用），验完 `git checkout` 回退。
 - **抖动的唯一实现 = `view/shake.ts`**（M1-8 抽出，`stopShake` + `shakeX`）：调用方必须存**基准位**并传进来（不能取当前 position——被中断的抖动会把偏移继承下去）；`PreviewLayer` / `ItemLayer` 都用它。`rotate-blocked` 分支**不要 refresh**（状态未变，重绘会把刚要抖的节点重建掉）。
 - **G1 出口检查点结论：Go**（报告 `docs/08` **V1.1**；V1.0 曾判 No-Go，M1-9 修复后改判，判据口径未放宽）：G1-1 手指遮挡 ✅（M1-9 实现）；G1-2 吸附 ✅；G1-3 旋转手感 ✅；G1-4 真机**顺延 M3-1 + 登记为已知风险**（320px 折算 93.5px ✅ 过 44 下限，微信开发者工具本环境没有；三个手感常量已集中，真机只改数值）；G1-5 撤销**不给临时手势**、整体归 M2-2。
+- **M2-1 起关卡载入的唯一路径 = `GameController.startLevel(levelId)`**（首启 / 再来一次 / 下一关三条路径共用；不要再写第二份装配——M1-7 的 `replayLevel` 就是第二份，已删）。**换关必须重挂 `wireDrag`**：`boardItemAt` 闭包捕获 `level`，不重挂＝拿旧关物品表查命中（症状：点得到却抓不起来）。
+- **「包里有哪些关」问 core 的 `levelIdsOf(raw)`**（升序去重），view 不数数组长度（执行纪律 #3）。`hasNextLevel()` = `levelId < max(ids)`。
+- **通关浮层两个入口（UI Spec 5.3，M2-1 调回主次）**：主按钮「**下一关**」粉实心（页面 **(195,482)**）、次入口「**再来一次**」白底描边（页面 **(195,540)**）；面板 **280×340**。**最后一关不显示「下一关」**（次入口居中到主位）。按钮显隐/位置由 `applyButtons(hasNext)` **每次 `show()` 重排**——懒加载 `built` 提前 return 吞掉差异是 M1-7 踩过的同一个病。
+- **关卡加载方式：场景直挂 `JsonAsset`（M1-0 建），不改成 `resources.load`**——同步、构建期可校验、JSON 仅几 KB；装配逻辑（`parseLevelBundle`）与加载方式已解耦，要换随时可换。M2 尚未做的：解锁门禁（M2-7）、进度持久化（M2-8）、完整庆祝动效（M2-10）。
 - **手指遮挡补偿 = 只改画法，三条硬约束**（M1-9 定，`UI_DRAG_LIFT_PX=24` / `UI_DRAG_LIFT_SCALE=1.05` / `UI_DRAG_SHADOW_OFFSET_PX=3` / `ALPHA=0.18`，全在 `config.ts`）：① `preview.anchor` 一个字不动（落点仍按手指位置 `snapToGrid` 算，否则 G1-2 立刻破功）② **不挪节点**——上浮画在 `Graphics` 的矩形上，`nodePos` 全程不变（M1-7 的 tween 不归位教训）③ 缩放锚点取**整体包围盒中心**（`core/geometry/lift.ts` 的 `centerOf`；取单格中心会让 1×3 物品散成三块，而 1.05 这种小倍率下**肉眼看不见**，只有算才知道）。非法态（红虚线）与合法态同步抬起。
 - **撤销入口的裁定：M1 不给临时手势，只等 M2-2 工具栏**（M1-9 定案，**别再倒回去自创**）。与 M1-8 旋转临时入口**刻意不对称**，理由三条：① 旋转有规格明文授权（UI Spec 5.2「可在已选中时点击按钮」）+ 作用于被选中对象（点它自己）；撤销的规格位置是**底部工具栏**（UI Spec 5.2），没有对应手势 ② 旋转四次回初态、非破坏性；撤销**破坏性且无重做**（core `History` 只有 `canUndo`，没有 redo），误触无救济 ③ 空白区手势已被交互表占用（「点击空白 → 取消高亮回 Idle」），双击/长按撤销会撞车成"想取消高亮却撤了一步"；且 M2-2 必然替换掉临时手势（第二套肌肉记忆）。**撤销的 view 侧残影风险低**：`undo-applied` 走的是与 `placement-committed`/`item-returned` 完全相同的 `refreshAll → ItemLayer 全量重绘` 路径。
