@@ -23,6 +23,16 @@
 
 ## 提交记录（倒序）
 
+### `d95a2f7` · feat: M2-11 托盘横向滚动（UI Spec 5.2，L7+ 溢出件可达）
+
+| 项 | 内容 |
+| --- | --- |
+| 日期 | 2026-10-15 20:13 |
+| 文件 | `assets/core/geometry/trayScroll.ts`(新+.meta)、`assets/core/index.ts`、`assets/view/TrayView.ts`、`assets/view/TraySlot.ts`、`assets/view/DragController.ts`、`test/trayScroll.spec.ts`(新)（7 文件，+396/−37） |
+| 要点 | ① **缺口**：L7–L10 有 7–9 件、`slotSizeFor` 夹到 44px 后一行只放得下 6–7 个，溢出件此前 `markOverflow()` 永久隐藏 → **不可达**；UI Spec 5.2「物品数量多时横向滚动」原本不在任何 M2 任务里（`bc62279` 补进计划表为 M2-11，本条落地）② **TrayView**：全部槽位照建，改挂 `TrayContent` 子容器，靠 `scrollOffset` 平移露出不同区段；只有与可见窗口**相交**的槽位才 `active`（`TraySlot.setInWindow`）。本节点保持固定尺寸=可见窗口，`containsPoint` / `hitTest` 口径与滚动前一致；`render` 归零偏移；暴露 `canScroll` / `scrollOffset` / `setScrollOffset`；`slotCenterX` 委托 core ③ **TraySlot**：`overflow`（一次性）拆成 `inWindow`（滚动）+ `dragHidden`（拖拽排除 M1-6）两个独立显隐理由，`updateActive = inWindow && !dragHidden`；删 `markOverflow` ④ **DragController**：过阈值后按**主轴方向**仲裁"滑托盘 vs 抓物品"——托盘带内起手（`overTray(start)`）+ 水平为主（`|dx|>|dy|`）+ `canScroll()` 三条件才滚（不发任何意图、松手不当点击）；否则维持原起拖 / 点选。托盘空白处也能滑；`onTouchEnd` / `onTouchCancel` 滚动分支直接收尾；L1–L6 放得下不可滚，横向拖动行为**零变化** ⑤ **core**：新 `geometry/trayScroll.ts` 纯函数（`trayContentWidth` / `trayMaxScroll` / `trayClampScroll` / `traySlotCenterX` / `traySlotInWindow`），从 `index.ts` 导出——与 `lift.ts` 同思路，把"夹取 / 可见性"变成可断言常量 |
+| 验收 | **`npm run check` 246/246**（+12 `test/trayScroll.spec.ts`）；**无头预览**：L1 四拖通关无回归（`可滚 0px`、全程无 `滑托盘`）；**L7**（临时置场景 `levelId=7` 重建，验完回退）`托盘 8 件 可滚 66px 窗内 7` → 横向拖动 `touch(100,186)→命中 L07_B` 触发 `滑托盘开始`（不抓物品）→ offset≈60 → `tap(350,186)→命中 L07_H`（原本窗外不可达的末件变为可命中）→ 前后截图可见托盘左平移、L07_A 滑出左沿、L07_H 滑入右沿，无重叠 / 空隙，**零 Console 错误** |
+| 关联 | 落地 `bc62279` 补进计划的 M2-11（P2 排期缺口）；`markOverflow` 移除后 `TrayView.visibleCount` 静态方法成死代码一并删除 |
+
 ### `a8b6548` · refactor: M2-4 deadend 判据复用 suggestNextPlacement（消除与 canHint 的同谓词两实现）
 
 | 项 | 内容 |
