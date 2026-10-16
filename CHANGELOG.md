@@ -23,6 +23,16 @@
 
 ## 提交记录（倒序）
 
+### `c1f26d5` · feat: M2-7 首页选关（Home.scene + 关卡选择 + 进度，未解锁关卡不可进）
+
+| 项 | 内容 |
+| --- | --- |
+| 日期 | 2026-10-16 22:28 |
+| 文件 | `assets/core/progress.ts`（+`.meta`）、`assets/core/index.ts`、`assets/view/storage.ts`（+`.meta`）、`assets/view/route.ts`（+`.meta`）、`assets/view/BootController.ts`（+`.meta`）、`assets/view/HomeController.ts`（+`.meta`）、`assets/view/GameController.ts`、`assets/scenes/Boot.scene`、`assets/scenes/Home.scene`、`tools/scene-build.mjs`、`tools/preview-check.mjs`、`test/progress.spec.ts`（17 文件，+1107/−14，含 4 个新 `.ts` + `.meta`） |
+| 要点 | ① **`core/progress.ts`（新）**：进度模型全走纯函数——`cleared`（已通关关卡号集合）为唯一真相，**最高解锁 = `cleared` 上界 + 1 与总关数取小**（不另存「最高解锁」字段，避免两份真相不一致）；`continueLevelId`（最新待玩关）= 最低未通关与最高解锁取小（AC：主 CTA 进最新待玩关、全通后落在末关）；`markCleared` 不可变更新 + 去重；`defaultProgress` = 仅 L1 解锁 ② **`view/storage.ts`（新）**：`sys.localStorage` 读写（Web 端即 `window.localStorage`），key `suitcase.progress.v1`；**读写双向容错**——坏 JSON / 缺字段 / 越界关卡号一律回落默认，存档损坏绝不卡死启动 ③ **`view/route.ts`（新）**：场景间传「该进哪一关」用**模块级单例**（`setPendingLevel`/`takePendingLevel`，取后即清）——`director.loadScene` 换场景时模块单例天然存活，避开「场景序列化属性要手改 JSON」的易碎路径 ④ **`view/BootController.ts`（新）**：启动场景只做一件事——`loadProgress()` → `director.loadScene('Home')` ⑤ **`view/HomeController.ts`（新）**：程序化建首页（同 `ToolbarView` 范式 `Node`+`Graphics`+`Label`，不手改场景）——标题 / 主 CTA「开始收纳」/ 10 张选关卡；卡三态 **已通关（✓ + 绿框）/ 继续（当前可玩，粉底 + 右上角实心标记——UI Spec 5.4「不只靠颜色区分」）/ 未解锁（灰 + 右上角锁角标）**；门禁在卡片 `TOUCH_END` 回调判 `isUnlocked`：**未解锁只 `shakeX` 抖动、不切场景**，已解锁才 `setPendingLevel(id)` + `director.loadScene('Game')`；全部卡片与 CTA 都 `propagationStopped=true`（M2-2 教训：Cocos 触摸派发给**所有**命中节点，"盖住"必须显式停冒泡） ⑥ **`view/GameController.ts` 接线**：`onLoad` **优先消费 `takePendingLevel()`**（有值则覆盖场景属性 `levelId`，无值仍用属性——直连 Game 调试不受影响）；`afterDispatch` 的 `level-cleared` 里 `markCleared(loadProgress(), levelId)` + `saveProgress` 落盘（`DEBUG` 打「进度已保存：…」）；左上角补「返回 Home」按钮（代码注入 `SafeAreaRoot`，与工具栏同范式） ⑦ **`tools/scene-build.mjs`**：`SCENES` 声明里给 Boot/Home 场景挂 `BootController`/`HomeController`（走已有 `script()`，`.meta` 的 uuid → `__type__` 压缩），重生成 `Boot.scene`/`Home.scene`——**继续不手改场景 JSON** ⑧ **`tools/preview-check.mjs`**：加 `--reload` 步骤（`Page.reload` 同 profile → localStorage 保留，重注入 `touch-action` 与隐藏 FPS 面板），用于验「落盘 → 重启恢复」链路 |
+| 验收 | **`npm run check` 301/301**（+20：`progress.spec` 解锁门禁 / 最高解锁推导 / continue 封顶 / 不可变更新 / 去重 / 坏存档退化）；**无头预览零 Console 错误**（194 行日志），一条会话内跑完整链路——**首启** Boot→Home（`[BootController] 载入存档：最高解锁 L1`、截图：仅 L1 粉底「继续」、L2–L10 锁角标）→ **点锁卡 L2 不切场景**（截图仍在首页，锁卡只抖动）→ **点 L1** → `[GameController] 载入 L1《…》 3×3 / 4 件` → **4 次拖拽通关**（`放入 L01_A→(1,1) B→(1,0) C→(2,1) D→(0,0)` → `🎉 通关！L1 4 步 6.2s`）→ `[GameController] 进度已保存：L1 通关 → 最高解锁 L2 / 已通关 1 关` → **`--reload`** → `[BootController] 载入存档：最高解锁 L2 / 已通关 1 关 → 进入 Home`（截图：L1 **已通关✓**、L2 **继续**解锁、L3–L10 仍锁）→ **点 L2** → `[HomeController] 进入 L2` → `[GameController] 载入 L2《再装一件》 4×3 / 4 件`（截图确认 4×3 棋盘 + L2 托盘）——**AC13（重启后已完成关卡与最高解锁仍在）+ 未解锁关卡不可进 + 主 CTA/卡片进入对应关**全部实证 |
+| 关联 | 落地 **PRD F01 / AC13**、**UI Spec 5.1 首页 / 5.4 关卡选择**、**实施计划 M2-7**；场景流 **Boot→Home→Game** 三段成型（`nav` 走 `director.loadScene` + `route.ts` 单例）；**M2-8 存档**的适配器雏形已由 `view/storage.ts` 铺好（`GuideMemory` 等其余状态可并入同一命名空间）；无 core 契约变更，`cellSize/cellPx` 算术仍仅存在于 `BoardView.ts` + `config.ts` |
+
 ### `aa3004b` · fix: M2-6 复审三处 [低]（引导收起漏点 / L3 文案孤字 / M2-4 遥测残留）
 
 | 项 | 内容 |

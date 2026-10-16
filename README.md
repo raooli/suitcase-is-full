@@ -91,6 +91,7 @@ assets/core/              ★ 纯 TS 游戏逻辑，零 cc 依赖，100% 可单�
   index.ts                唯一对外出口（view/tools 只许从这里导）
   config.ts               全部可调参数（布局 / 阈值 / 色板 / 明度倍率）
   palette.ts              明度阶梯着色（TDD 17.4）
+  progress.ts             关卡进度模型（已通关集合 → 最高解锁 / 最新待玩关，纯函数）
   geometry/
     shape.ts              归一化、旋转、包围盒、连通性
     coords.ts             网格坐标 ↔ 线性索引
@@ -106,7 +107,11 @@ assets/core/              ★ 纯 TS 游戏逻辑，零 cc 依赖，100% 可单�
     events.ts             core → view 事件类型
   solver/                 回溯求解器（bigint bitset + MRV）、面积守恒快检
 assets/view/              ★ 唯一允许 import 'cc' 的层
+  BootController.ts       启动场景：读存档 → loadScene('Home')
+  HomeController.ts       首页：选关网格三态 + 解锁门禁（未解锁不可进）
   GameController.ts       接线中枢：intent → dispatch → 刷新
+  storage.ts              存档读写（sys.localStorage，坏数据容错退化）
+  route.ts                场景间传参单例（待进关卡号，换场景存活）
   DragController.ts       触摸生命周期 → Intent（挂在整屏 SafeAreaRoot）
   PreviewLayer.ts         合法/非法/取出三态 ghost
   BoardView.ts            ★ 全项目唯一 RC↔像素转换点（R-A6）
@@ -198,5 +203,7 @@ npm run verify:levels     # 输出 assets/data/levels.json
 - **旋转只加 view 层临时入口（选中后再次点击），撤销不给。** 撤销是破坏性操作且 MVP 无 redo，规格位置在底部工具栏（M2-2 已落地）；双击/长按空白会与「取消高亮」抢同一次触摸。
 - **蒙特卡洛脚本里 `rng` 只能建一次。** 每次试验内部重建同种子的发生器，会让 N 次试验退化成同一次重复 N 遍，扫出来的 0%/100% 全是假数据。
 - **`.scene` 的真相源是 [`tools/scene-build.mjs`](./tools/scene-build.mjs)**，不是 GUI 编辑器。一旦在 GUI 里手改过场景就别再跑它（会覆盖）；改动脚本 `.meta` 后必须重跑生成脚本再开编辑器，否则编辑器按 `__type__` 找不到类 → `Script attached to '%s' is missing or invalid.`（4600）。
+- **无头构建偶发吃到旧场景缓存。** 改场景（如换 `levelId` 验某关）后重跑，构建有一次仍按旧内容跑出上一关、截图与旧关一模一样。**判据**：必须核 Console 里的 `载入 L<n>` 行（或重跑一次）确认改动生效，别只看截图下结论。
+- **多格物品从托盘起手时抓取偏移非零。** 按缩略图中心按下 → `grabOffset ≠ 0` → 松手点必须按该偏移修正；按「格中心」直接落点会被 `canPlace` 拒（表现是「拖了没反应」，不是引擎回归）。
 
 > 更完整的踩坑记录与取证手法见项目记忆 [`.workbuddy/memory/MEMORY.md`](./.workbuddy/memory/MEMORY.md)。
