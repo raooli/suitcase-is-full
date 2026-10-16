@@ -8,10 +8,13 @@
  *
  * ## 卡片三态（UI Spec 5.4）
  *
- * - **已完成（cleared）**：绿描边 + 对勾，可重玩；
+ * 三态的状态徽标统一放在**右上角**（已完成 ✓ / 当前 ▲ / 未解锁 🔒），避开圆角与
+ * 中央大号关卡数字——中央只放数字、底部放状态小字。
+ *
+ * - **已完成（cleared）**：绿描边 + 右上角对勾徽标，可重玩；
  * - **当前可玩（current = 最高已解锁关）**：粉填充 + 粗粉描边 + 右上角三角标记 +
  *   「继续」字样——**不只靠颜色**区分（规格硬要求「不能只用颜色」）；
- * - **未解锁（locked）**：整卡降透明度 + 「未解锁」+ 锁形，点击只抖一下、不进关。
+ * - **未解锁（locked）**：整卡降透明度 + 「未解锁」+ 右上角锁形，点击只抖一下、不进关。
  *
  * 「当前可玩」= `continueLevelId(progress)`（= 最高已解锁关），主 CTA 点它进；
  * 卡片网格允许直接挑任意已解锁关重玩。
@@ -216,6 +219,10 @@ export class HomeController extends Component {
     const halfW = CARD_WIDTH / 2;
     const halfH = CARD_HEIGHT / 2;
     const box = () => g.roundRect(-halfW, -halfH, CARD_WIDTH, CARD_HEIGHT, CARD_RADIUS);
+    // 右上角状态徽标锚点（三态同位：已完成✓ / 当前▲ / 未解锁🔒）。
+    // 取圆角弧心附近、略向内收，保证徽标整体落在圆角矩形内、且不压中央大号关卡数字。
+    const badgeX = halfW - 15;
+    const badgeY = halfH - 15;
 
     g.clear();
     // 底
@@ -232,19 +239,20 @@ export class HomeController extends Component {
       g.lineWidth = 3;
       box();
       g.stroke();
-      this.drawCheck(g, 0, 6);
+      this.drawCheck(g, badgeX, badgeY);
     } else if (state === 'current') {
       g.strokeColor = Color.fromHEX(new Color(), UI_PALETTE.accentPink);
       g.lineWidth = 4;
       box();
       g.stroke();
+      this.drawSelectedMark(g, badgeX, badgeY);
     } else if (state === 'locked') {
       g.strokeColor = Color.fromHEX(new Color(), UI_PALETTE.border);
       g.lineWidth = 2;
       box();
       g.stroke();
       // 锁形作为右上角小徽标，避免和大号关卡数字重叠
-      this.drawLock(g, halfW - 14, halfH - 14, 6);
+      this.drawLock(g, badgeX, badgeY, 6);
     } else {
       g.strokeColor = Color.fromHEX(new Color(), UI_PALETTE.border);
       g.lineWidth = 2;
@@ -253,14 +261,36 @@ export class HomeController extends Component {
     }
   }
 
-  /** 对勾（已完成） */
+  /**
+   * 对勾（已完成）徽标：右上角小勾。
+   *
+   * 早期画在卡中心 `(0, 6)`，与大号关卡数字（`yOffset=6`、`fontSize=40`）同中心 →
+   * √ 压在数字上。现移到右上角徽标位（与锁角标 / 三角标记同位），并缩小到徽标尺寸。
+   */
   private drawCheck(g: Graphics, cx: number, cy: number): void {
-    g.lineWidth = 4;
+    g.lineWidth = 3.5;
     g.strokeColor = Color.fromHEX(new Color(), UI_PALETTE.valid);
-    g.moveTo(cx - 10, cy);
-    g.lineTo(cx - 3, cy + 8);
-    g.lineTo(cx + 11, cy - 9);
+    g.moveTo(cx - 7, cy);
+    g.lineTo(cx - 2, cy + 5);
+    g.lineTo(cx + 7, cy - 6);
     g.stroke();
+  }
+
+  /**
+   * 选中标记（当前可玩）：右上角实心三角（▲）。
+   *
+   * Cocos 3.8.8 的 `Graphics` **没有 `fillTriangle`**（`cc.d.ts` 查无此方法，M2-7 曾
+   * 因此 typecheck 报错），故用路径 `moveTo → lineTo → lineTo → close → fill` 画。
+   * 与锁卡锁角标同位，作为 UI Spec 5.4「当前关卡选中态不能只用颜色区分」的图形佐证
+   * （「继续」文案之外的第二重非颜色区分）。
+   */
+  private drawSelectedMark(g: Graphics, cx: number, cy: number): void {
+    g.fillColor = Color.fromHEX(new Color(), UI_PALETTE.accentPink);
+    g.moveTo(cx, cy + 7); // 上顶点
+    g.lineTo(cx - 6.5, cy - 4); // 左下
+    g.lineTo(cx + 6.5, cy - 4); // 右下
+    g.close();
+    g.fill();
   }
 
   /** 锁形（未解锁）徽标；`s` = 半宽，锁体高约 1.6s */

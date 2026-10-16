@@ -574,6 +574,23 @@ export class GameController extends Component {
   }
 
   /**
+   * 「返回首页」按钮的可用闸门（M2-7 复审修正）。
+   *
+   * 只挡 `WinAnimating`（通关入场动画中）与 `dialogOpen`（确认框），**放行 `Completed`**。
+   * 与 SuccessOverlay「动画播完、按钮才可用」同口径：浮层 settled、其自身按钮可用时，
+   * 返回按钮也该可用。否则 `Completed` 是终态（不点「下一关 / 再来一次」不离开），
+   * 返回键会被浮层一直压住；L10（`hasNextLevel()=false`、不显「下一关」）更只剩「再来
+   * 一次」，回首页要绕「重开 L10 → 再返回」两步。
+   *
+   * 注意与 `isFrozen()` **故意不同**：后者仍含 `Completed`——棋盘输入在浮层期要继续
+   * 冻结（防误触拖拽），只是「离开本关」这个明确意图不该被一起挡掉。
+   */
+  private canLeaveToHome(): boolean {
+    const phase = this.gameSession?.getPhase();
+    return phase !== 'WinAnimating' && !this.dialogOpen;
+  }
+
+  /**
    * 关卡包里的全部关卡（**仅供 DEBUG 体检用**）。
    *
    * 这里只做一次结构读取：解析与校验的真相源始终是 core 的 `parseLevelBundle`，
@@ -691,8 +708,11 @@ export class GameController extends Component {
    * 返回首页按钮（M2-7：首页选关 ↔ 游戏互通）。
    *
    * 代码注入 SafeAreaRoot（与工具栏同范式），置于左上角信息带。点击 → 跳回首页。
-   * 中途返回不写通关进度（只在 `level-cleared` 落盘）；通关动画 / 确认框期间冻结
-   * （`isFrozen`）不响应，避免浮层期误触回首页。
+   * 中途返回不写通关进度（只在 `level-cleared` 落盘）。
+   *
+   * **冻结口径（M2-7 复审修正）**：走 `canLeaveToHome()`——只挡 `WinAnimating` 与
+   * `dialogOpen`，**放行 `Completed`**（与 SuccessOverlay「动画播完按钮才可用」同口径）。
+   * 这样通关浮层期也能直接回首页，L10（无「下一关」）不再需要绕「再来一次」两步。
    */
   private buildBackButton(): void {
     const root = this.dragController?.gestureRoot ?? this.node;
@@ -730,7 +750,9 @@ export class GameController extends Component {
       Node.EventType.TOUCH_END,
       (e: EventTouch) => {
         e.propagationStopped = true;
-        if (this.isFrozen()) return; // 通关 / 确认框期间不响应
+        // M2-7 复审：放行 Completed（通关浮层 settled 后可直接回首页，L10 也有出口），
+        // 仍挡 WinAnimating（入场动画中）与 dialogOpen（确认框）。见 canLeaveToHome。
+        if (!this.canLeaveToHome()) return;
         if (DEBUG) console.log('[GameController] 返回首页');
         director.loadScene('Home');
       },
