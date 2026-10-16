@@ -182,9 +182,18 @@ export interface SaveDataV1 {
  */
 export type SfxKey = 'select' | 'place-ok' | 'place-fail' | 'success';
 
+/**
+ * 振荡波形（core 自有联合类型）。
+ *
+ * **不引 lib.dom 的 `OscillatorType`**：core 应平台无关——R-A1 只管 `cc`，
+ * 但 DOM 类型同样是 Web 专有耦合，M4-4 换微信音频后端时这层不必跟着改。
+ * 取值为 WebAudio `OscillatorType` 去掉 `custom` 的子集，适配器处可直接赋值。
+ */
+export type SfxWaveform = 'sine' | 'square' | 'triangle' | 'sawtooth';
+
 /** 单个振荡脉冲：扫频 + 包络的最小单位。`delayMs > 0` 即可叠出多音（如通关的 click+钟） */
 export interface SfxPulse {
-  readonly waveform: OscillatorType;
+  readonly waveform: SfxWaveform;
   /** 起始频率（Hz） */
   readonly freqFrom: number;
   /** 结束频率（Hz）；线性扫频赋予「咔哒 / 上滑」的性格 */

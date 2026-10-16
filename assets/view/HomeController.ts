@@ -330,15 +330,20 @@ export class HomeController extends Component {
   /** 锁形（未解锁）徽标；`s` = 半宽，锁体高约 1.6s */
   private drawLock(g: Graphics, cx: number, cy: number, s: number): void {
     const color = Color.fromHEX(new Color(), UI_PALETTE.textSecondary);
-    const bodyTop = cy - s * 0.8;
+    // Graphics 局部坐标 y 向上：`roundRect` 的 y 参数是**下**边缘（曾按"Top"命名，
+    // 导致锁梁圆心被放在锁体下边缘——半圆埋进填充锁体，锁退化成圆角方块）。
+    const bodyBottom = cy - s * 0.8;
     // 锁体
     g.fillColor = color;
-    g.roundRect(cx - s, bodyTop, s * 2, s * 1.6, 2);
+    g.roundRect(cx - s, bodyBottom, s * 2, s * 1.6, 2);
     g.fill();
     // 锁梁（半圆，跨在锁体上方）
     g.strokeColor = color;
     g.lineWidth = Math.max(1.5, s * 0.35);
-    g.arc(cx, bodyTop, s * 0.7, Math.PI, Math.PI * 2, false);
+    // Cocos 3.8.8 `Graphics.arc` 末参 `counterclockwise=false` 渲染的是
+    // `[start,end]` 的**补集**（探针实证，见 MEMORY 引擎限制）——画标称区间必须
+    // 传 `true`；圆心还必须落在锁体**上**边缘，否则 ∩ 看不见。
+    g.arc(cx, bodyBottom + s * 1.6, s * 0.7, 0, Math.PI, true);
     g.stroke();
   }
 
@@ -461,9 +466,11 @@ export class HomeController extends Component {
     if (on) {
       g.strokeColor = body;
       g.lineWidth = 2;
-      g.arc(3, 0, 6, -Math.PI / 3, Math.PI / 3, false);
+      // 末参必须 `true`：`counterclockwise=false` 在 Cocos 3.8.8 渲染的是
+      // [-60°,60°] 的**补集**——弧绕到喇叭背后画 240°（探针实证见 MEMORY）。
+      g.arc(3, 0, 6, -Math.PI / 3, Math.PI / 3, true);
       g.stroke();
-      g.arc(3, 0, 10, -Math.PI / 3, Math.PI / 3, false);
+      g.arc(3, 0, 10, -Math.PI / 3, Math.PI / 3, true);
       g.stroke();
     } else {
       g.strokeColor = Color.fromHEX(new Color(), UI_PALETTE.textSecondary);
