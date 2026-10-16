@@ -23,6 +23,16 @@
 
 ## 提交记录（倒序）
 
+### `62e18ee` · fix: M2-9 复审三处——喇叭声波弧画反 / 锁徽标无锁梁 / SfxPulse 波形去 lib.dom 耦合
+
+| 项 | 内容 |
+| --- | --- |
+| 日期 | 2026-10-17 01:29 |
+| 文件 | `assets/view/HomeController.ts`、`assets/core/model/types.ts`（2 文件，+22/−6） |
+| 要点 | ① **喇叭「有声」态声波弧方向画反（真缺陷，M2-9 引入）**：`arc(3,0,r,-π/3,π/3,false)` 的末参 `counterclockwise=false` 在 Cocos 3.8.8 渲染的是 `[start,end]` 的**补集**——弧绕到喇叭背后画了 240°（像素级角度直方图：缺陷态 **0/232** 个弧像素落在预期 ±60° 内，角度范围 −155°~+162°）。两处弧末参改 `true` → 标准「喇叭 + 右侧双弧」② **锁徽标根本没有锁梁（真缺陷，M2-7 起就存在，前两轮审查漏抓）**：`arc(cx, bodyTop, s*0.7, π, 2π, false)` 双重错误——末参补集语义，且圆心取在锁体**下**边缘（`roundRect` 的 y 参数实为下边缘，变量名 `bodyTop` 是误导源）→ 上半圆正好埋进填充的锁体里，锁形退化成**纯圆角方块**。修法：圆心移到锁体**上**边缘（`bodyBottom + s*1.6`，变量改名 `bodyBottom` 正名）+ `arc(…, 0, π, true)` → 标准挂锁「∩ + 体」③ **`core/model/types.ts` 去 lib.dom 耦合（类型洁癖）**：`SfxPulse.waveform: OscillatorType`（浏览器专有类型）换成 core 自有联合类型 `SfxWaveform = 'sine'\|'square'\|'triangle'\|'sawtooth'`（WebAudio `OscillatorType` 去 `custom` 的子集，`AudioAdapter` 的 `osc.type = p.waveform` 直接赋值兼容）。core 的平台无关不止 R-A1 管的 `cc`——DOM 类型同样是 Web 专有耦合，M4-4 换微信音频后端时这层不必跟着改。纯类型层、无运行时影响 |
+| 验收 | **`npm run check` 321/321**（typecheck + typecheck:view + check:arch + verify:levels + vitest 全绿）；**无头预览零 Console 错误**。像素级取证（stdlib PNG 解码，dpr=2）：① 喇叭——弧心环带**径向剖面双峰** r≈6（53px）/ r≈10（90px）、**角度剖面 144/144 全落 ±60°**（缺陷态 0/232）、弧心正上/正下方（90°/270°、两半径）**背面探针 0 暗像素**，裁剪图可见右侧双弧、背后干净；② 锁——L2 卡（新档只解锁 L1，L2 为锁定态）徽标锁体区 466 暗像素、**锁梁区（锁体上方）90 暗像素**，到「锁体上边缘圆心」距离均值 **4.35**（期望 4.2）、最高点局部 y=**10.0**（期望 9.0+半描边），裁剪图可见「∩ + 体」；③ Game 场景冒烟：L1 正常载入、点托盘件触发 `播放音效 select（1 脉冲 / 70ms）`——音效运行时链路不受类型改动影响 |
+| 关联 | M2-9 复审（结论 PASS + 3 条 [低]）的修复轮；根因「**Cocos 3.8.8 `Graphics.arc` 的 `counterclockwise=false` = 从 start 顺时针（角度递减）扫到 end，渲染出 `[start,end]` 的补集；`true` 才是标称区间**」已记入 MEMORY 引擎限制与 README 踩坑清单——**M2-10 通关庆祝的星光/动效若用弧，一律传 `true` 并直接给标称区间**；`SfxWaveform` 属 M4-4 换真音效后端的前置洁癖（`SfxKey` 命名空间与调用方零改动） |
+
 ### `7d88d4e` · feat: M2-9 音效——AudioAdapter + 4 个占位音效 + 首页静音开关（可静音，重启保持）
 
 | 项 | 内容 |

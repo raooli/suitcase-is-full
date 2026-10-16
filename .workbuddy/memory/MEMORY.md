@@ -14,6 +14,7 @@ view 类型检查：`tsconfig.view.json` 显式重写 `types`（相对路径以�
 
 ## 引擎限制与状态机
 - 一节点一 renderable：多组绘制复用同一 Graphics 或建子节点。
+- **`Graphics.arc(cx,cy,r,start,end,ccw)` 里 `ccw=false` 画的是 `[start,end]` 的补集**（干净背景探针实测：`arc(…,0,90°,false)` 渲染出 `[90°,360°]`；`true` 才渲染标称 `[0°,90°]`）。即 **`false` = 从 start 顺时针（角度递减）扫到 end**，扫过去的是另一半。M2-9 两处踩坑：喇叭声波弧（`-60..60,false` → 绕到喇叭背后画了 240°，修法传 `true`）、锁徽标锁梁（`arc(π,2π,false)` 圆心还在锁体**下**边缘 → 上半圆埋进锁体看不见、锁形退化成圆角方块，修法：圆心移到锁体上边缘 + `0..π,true`）。**要画弧一律传 `true` 并直接给标称区间**；验弧用像素级角度直方图（扫环带算 `atan2`）——**先径向剖面定性**（双峰=两弧，不做填充体掩蔽会被体像素污染失真），**再角度剖面定量**；「背面探针」盒心放弧圆**正上/正下方**（弧心系 dx≈0、dy=±r），盒放宽会吃到 ±60° 端点像素误报「补集复发」。另：Graphics 局部坐标 **y 向上**，`roundRect` 的 y 是**下**边缘（别按 Top 命名）。
 - 冻结门覆盖所有写状态 handler（含 `handleDrop/handleCancel` 清理路径）；`handleMove` 不需门（`phase!=='Dragging'` 提前返）。
 - 懒加载 `built` 提前 return 必须抽 `applyEvent()` 入口无条件调用（Success/Confirm/Guide 同类防 M1-7 复玩战绩不刷新）。
 - `completeWinAnimation()` 幂等；`SuccessOverlay.show()` 开头 `unscheduleAllCallbacks`。
