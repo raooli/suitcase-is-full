@@ -23,6 +23,16 @@
 
 ## 提交记录（倒序）
 
+### `7d88d4e` · feat: M2-9 音效——AudioAdapter + 4 个占位音效 + 首页静音开关（可静音，重启保持）
+
+| 项 | 内容 |
+| --- | --- |
+| 日期 | 2026-10-17 00:25 |
+| 文件 | `assets/core/audio/sfx.ts`（+`.meta`，含目录 `assets/core/audio.meta`）、`assets/core/model/types.ts`、`assets/core/config.ts`、`assets/core/progress.ts`、`assets/core/index.ts`、`assets/view/AudioAdapter.ts`（+`.meta`）、`assets/view/HomeController.ts`、`assets/view/GameController.ts`、`test/audio.spec.ts`、`test/progress.spec.ts`（13 文件，+696/−9） |
+| 要点 | ① **`core/audio/sfx.ts`（新，纯数据零 cc）**：音效规格表——UI Spec 8 点名的四种：`select` 选中轻点（正弦 660→880、70ms）/ `place-ok` 合法放置咔哒（方波 520→260、110ms）/ `place-fail` 非法放置柔和提示（三角波 300→180、220ms，**禁谐波丰富的 sawtooth**——PRD 无障碍「避免刺耳」）/ `success` 成功扣锁（**双脉冲叠**：扣锁 click 60ms + 80ms 后上行小钟 260ms，共 340ms）。规格是「脉冲序列」模型（`SfxPulse`：波形 / 扫频 / 延时 / 时长 / 相对增益），`durationMs` **由 pulses 推导**不手写，改脉冲不会忘同步总长 ② **`core/model/types.ts`**：`SfxKey`/`SfxPulse`/`SfxSpec` 入中央类型模块（避免 types.ts ↔ sfx.ts 互引）；③ **`core/config.ts`**：`SFX_MASTER_GAIN=0.22`（总音量，真素材进来只改这一处）+ `SFX_ENVELOPE_ATTACK_S=0.008`（起振消爆音；**释音不设常数**——振荡器被 `stop()` 硬切时增益未衰尽同样爆音，故指数衰减恒收敛到 stop 时刻，注释已说明）④ **`core/progress.ts`**：`setMuted` 纯函数——静音写入侧，与 `markCleared`/`setLearnedLevels` **同存一份存档三条写链**（`suitcase.progress.v1`），各自只覆盖自己字段 ⑤ **`view/AudioAdapter.ts`（新）**：WebAudio 合成适配器，**模块级单例**（Home/Game 共用一个 `AudioContext`——浏览器限制并发数量，且换场景不该断声）。**懒创建**（首次 `play()` 才建，而游戏里每次播放都在用户手势回调里，合 TDD 11.3「首次播放必须由用户手势触发」）；建成仍 `suspended` 则**先 `resume()` 再发声**（直接往 suspended ctx schedule 的声音会被丢弃，症状「第一次没声」）；**同 key 重触发即停上一发**（快速连点不叠成噪音）；无 WebAudio 环境（微信端无全局 `AudioContext`）→ **优雅降级永久静默、不抛错**（架构文档 §5 表现层降级而非崩溃；M3 真机阶段按 TDD 11.3 换 wx API，R-A4 要求收进 platform 目录，与 M3-1 构建一起做）⑥ **`view/HomeController.ts`**：首页**音效开关**（PRD 290 把「音效开关」列在首页信息里）——网格下方 pill（喇叭图形 + 「音效：开/关」**双通道**，UI Spec 无障碍不只靠图形/颜色）；点击 → `setMuted` + `saveProgress` **读改存**（M2-8 规则）+ 同步适配器 + 重绘；**开启时播一声 select 作当场确认**（关闭时自然被静音闸挡掉）⑦ **`view/GameController.ts`**：`onLoad` 灌静音态（与 guide restore 并列，早于 `startLevel`）；`afterDispatch` 事件 → 音效（`placement-committed`→`place-ok`、`placement-rejected`→`place-fail`、`level-cleared`→`success`（浮层入场**先有声后有画面**））；**选中轻点声只认 `select` 意图**（`grab` 起拖不响、取消选中不响、点已选中物品走 rotate 也不响——规格只有四种）；`onDestroy` `audio.stopAll()` 收尾（单例跨场景，长 340ms 的通关钟不该拖进下一场景） |
+| 验收 | **`npm run check` 321/321**（+14：`audio.spec` 覆盖清单与 UI Spec 对齐 / 数量在计划表 4～6 / 短音效 ≤500ms / 频率增益合理域 / 非法放置禁 sawtooth / success 双脉冲构成；`progress.spec` 补 `setMuted` 不可变透传 + 三条写链互不覆盖）；**无头预览零 Console 错误**。① 开关往返：首页 `音效开` → 点 `(195,722)` → `音效开关：开 → 关（已保存）`（截图：喇叭加斜杠 + 「音效：关」）→ `--reload` → `首页：… / 音效关`（**AC18 重启保持**）→ 再点 → `音效开关：关 → 开（已保存）` + `播放音效 select`（当场确认）② 四种音效实触发：`place-ok`×4（L1 四件依次放入）/ `place-fail`×1（**L01_C 拖到 L01_A 已占格 → overlap 拒收**，与「放不下」warn 同帧）/ `success`（2 脉冲 340ms，通关浮层入场前）③ 静音路径：`静音：开` → 进 L1 放置 → `已静音，跳过 place-ok`（静音期放置不发声，玩法不受影响） |
+| 关联 | 落地 **实施计划 M2-9**（`AudioAdapter` + 4～6 占位音效，验收「可静音」）；UI Spec 8 四种音效全接线；PRD F14/AC18；`SaveDataV1.muted`（M2-7 起就在 schema 里，本次接上写入侧与 UI）；M4-4 真音效进来时只换 `AudioAdapter` 的发声后端，`SfxKey` 命名空间不变、调用方零改动；无 core 契约变更，`cellSize/cellPx` 算术仍仅存在于 `BoardView.ts` + `config.ts` |
+
 ### `bb1fccd` · fix: M2-7 复审三处（浮层期返回键失效 / 当前卡标记缺失 / 已通关对勾压数字）
 
 | 项 | 内容 |

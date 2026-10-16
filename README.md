@@ -89,9 +89,11 @@ node tools/preview-check.mjs --grep PreviewLayer                    # 只看匹�
 ```
 assets/core/              ★ 纯 TS 游戏逻辑，零 cc 依赖，100% 可单测
   index.ts                唯一对外出口（view/tools 只许从这里导）
-  config.ts               全部可调参数（布局 / 阈值 / 色板 / 明度倍率）
+  config.ts               全部可调参数（布局 / 阈值 / 色板 / 明度倍率 / 音效）
   palette.ts              明度阶梯着色（TDD 17.4）
-  progress.ts             存档模型（通关进度 + 已学引导 + 解锁推导，全纯函数）
+  progress.ts             存档模型（通关进度 + 已学引导 + 解锁推导 + 静音，全纯函数）
+  audio/
+    sfx.ts                音效规格表（UI Spec 8 四种：选中/合法/非法/扣锁，纯数据）
   geometry/
     shape.ts              归一化、旋转、包围盒、连通性
     coords.ts             网格坐标 ↔ 线性索引
@@ -108,10 +110,11 @@ assets/core/              ★ 纯 TS 游戏逻辑，零 cc 依赖，100% 可单�
   solver/                 回溯求解器（bigint bitset + MRV）、面积守恒快检
 assets/view/              ★ 唯一允许 import 'cc' 的层
   BootController.ts       启动场景：读存档 → loadScene('Home')
-  HomeController.ts       首页：选关网格三态 + 解锁门禁（未解锁不可进）
-  GameController.ts       接线中枢：intent → dispatch → 刷新
+  HomeController.ts       首页：选关网格三态 + 解锁门禁（未解锁不可进）+ 音效开关
+  GameController.ts       接线中枢：intent → dispatch → 刷新（事件 → 音效/动画）
   storage.ts              存档读写（sys.localStorage，整份序列化 + 坏数据容错退化）
   route.ts                场景间传参单例（待进关卡号，换场景存活）
+  AudioAdapter.ts         音效合成（WebAudio 振荡器占位，单例；静音闸；M4-4 换真素材）
   DragController.ts       触摸生命周期 → Intent（挂在整屏 SafeAreaRoot）
   PreviewLayer.ts         合法/非法/取出三态 ghost
   BoardView.ts            ★ 全项目唯一 RC↔像素转换点（R-A6）
@@ -207,5 +210,7 @@ npm run verify:levels     # 输出 assets/data/levels.json
 - **多格物品从托盘起手时抓取偏移非零。** 按缩略图中心按下 → `grabOffset ≠ 0` → 松手点必须按该偏移修正；按「格中心」直接落点会被 `canPlace` 拒（表现是「拖了没反应」，不是引擎回归）。
 - **一份存档 key 上并存多个状态时，写入方必须「读改存」。** 存档 `suitcase.progress.v1` 同时存通关进度与已学引导（M2-8），任何一处落盘都要 `setLearnedLevels(loadProgress(), …)` / `markCleared(loadProgress(), …)`——先取全量再改自己那一个字段。若各自 `{…新建小对象}` 直接 `saveProgress`，后写的一方会把另一份状态抹掉（表现为「通关记录莫名回退」或「引导又弹了」）。`coerceProgress` 的读入归一与各写方的字段语义共用，是防漂移的关键。
 - **冻结闸门要分场景，别拿同一道门挡所有意图。** `isFrozen()`（`WinAnimating ∨ Completed ∨ dialogOpen`）是**棋盘输入**的冻结线——`Completed` 期要冻住拖拽、防玩家被浮层误导误触。但「离开本关」这类明确意图不该被它一起挡：通关浮层期「返回首页」若也用 `isFrozen()`，`Completed` 是终态（不点浮层按钮不离开），返回键会被一直压住；L10 无「下一关」时回首页得绕两步。**解法**：给不同意图单独设闸门（返回键用 `canLeaveToHome()` = 只挡 `WinAnimating` + `dialogOpen`，放行 `Completed`，与 SuccessOverlay「动画播完按钮才可用」同口径）。
+- **WebAudio 两个爆音/无声坑（M2-9 实测）。** ① **`suspended` 的 context 里 schedule 的声音会被丢弃**（症状「第一次播放没声」）：`AudioContext` 受自动播放策略管控，懒创建后可能停在 `suspended`；必须先 `resume()` 再在 promise 落地后发声。② **`osc.stop()` 硬切时增益没衰尽会残留一帧直流**（症状：每声开头/结尾「噗」的一声）：起振要 8ms 线性 ramp（不能从满刻度起），释音的指数衰减必须**收敛到 `stop()` 时刻**（不要用固定释音时长 + 提前收尾）。
+- **静音语义的方向别标反。** `muted === true` 表示**音效关**。写 UI 文案 / 调试日志时映射是 `muted ? '关' : '开'`——M2-9 曾把 toggle 日志的 before/after 标反（行为全对、日志骗人），而日志正是无头取证的判据。
 
 > 更完整的踩坑记录与取证手法见项目记忆 [`.workbuddy/memory/MEMORY.md`](./.workbuddy/memory/MEMORY.md)。
