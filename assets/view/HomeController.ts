@@ -3,7 +3,7 @@
  *
  * ## 职责
  *
- * 读存档 → 渲染首页（标题 + 「开始收纳」主 CTA + 关卡卡片网格）→
+ * 读存档 → 渲染首页（标题 + 「开始收纳」主 CTA + 关卡卡片网格 + 音效开关）→
  * 处理进关 / 解锁门禁。
  *
  * ## 卡片三态（UI Spec 5.4）
@@ -18,6 +18,13 @@
  *
  * 「当前可玩」= `continueLevelId(progress)`（= 最高已解锁关），主 CTA 点它进；
  * 卡片网格允许直接挑任意已解锁关重玩。
+ *
+ * ## 音效开关（M2-9 / PRD F14·290 / AC18）
+ *
+ * PRD 290 把「音效开关」列在首页信息里：网格下方一枚 pill 按钮（喇叭图形 +
+ * 「音效：开/关」文字，双通道不只靠颜色）。点击 → `setMuted` + `saveProgress`
+ * **读改存**（M2-8 规则，只覆盖 muted 一个字段）+ 同步 `audio` 适配器；
+ * 开启时顺手播一声轻点作确认。静音态与进度同命名空间，重启后保持（AC18）。
  *
  * ## 进关链路
  *
@@ -38,13 +45,15 @@ import {
   isCleared,
   isUnlocked,
   levelIdsOf,
+  setMuted,
   UI_DESIGN_HEIGHT,
   UI_DESIGN_WIDTH,
   UI_PALETTE,
   UI_SAFE_MARGIN,
 } from '../core';
 import type { SaveDataV1 } from '../core';
-import { loadProgress } from './storage';
+import { audio } from './AudioAdapter';
+import { loadProgress, saveProgress } from './storage';
 import { setPendingLevel } from './route';
 import { shakeX } from './shake';
 
@@ -67,6 +76,14 @@ const CARD_GAP_Y = 16;
 const GRID_TOP_Y = 150; // 第一行中心 y；向下递减 (CARD_HEIGHT + CARD_GAP_Y)
 const CARD_LOCKED_OPACITY = 0.55;
 
+// 音效开关（M2-9）：网格下方一枚 pill。网格末行中心 = 150 − 3×116 = −198、
+// 卡底 ≈ −248，故 −300 既不相连也不贴底（设计高半幅 −422）。
+const MUTE_BUTTON_WIDTH = 156;
+const MUTE_BUTTON_HEIGHT = 44;
+const MUTE_BUTTON_Y = -300;
+const MUTE_BUTTON_RADIUS = 22; // 半高 → 全圆角 pill
+const MUTE_GLYPH_SIZE = 28; // 喇叭图形节点边长
+
 type CardState = 'cleared' | 'current' | 'playable' | 'locked';
 
 @ccclass('HomeController')
@@ -75,6 +92,16 @@ export class HomeController extends Component {
   @property(JsonAsset)
   levelJson: JsonAsset | null = null;
 
+  /**
+   * 音效静音态（M2-9）。来自存档（AC18 重启保持），与 `audio` 适配器双向同步：
+   * onLoad 灌入、开关点击时改出。`SaveDataV1.muted` 是唯一真相。
+   */
+  private muted = false;
+
+  /** 开关里的文字与喇叭图形（切换时只改内容，不重建节点） */
+  private muteLabel: Label | null = null;
+  private muteGlyph: Graphics | null = null;
+
   override onLoad(): void {
     const progress = loadProgress();
     const ids = levelIdsOf(this.levelJson?.json);
@@ -82,11 +109,17 @@ export class HomeController extends Component {
     const maxLevelId = Math.max(...levelIds);
     const currentLevel = continueLevelId(progress, maxLevelId);
 
+    // M2-9：静音态从存档灌入适配器（AC18：重启后保持）。Game 场景的 onLoad 也会
+    // 灌一次（单例两份调用方，同一真相同一字段，幂等）。
+    this.muted = progress.muted;
+    audio.setMuted(this.muted);
+
     if (DEBUG) {
       console.log(
         `[HomeController] 首页：最高解锁 L${progress.maxUnlockedLevelId}` +
           ` / 已通关 ${progress.clearedLevelIds.length} 关 → 当前可玩 L${currentLevel}` +
-          ` / 共 ${levelIds.length} 关`,
+          ` / 共 ${levelIds.length} 关` +
+          ` / 音效${this.muted ? '关' : '开'}`,
       );
     }
 
@@ -94,6 +127,7 @@ export class HomeController extends Component {
     this.buildHeader();
     this.buildCTA(currentLevel);
     this.buildGrid(levelIds, progress, currentLevel);
+    this.buildMuteButton();
   }
 
   // ───────────────────────── 背景与标题 ─────────────────────────
@@ -321,9 +355,128 @@ export class HomeController extends Component {
     director.loadScene('Game');
   }
 
+  // ───────────────────────── 音效开关（M2-9） ─────────────────────────
+
+  /**
+   * 首页音效开关（PRD 290 把「音效开关」列在首页信息里 / F14「可静音」）。
+   *
+   * pill 按钮 = 喇叭图形 + 「音效：开 / 关」文字——**双通道**（UI Spec 无障碍：
+   * 不只靠图形、也不只靠颜色区分状态）。点击切换 → 落盘 → 同步适配器。
+   */
+  private buildMuteButton(): void {
+    const node = new Node('MuteToggle');
+    node.layer = this.node.layer;
+    this.node.addChild(node);
+    node.setPosition(0, MUTE_BUTTON_Y, 0);
+    const transform = node.addComponent(UITransform);
+    transform.setContentSize(MUTE_BUTTON_WIDTH, MUTE_BUTTON_HEIGHT);
+    transform.setAnchorPoint(0.5, 0.5);
+
+    const g = node.addComponent(Graphics);
+    g.fillColor = Color.fromHEX(new Color(), UI_PALETTE.surfaceWhite);
+    g.strokeColor = Color.fromHEX(new Color(), UI_PALETTE.border);
+    g.lineWidth = 2;
+    g.roundRect(
+      -MUTE_BUTTON_WIDTH / 2,
+      -MUTE_BUTTON_HEIGHT / 2,
+      MUTE_BUTTON_WIDTH,
+      MUTE_BUTTON_HEIGHT,
+      MUTE_BUTTON_RADIUS,
+    );
+    g.fill();
+    g.stroke();
+
+    // 喇叭图形（左侧，独立小节点，切换时重绘）
+    const glyph = new Node('MuteGlyph');
+    glyph.layer = this.node.layer;
+    node.addChild(glyph);
+    glyph.setPosition(-MUTE_BUTTON_WIDTH / 2 + 32, 0, 0);
+    const glyphTransform = glyph.addComponent(UITransform);
+    glyphTransform.setContentSize(MUTE_GLYPH_SIZE, MUTE_GLYPH_SIZE);
+    glyphTransform.setAnchorPoint(0.5, 0.5);
+    this.muteGlyph = glyph.addComponent(Graphics);
+
+    // 文字（右侧）：节点宽沿用卡内文字的 94，右移让「喇叭 + 文字」整体居中
+    this.muteLabel = this.makeLabelOn(node, '音效：开', 16, UI_PALETTE.textPrimary, 0, 22, 26);
+
+    this.refreshMuteButton();
+
+    node.on(Node.EventType.TOUCH_START, (e: EventTouch) => (e.propagationStopped = true), this);
+    node.on(
+      Node.EventType.TOUCH_END,
+      (e: EventTouch) => {
+        e.propagationStopped = true;
+        this.onMuteTap();
+      },
+      this,
+    );
+  }
+
+  /** 切换静音：内存 + 适配器 + 存档三处同步（存档走读改存，见 M2-8 规则） */
+  private onMuteTap(): void {
+    // 注意语义方向：`muted === true` 表示**音效关**。文案映射与 UI 标签
+    // （`音效：关`）保持一致，别写反了（曾在这里把 before/after 标反，日志骗人）。
+    const before = this.muted ? '关' : '开';
+    const next = !this.muted;
+    this.muted = next;
+    audio.setMuted(next);
+    saveProgress(setMuted(loadProgress(), next, Date.now()));
+    this.refreshMuteButton();
+    // 开启时播一声轻点作确认（"我听不听得见"当场可验）；关闭时播放本就被
+    // 静音闸挡掉，无需特判。
+    audio.play('select');
+    if (DEBUG) {
+      console.log(`[HomeController] 音效开关：${before} → ${next ? '关' : '开'}（已保存）`);
+    }
+  }
+
+  /** 按当前静音态重绘图形与文字（只改内容，不重建节点） */
+  private refreshMuteButton(): void {
+    if (this.muteLabel !== null) {
+      this.muteLabel.string = this.muted ? '音效：关' : '音效：开';
+    }
+    if (this.muteGlyph !== null) {
+      this.drawSpeaker(this.muteGlyph, !this.muted);
+    }
+  }
+
+  /**
+   * 喇叭图形（程序绘制，同卡片徽标范式）。`on` = 有声（带两道声波弧），
+   * `off` = 静音（加一道斜杠）。都不靠颜色传达状态——文字「音效：开/关」
+   * 是第二通道。
+   */
+  private drawSpeaker(g: Graphics, on: boolean): void {
+    const body = Color.fromHEX(new Color(), UI_PALETTE.textPrimary);
+    g.clear();
+    // 喇叭体（小梯形 + 右侧出口）
+    g.fillColor = body;
+    g.moveTo(-9, -4);
+    g.lineTo(-9, 4);
+    g.lineTo(-4, 4);
+    g.lineTo(2, 9);
+    g.lineTo(2, -9);
+    g.lineTo(-4, -4);
+    g.close();
+    g.fill();
+    if (on) {
+      g.strokeColor = body;
+      g.lineWidth = 2;
+      g.arc(3, 0, 6, -Math.PI / 3, Math.PI / 3, false);
+      g.stroke();
+      g.arc(3, 0, 10, -Math.PI / 3, Math.PI / 3, false);
+      g.stroke();
+    } else {
+      g.strokeColor = Color.fromHEX(new Color(), UI_PALETTE.textSecondary);
+      g.lineWidth = 2.5;
+      g.moveTo(-4, -9);
+      g.lineTo(11, 9);
+      g.stroke();
+    }
+  }
+
   // ───────────────────────── 文本工具 ─────────────────────────
 
-  /** 在父节点下建一个居中文字节点（自身带 UITransform，便于单独定位） */
+  /** 在父节点下建一个居中文字节点（自身带 UITransform，便于单独定位）。返回 Label 组件 */
   private makeLabelOn(
     parent: Node,
     text: string,
@@ -331,11 +484,12 @@ export class HomeController extends Component {
     colorHex: string,
     yOffset: number,
     height: number,
-  ): Node {
+    xOffset = 0,
+  ): Label {
     const node = new Node('Label');
     node.layer = parent.layer;
     parent.addChild(node);
-    node.setPosition(0, yOffset, 0);
+    node.setPosition(xOffset, yOffset, 0);
     const transform = node.addComponent(UITransform);
     transform.setContentSize(CARD_WIDTH - 6, height);
     transform.setAnchorPoint(0.5, 0.5);
@@ -346,7 +500,7 @@ export class HomeController extends Component {
     lbl.color = Color.fromHEX(new Color(), colorHex);
     lbl.horizontalAlign = Label.HorizontalAlign.CENTER;
     lbl.verticalAlign = Label.VerticalAlign.CENTER;
-    return node;
+    return lbl;
   }
 
   /** 在 HomeRoot 下建一个绝对定位的标题 / 副标题节点 */

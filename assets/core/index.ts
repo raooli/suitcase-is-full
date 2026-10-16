@@ -26,6 +26,9 @@ export type {
   RC,
   Rotation,
   SaveDataV1,
+  SfxKey,
+  SfxPulse,
+  SfxSpec,
   Vec2Like,
 } from './model/types';
 export {
@@ -127,7 +130,11 @@ export {
   isUnlocked,
   markCleared,
   setLearnedLevels,
+  setMuted,
 } from './progress';
+
+// 音效规格表（M2-9：纯数据，发声在 view/AudioAdapter）
+export { SFX_KEYS, sfxSpecOf } from './audio/sfx';
 
 // 会话
 export { GameSession } from './session/GameSession';

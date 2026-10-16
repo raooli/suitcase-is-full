@@ -171,3 +171,35 @@ export interface SaveDataV1 {
   /** 时间戳，仅调试用 */
   readonly updatedAt: number;
 }
+
+// ─────────────────────────────── 音效 ───────────────────────────────
+
+/**
+ * 音效 key（M2-9 / UI Spec 8「动画与音效」点名的四种）。
+ *
+ * 占位期由 `view/AudioAdapter.ts` 用 WebAudio **合成**；M4-4 真素材进来后换成
+ * 播文件，key 命名空间不变（调用方零改动）。
+ */
+export type SfxKey = 'select' | 'place-ok' | 'place-fail' | 'success';
+
+/** 单个振荡脉冲：扫频 + 包络的最小单位。`delayMs > 0` 即可叠出多音（如通关的 click+钟） */
+export interface SfxPulse {
+  readonly waveform: OscillatorType;
+  /** 起始频率（Hz） */
+  readonly freqFrom: number;
+  /** 结束频率（Hz）；线性扫频赋予「咔哒 / 上滑」的性格 */
+  readonly freqTo: number;
+  /** 相对音效起点的延时（ms） */
+  readonly delayMs: number;
+  readonly durationMs: number;
+  /** 相对音量（0..1），适配器再乘 `SFX_MASTER_GAIN` */
+  readonly gain: number;
+}
+
+/** 一种音效的完整合成规格。`durationMs` 由 pulses 推导（见 `sfx.ts` 的 `makeSpec`） */
+export interface SfxSpec {
+  readonly key: SfxKey;
+  readonly pulses: readonly SfxPulse[];
+  /** 总时长（ms）= 各脉冲 `delayMs + durationMs` 的最大值 */
+  readonly durationMs: number;
+}

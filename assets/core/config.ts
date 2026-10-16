@@ -389,3 +389,22 @@ export const UI_OVERLAY_BUTTON_SECONDARY_HEIGHT = 44;
  */
 export const UI_SHAKE_OFFSET_PX = 8;
 export const UI_SHAKE_DURATION_MS = 160;
+
+// ───────────────────────── 音效（M2-9 / UI Spec 8 / PRD F14） ─────────────────────────
+
+/**
+ * 音效总音量（0..1）。
+ *
+ * 占位音效一律**轻柔**（GDD「音效柔和」）：单个脉冲的 `gain` 再乘它。真素材
+ * （M4-4）进来后如果整体偏响，只改这一处即可。
+ */
+export const SFX_MASTER_GAIN = 0.22;
+
+/**
+ * 包络起音时长（秒）：音量从 0 线性拉到峰值。**不能为 0**——直接从满刻度起振
+ * 会有「噗」的爆音（ADC click），8ms 人耳听不出延迟但足够消爆音。
+ *
+ * 释音**不设固定时长**：`AudioAdapter` 让指数衰减恒收敛到振荡器的 `stop()`
+ * 时刻（硬切时增益未衰尽同样会爆音），衰减快慢由脉冲时长自然决定。
+ */
+export const SFX_ENVELOPE_ATTACK_S = 0.008;

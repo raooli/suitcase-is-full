@@ -141,3 +141,18 @@ export function setLearnedLevels(
     updatedAt: now,
   };
 }
+
+/**
+ * 设置静音开关（M2-9：PRD F14「可静音」/ AC18「关闭音效后重新启动保持」）。
+ *
+ * 返回**新**进度（不可变）。`muted` 与通关/解锁/已学引导同存于
+ * `suitcase.progress.v1`，写方照例先 `loadProgress()` 读改存（M2-8 规则），
+ * 只覆盖自己这一个字段。
+ */
+export function setMuted(p: SaveDataV1, muted: boolean, now: number): SaveDataV1 {
+  return {
+    ...p,
+    muted,
+    updatedAt: now,
+  };
+}

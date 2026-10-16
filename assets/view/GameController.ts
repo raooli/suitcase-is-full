@@ -8,7 +8,8 @@
  * M1-6 起本组件还是**单向数据流的接线总闸**（实施计划 M1.A）：
  * 所有改变状态的请求都收敛到 `handleIntent()` → `session.dispatch()`，
  * 返回的事件数组决定"刷什么、表现什么"——view 不直接改任何 core 状态。
- * M1-7 起 `level-cleared` 在这里接上 `SuccessOverlay`。
+ * M1-7 起 `level-cleared` 在这里接上 `SuccessOverlay`；M2-9 起同一张事件表
+ * 还驱动音效（`AudioAdapter`：放得下 / 放不下 / 通关 / 选中）。
  *
  * 挂载点：`Game.scene` 的 `GameRoot` 节点（与官方 2D 模板 taxi 的 `GameRoot`
  * 同一形状；Scene 根节点上不带组件，这是引擎示例的既有惯例）。
@@ -53,6 +54,7 @@ import type {
 } from '../core';
 import { loadProgress, saveProgress } from './storage';
 import { takePendingLevel } from './route';
+import { audio } from './AudioAdapter';
 import { BoardView } from './BoardView';
 import { ConfirmDialog } from './ConfirmDialog';
 import { boxRectIn, centerRectIn } from './designRect';
@@ -172,8 +174,22 @@ export class GameController extends Component {
     // 首关首次引导是否弹出由它决定，灌晚了会漏弹或错弹。
     this.guideMemory.restore(loadProgress().learnedLevelIds);
 
+    // M2-9：静音态从存档灌入音效适配器（AC18 重启保持；Home 的开关写的同一字段）。
+    // 与 guide restore 并列：两者都是「存档 → 本场景运行态」的恢复，早于 startLevel。
+    audio.setMuted(loadProgress().muted);
+
     // 装配与"换一关"是同一条路径（M2-1）：首启就是载入第 `levelId` 关
     this.startLevel(this.levelId);
+  }
+
+  /**
+   * 离开 Game 场景（返回首页 / 进下一关）时的收尾（M2-9）。
+   *
+   * `audio` 是跨场景单例，正在响的音效（最长 340ms 的通关钟）不该拖到下一个
+   * 场景的耳朵里；单例的静音态与 AudioContext 本身保留（不重建）。
+   */
+  protected override onDestroy(): void {
+    audio.stopAll();
   }
 
   /**
@@ -435,6 +451,8 @@ export class GameController extends Component {
           break; // 信号本身不触发重画（见方法注释）
         case 'placement-committed':
           refresh = true;
+          // M2-9：合法放置咔哒声（UI Spec 8）
+          audio.play('place-ok');
           if (DEBUG) {
             console.log(
               `[GameController] ${event.from === 'tray' ? '放入' : '移动'} ${event.itemId}` +
@@ -448,6 +466,8 @@ export class GameController extends Component {
           console.warn(
             `[GameController] 放不下：${event.itemId}（${event.reason}）——状态未变、不入撤回栈`,
           );
+          // M2-9：非法放置柔和提示声（UI Spec 8「不刺耳」）
+          audio.play('place-fail');
           break;
         case 'item-returned':
         case 'undo-applied':
@@ -505,9 +525,18 @@ export class GameController extends Component {
               );
             }
           }
+          // M2-9：成功扣锁声（UI Spec 8）。放在浮层入场之前——先有声、后有画面
+          audio.play('success');
           this.successOverlay?.show(event, this.hasNextLevel());
           break;
       }
+    }
+
+    // M2-9：选中轻点声（UI Spec 8）。**只认 `select` 意图**——`grab` 起拖不响
+    // （那一下的反馈留给松手时的 place-ok），取消选中（itemId=null）也不响；
+    // 「点已选中物品 = 旋转」走的是 rotate 意图，同样不响（规格只有四种音效）。
+    if (intent.type === 'select' && intent.itemId !== null) {
+      audio.play('select');
     }
 
     // M2-6：学会判定（UI Spec 7「本关已学会后不再弹出」）。判据问 core

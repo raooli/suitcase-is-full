@@ -6,7 +6,8 @@
  * 2. `markCleared` 解锁下一关并封顶到最后一关；
  * 3. `continueLevelId` 永远落在 [1, maxLevelId]；
  * 4. 不可变——`markCleared` 不就地改原对象；
- * 5. `coerceProgress` 对脏数据回退默认、对合法数据原样保真。
+ * 5. `coerceProgress` 对脏数据回退默认、对合法数据原样保真；
+ * 6. M2-9 `setMuted`：静音态与其余持久态同存一份存档、互不覆盖（AC18）。
  */
 
 import { describe, expect, it } from 'vitest';
@@ -19,6 +20,7 @@ import {
   isUnlocked,
   markCleared,
   setLearnedLevels,
+  setMuted,
 } from '../assets/core/progress';
 import type { SaveDataV1 } from '../assets/core/model/types';
 
@@ -206,5 +208,44 @@ describe('setLearnedLevels：已学引导持久化（M2-8）', () => {
     const base = setLearnedLevels(defaultProgress(0), [1, 3], 1);
     const after = markCleared(base, 2, MAX, 2);
     expect(after.learnedLevelIds).toEqual([1, 3]);
+  });
+});
+
+describe('setMuted：静音持久化写入侧（M2-9 / PRD F14 / AC18）', () => {
+  it('只改 muted 一个字段，其余原样透传', () => {
+    const base: SaveDataV1 = {
+      schemaVersion: 1,
+      maxUnlockedLevelId: 4,
+      clearedLevelIds: [1, 2, 3],
+      learnedLevelIds: [1],
+      muted: false,
+      updatedAt: 500,
+    };
+    const after = setMuted(base, true, 900);
+    expect(after.muted).toBe(true);
+    expect(after.maxUnlockedLevelId).toBe(4);
+    expect(after.clearedLevelIds).toEqual([1, 2, 3]);
+    expect(after.learnedLevelIds).toEqual([1]);
+    expect(after.updatedAt).toBe(900);
+  });
+
+  it('不可变：原对象不被修改', () => {
+    const original = defaultProgress(0);
+    const snapshot = JSON.parse(JSON.stringify(original));
+    setMuted(original, true, 1);
+    expect(original).toEqual(snapshot);
+  });
+
+  it('与 markCleared / setLearnedLevels 互不覆盖（同一份存档三条写链）', () => {
+    let p = markCleared(defaultProgress(0), 1, MAX, 1); // 通关链
+    p = setLearnedLevels(p, [1], 2); // 已学引导链
+    p = setMuted(p, true, 3); // 静音链
+    expect(p.muted).toBe(true);
+    expect(p.clearedLevelIds).toEqual([1]);
+    expect(p.learnedLevelIds).toEqual([1]);
+    // 反向：先静音再通关，muted 不丢
+    const q = markCleared(setMuted(defaultProgress(0), true, 1), 2, MAX, 2);
+    expect(q.muted).toBe(true);
+    expect(q.clearedLevelIds).toEqual([2]);
   });
 });
