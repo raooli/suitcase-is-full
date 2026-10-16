@@ -331,7 +331,7 @@ const safeAreaRootNode = (children = []) => ({
   children,
 });
 
-/** Canvas 下的内容挂载点；不同场景给不同的子树（Boot/Home 目前还没有内容） */
+/** Canvas 下的内容挂载点；不同场景给不同的子树 */
 const canvasNode = (contentRoots = []) => ({
   name: 'Canvas',
   layer: LAYER.UI_2D,
@@ -345,6 +345,16 @@ const canvasNode = (contentRoots = []) => ({
     },
     ...contentRoots,
   ],
+});
+
+/**
+ * 一个带 UI 尺寸的「内容根」节点（首页 / 启动页用它承载代码注入的 UI 子节点）。
+ * 给一个 uiTransform 让子节点用设计坐标（以节点中心为原点）定位。
+ */
+const contentRootNode = (name, components) => ({
+  name,
+  layer: LAYER.UI_2D,
+  components: [builtin('uiTransform', [DESIGN.width, DESIGN.height]), ...components],
 });
 
 const boardRootNode = () => ({
@@ -406,11 +416,23 @@ const successRootNode = () => ({
 const SCENES = {
   'Boot.scene': {
     sceneName: 'Boot',
-    nodes: [cameraNode(), canvasNode()],
+    nodes: [
+      cameraNode(),
+      canvasNode([contentRootNode('BootRoot', [script('BootController')])]),
+    ],
   },
   'Home.scene': {
     sceneName: 'Home',
-    nodes: [cameraNode(), canvasNode()],
+    nodes: [
+      cameraNode(),
+      canvasNode([
+        contentRootNode('HomeRoot', [
+          script('HomeController', {
+            levelJson: assetRef('assets/data/levels.json', 'cc.JsonAsset'),
+          }),
+        ]),
+      ]),
+    ],
   },
   'Game.scene': {
     sceneName: 'Game',

@@ -73,6 +73,8 @@ function parseArgs(argv) {
     else if (a === '--tap-mouse') out.steps.push({ kind: 'tap', spec: argv[++i], mouse: true });
     // `--drag x1,y1,x2,y2`：一次完整拖拽手势（按下 → 插值移动 → 松手）
     else if (a === '--drag') out.steps.push({ kind: 'drag', spec: argv[++i] });
+    // `--reload`：重新加载页面（同一 profile → localStorage 保留），用于验存档恢复
+    else if (a === '--reload') out.steps.push({ kind: 'reload' });
     else if (a === '--quiet') out.quiet = true;
   }
   return out;
@@ -513,6 +515,20 @@ async function main() {
         await session.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
         console.log(`👆 拖拽 (${x1}, ${y1}) → (${x2}, ${y2})${shot === null ? '' : ` 📸 ${shot}`}`);
         await sleep(args.gap);
+      } else if (step.kind === 'reload') {
+        // 重新加载页面：同一 profile/origin → localStorage 保留，用来验证「通关进度
+        // 落盘 → 重启恢复」这条链路（M2-7 AC13）。reload 会清空 DOM，所以页面级
+        // 微调（touch-action / 隐藏 FPS 面板）必须重注入。
+        await session.send('Page.reload', { ignoreCache: false });
+        await sleep(args.wait);
+        await evaluate(`(() => {
+          try { const st = document.createElement('style'); st.textContent = 'html,body,#GameCanvas{touch-action:none;}'; document.head.appendChild(st); } catch (e) {}
+          try { const p = globalThis.cc && globalThis.cc.profiler; if (p && typeof p.hideStats === 'function') p.hideStats(); } catch (e) {}
+          for (const sel of ['#profiler', '.profiler']) { const el = document.querySelector(sel); if (el) el.style.display = 'none'; }
+          return 'ok';
+        })()`);
+        console.log('🔄 重新加载页面（验存档恢复）');
+        await sleep(400);
       }
     }
   } catch (e) {

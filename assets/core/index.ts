@@ -118,6 +118,16 @@ export type { HintSuggestion, RotateResult } from './rules/placement';
 export { GuideMemory, guideDoneEventOf, guideKindOf, guideLearnedBy } from './guide';
 export type { GuideDoneEvent, GuideKind } from './guide';
 
+// 关卡进度（M2-7：首页选关 + 解锁；与 M2-8 存档强耦合）
+export {
+  continueLevelId,
+  coerceProgress,
+  defaultProgress,
+  isCleared,
+  isUnlocked,
+  markCleared,
+} from './progress';
+
 // 会话
 export { GameSession } from './session/GameSession';
 export type { GameSessionOptions } from './session/GameSession';

@@ -14,7 +14,7 @@
  * 同一形状；Scene 根节点上不带组件，这是引擎示例的既有惯例）。
  */
 
-import { _decorator, Component, JsonAsset, Node, UITransform } from 'cc';
+import { _decorator, Component, JsonAsset, Node, UITransform, director, Color, EventTouch, Graphics } from 'cc';
 import { DEBUG } from 'cc/env';
 
 import {
@@ -26,12 +26,16 @@ import {
   guideLearnedBy,
   itemAtCell,
   levelIdsOf,
+  markCleared,
   parseLevelBundle,
   rotateBy,
   suggestNextPlacement,
   UI_DESIGN_HEIGHT,
   UI_DESIGN_WIDTH,
   UI_HINT_AUTO_CLEAR_MS,
+  UI_HEADER_HEIGHT,
+  UI_PALETTE,
+  UI_SAFE_MARGIN,
   UI_TOOLBAR_BAND_CENTER_Y,
   UI_TOOLBAR_BUTTON_HEIGHT,
   UI_TOOLBAR_BUTTON_WIDTH,
@@ -43,8 +47,11 @@ import type {
   Intent,
   LevelSpec,
   LevelState,
+  SaveDataV1,
   SessionResult,
 } from '../core';
+import { loadProgress, saveProgress } from './storage';
+import { takePendingLevel } from './route';
 import { BoardView } from './BoardView';
 import { ConfirmDialog } from './ConfirmDialog';
 import { boxRectIn, centerRectIn } from './designRect';
@@ -151,6 +158,13 @@ export class GameController extends Component {
     this.buildGuide();
     this.buildDialog();
     this.buildToast();
+    this.buildBackButton();
+
+    // M2-7：若从首页带「要进哪一关」进来（route 模块单例），覆盖场景属性里的
+    // levelId；没有（直接预览 Game 场景 / 旧链路）则按场景属性默认（首关）。
+    const pending = takePendingLevel();
+    if (pending !== null) this.levelId = pending;
+
     // 装配与"换一关"是同一条路径（M2-1）：首启就是载入第 `levelId` 关
     this.startLevel(this.levelId);
   }
@@ -470,6 +484,20 @@ export class GameController extends Component {
             `[GameController] 🎉 通关！L${event.levelId} ${event.moves} 步` +
               ` ${(event.elapsedMs / 1000).toFixed(1)}s → SuccessOverlay`,
           );
+          // M2-7 / M2-8：通关即落盘进度（解锁下一关 + 记录已通关），封顶到本包
+          // 最后一关，避免越界解锁不存在的关。中途返回不记通关，故只在这里写。
+          {
+            const ids = levelIdsOf(this.levelJson?.json);
+            const maxLevelId = ids.length ? Math.max(...ids) : event.levelId;
+            const after = markCleared(loadProgress(), event.levelId, maxLevelId, Date.now());
+            saveProgress(after);
+            if (DEBUG) {
+              console.log(
+                `[GameController] 进度已保存：L${event.levelId} 通关 → 最高解锁 L${after.maxUnlockedLevelId}` +
+                  ` / 已通关 ${after.clearedLevelIds.length} 关`,
+              );
+            }
+          }
           this.successOverlay?.show(event, this.hasNextLevel());
           break;
       }
@@ -647,6 +675,57 @@ export class GameController extends Component {
     root.addChild(node); // 末尾追加 → 最顶层（盖住成功浮层与确认框，且不挡手势）
     this.toastView = node.addComponent(Toast);
     if (DEBUG) console.log('[GameController] 装不下提示条已注入 SafeAreaRoot');
+  }
+
+  /**
+   * 返回首页按钮（M2-7：首页选关 ↔ 游戏互通）。
+   *
+   * 代码注入 SafeAreaRoot（与工具栏同范式），置于左上角信息带。点击 → 跳回首页。
+   * 中途返回不写通关进度（只在 `level-cleared` 落盘）；通关动画 / 确认框期间冻结
+   * （`isFrozen`）不响应，避免浮层期误触回首页。
+   */
+  private buildBackButton(): void {
+    const root = this.dragController?.gestureRoot ?? this.node;
+    const node = new Node('BackButton');
+    node.layer = root.layer;
+    root.addChild(node);
+    node.setPosition(
+      -UI_DESIGN_WIDTH / 2 + UI_SAFE_MARGIN + 22,
+      UI_DESIGN_HEIGHT / 2 - UI_HEADER_HEIGHT / 2,
+      0,
+    );
+
+    const transform = node.getComponent(UITransform) ?? node.addComponent(UITransform);
+    transform.setContentSize(44, 44);
+    transform.setAnchorPoint(0.5, 0.5);
+
+    const g = node.addComponent(Graphics);
+    g.fillColor = Color.fromHEX(new Color(), UI_PALETTE.surfaceWhite);
+    g.roundRect(-22, -22, 44, 44, 12);
+    g.fill();
+    g.strokeColor = Color.fromHEX(new Color(), UI_PALETTE.border);
+    g.lineWidth = 2;
+    g.roundRect(-22, -22, 44, 44, 12);
+    g.stroke();
+    // 返回箭头（向左的「‹」）
+    g.lineWidth = 3;
+    g.strokeColor = Color.fromHEX(new Color(), UI_PALETTE.textPrimary);
+    g.moveTo(6, -8);
+    g.lineTo(-6, 0);
+    g.lineTo(6, 8);
+    g.stroke();
+
+    node.on(Node.EventType.TOUCH_START, (e: EventTouch) => (e.propagationStopped = true), this);
+    node.on(
+      Node.EventType.TOUCH_END,
+      (e: EventTouch) => {
+        e.propagationStopped = true;
+        if (this.isFrozen()) return; // 通关 / 确认框期间不响应
+        if (DEBUG) console.log('[GameController] 返回首页');
+        director.loadScene('Home');
+      },
+      this,
+    );
   }
 
   // ───────────────────────── M2-6 首次引导（代码注入 SafeAreaRoot） ─────────────────────────

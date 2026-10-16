@@ -26,7 +26,7 @@
     "_prefab": null,
     "autoReleaseAssets": false,
     "_globals": {
-      "__id__": 10
+      "__id__": 13
     },
     "_id": "d615820d-a802-4977-b05b-1d5edb0ea163"
   },
@@ -124,6 +124,9 @@
     "_children": [
       {
         "__id__": 8
+      },
+      {
+        "__id__": 10
       }
     ],
     "_active": true,
@@ -317,18 +320,96 @@
     "_id": "YHlL/4XHxLw0P1Nbe47TR1"
   },
   {
+    "__type__": "cc.Node",
+    "_name": "BootRoot",
+    "_objFlags": 0,
+    "_parent": {
+      "__id__": 4
+    },
+    "_children": [],
+    "_active": true,
+    "_components": [
+      {
+        "__id__": 11
+      },
+      {
+        "__id__": 12
+      }
+    ],
+    "_prefab": null,
+    "_lpos": {
+      "__type__": "cc.Vec3",
+      "x": 0,
+      "y": 0,
+      "z": 0
+    },
+    "_lrot": {
+      "__type__": "cc.Quat",
+      "x": 0,
+      "y": 0,
+      "z": 0,
+      "w": 1
+    },
+    "_lscale": {
+      "__type__": "cc.Vec3",
+      "x": 1,
+      "y": 1,
+      "z": 1
+    },
+    "_layer": 33554432,
+    "_euler": {
+      "__type__": "cc.Vec3",
+      "x": 0,
+      "y": 0,
+      "z": 0
+    },
+    "_id": "bt4nFl4Iu4hcSIpx2Ywz5v"
+  },
+  {
+    "__type__": "cc.UITransform",
+    "_name": "Canvas<UITransform>",
+    "_objFlags": 0,
+    "node": {
+      "__id__": 10
+    },
+    "_enabled": true,
+    "__prefab": null,
+    "_contentSize": {
+      "__type__": "cc.Size",
+      "width": 390,
+      "height": 844
+    },
+    "_anchorPoint": {
+      "__type__": "cc.Vec2",
+      "x": 0.5,
+      "y": 0.5
+    },
+    "_id": "DRHfpDjQL1ooe2L+eByX5j"
+  },
+  {
+    "__type__": "459958mAr1DUr8AzxFDwFDQ",
+    "_name": "",
+    "_objFlags": 0,
+    "node": {
+      "__id__": 10
+    },
+    "_enabled": true,
+    "__prefab": null,
+    "_id": "9hqTlrnL2wUH6z+bTBwm5n"
+  },
+  {
     "__type__": "cc.SceneGlobals",
     "ambient": {
-      "__id__": 11
+      "__id__": 14
     },
     "shadows": {
-      "__id__": 12
+      "__id__": 15
     },
     "_skybox": {
-      "__id__": 13
+      "__id__": 16
     },
     "fog": {
-      "__id__": 14
+      "__id__": 17
     }
   },
   {

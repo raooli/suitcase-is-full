@@ -1,0 +1,165 @@
+/**
+ * 关卡进度模型单测（M2-7：首页选关 + 解锁）。
+ *
+ * 重点：
+ * 1. 解锁门禁——第 1 关永远可进，未解锁关被挡；
+ * 2. `markCleared` 解锁下一关并封顶到最后一关；
+ * 3. `continueLevelId` 永远落在 [1, maxLevelId]；
+ * 4. 不可变——`markCleared` 不就地改原对象；
+ * 5. `coerceProgress` 对脏数据回退默认、对合法数据原样保真。
+ */
+
+import { describe, expect, it } from 'vitest';
+
+import {
+  coerceProgress,
+  continueLevelId,
+  defaultProgress,
+  isCleared,
+  isUnlocked,
+  markCleared,
+} from '../assets/core/progress';
+import type { SaveDataV1 } from '../assets/core/model/types';
+
+const MAX = 10;
+
+describe('defaultProgress：首启默认值', () => {
+  it('仅第 1 关解锁、无通关记录', () => {
+    const p = defaultProgress(1000);
+    expect(p.schemaVersion).toBe(1);
+    expect(p.maxUnlockedLevelId).toBe(1);
+    expect(p.clearedLevelIds).toEqual([]);
+    expect(p.muted).toBe(false);
+    expect(p.updatedAt).toBe(1000);
+  });
+});
+
+describe('isUnlocked：解锁门禁', () => {
+  it('第 1 关永远解锁', () => {
+    const p = defaultProgress(0);
+    expect(isUnlocked(p, 1)).toBe(true);
+  });
+
+  it('首启时第 2 关未解锁', () => {
+    const p = defaultProgress(0);
+    expect(isUnlocked(p, 2)).toBe(false);
+  });
+
+  it('通关第 1 关后第 2 关解锁、第 3 关仍锁', () => {
+    const p = markCleared(defaultProgress(0), 1, MAX, 1);
+    expect(isUnlocked(p, 1)).toBe(true);
+    expect(isUnlocked(p, 2)).toBe(true);
+    expect(isUnlocked(p, 3)).toBe(false);
+  });
+
+  it('非整数 / 0 / 负数 / 超大都不算解锁', () => {
+    const p = markCleared(defaultProgress(0), 1, MAX, 1);
+    expect(isUnlocked(p, 0)).toBe(false);
+    expect(isUnlocked(p, -1)).toBe(false);
+    expect(isUnlocked(p, 1.5)).toBe(false);
+    expect(isUnlocked(p, 999)).toBe(false);
+  });
+});
+
+describe('isCleared：通关标记', () => {
+  it('通关后该关标记为已通关', () => {
+    const p = markCleared(defaultProgress(0), 3, MAX, 1);
+    expect(isCleared(p, 3)).toBe(true);
+    expect(isCleared(p, 1)).toBe(false);
+  });
+});
+
+describe('markCleared：解锁下一关 + 封顶', () => {
+  it('通关 N 解锁 N+1，且去重（重复通关同关不产生重复记录）', () => {
+    let p = defaultProgress(0);
+    p = markCleared(p, 1, MAX, 1);
+    p = markCleared(p, 1, MAX, 2); // 重复
+    expect(p.clearedLevelIds).toEqual([1]);
+    expect(p.maxUnlockedLevelId).toBe(2);
+  });
+
+  it('多关连续通关累积解锁', () => {
+    let p = defaultProgress(0);
+    for (const id of [1, 2, 3, 4]) p = markCleared(p, id, MAX, id);
+    expect(p.clearedLevelIds).toEqual([1, 2, 3, 4]);
+    expect(p.maxUnlockedLevelId).toBe(5);
+  });
+
+  it('最后一关通关后不再解锁超出 maxLevelId 的关', () => {
+    let p = defaultProgress(0);
+    p = markCleared(p, MAX, MAX, 1); // 通关第 10 关
+    expect(p.maxUnlockedLevelId).toBe(MAX); // 不变成 11
+    expect(isUnlocked(p, MAX)).toBe(true);
+    expect(isUnlocked(p, MAX + 1)).toBe(false);
+  });
+
+  it('不可变：原对象不被修改', () => {
+    const original = defaultProgress(0);
+    const snapshot = JSON.parse(JSON.stringify(original));
+    markCleared(original, 1, MAX, 1);
+    expect(original).toEqual(snapshot);
+  });
+
+  it('updatedAt 被刷新为传入的时间', () => {
+    const p = markCleared(defaultProgress(0), 1, MAX, 12345);
+    expect(p.updatedAt).toBe(12345);
+  });
+});
+
+describe('continueLevelId：继续游戏入口', () => {
+  it('首启进第 1 关', () => {
+    expect(continueLevelId(defaultProgress(0), MAX)).toBe(1);
+  });
+
+  it('通关第 1 关后继续进第 2 关', () => {
+    const p = markCleared(defaultProgress(0), 1, MAX, 1);
+    expect(continueLevelId(p, MAX)).toBe(2);
+  });
+
+  it('通关最后一关后继续仍停在最后一关（封顶）', () => {
+    const p = markCleared(defaultProgress(0), MAX, MAX, 1);
+    expect(continueLevelId(p, MAX)).toBe(MAX);
+  });
+
+  it('maxLevelId <= 0 的极端输入不越界（返回 1）', () => {
+    expect(continueLevelId(defaultProgress(0), 0)).toBe(1);
+  });
+});
+
+describe('coerceProgress：脏数据容错', () => {
+  it('null / 非对象 → 默认', () => {
+    expect(coerceProgress(null, 5)).toEqual(defaultProgress(5));
+    expect(coerceProgress('garbage', 5)).toEqual(defaultProgress(5));
+  });
+
+  it('schemaVersion 不是 1 → 默认', () => {
+    expect(coerceProgress({ schemaVersion: 2, maxUnlockedLevelId: 9 }, 5)).toEqual(defaultProgress(5));
+  });
+
+  it('字段残缺 / 类型错误 → 各回退默认子值，不抛', () => {
+    const p = coerceProgress({ schemaVersion: 1 }, 7);
+    expect(p.maxUnlockedLevelId).toBe(1);
+    expect(p.clearedLevelIds).toEqual([]);
+    expect(p.muted).toBe(false);
+    expect(p.updatedAt).toBe(7);
+  });
+
+  it('clearedLevelIds 混入非正整数会被过滤并排序', () => {
+    const p = coerceProgress(
+      { schemaVersion: 1, maxUnlockedLevelId: 5, clearedLevelIds: [3, 1, 0, -2, 2, 1] },
+      7,
+    );
+    expect(p.clearedLevelIds).toEqual([1, 2, 3]);
+  });
+
+  it('合法的存档原样保真（含 muted / updatedAt）', () => {
+    const saved: SaveDataV1 = {
+      schemaVersion: 1,
+      maxUnlockedLevelId: 6,
+      clearedLevelIds: [1, 2, 3, 4, 5],
+      muted: true,
+      updatedAt: 999,
+    };
+    expect(coerceProgress(saved, 7)).toEqual(saved);
+  });
+});
