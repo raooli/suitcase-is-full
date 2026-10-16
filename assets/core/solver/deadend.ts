@@ -24,7 +24,6 @@
  * （形状 / 邻域约束可能仍无解）。所以它**绝不**用来触发失败态或禁用操作。
  */
 
-import { buildIndex, usableCellCount } from '../rules/board';
 import { suggestNextPlacement } from '../rules/placement';
 import { rotateBy } from '../geometry/shape';
 import type { LevelSpec, LevelState } from '../model/types';
@@ -32,69 +31,29 @@ import type { LevelSpec, LevelState } from '../model/types';
 export interface DeadendReport {
   /** 当前局面是否**确定**装不下：任何剩余物品都找不到合法落点 */
   readonly stuck: boolean;
-  /** 剩余可用格数（不含障碍） */
-  readonly freeCells: number;
-  /** 剩余未放置物品的总格数 */
-  readonly requiredCells: number;
 }
 
 /**
  * 判定「一定装不下」（UI Spec 13 / PRD R-10 / TDD 8.4）。
  *
- * 见文件头注释：用「无合法落点」取代退化（放置无关）的面积守恒快检；
- * 该判据复用 rules 层的 `suggestNextPlacement`，不另写扫描。
- * `freeCells` / `requiredCells` 仍计算出来供调试日志与事件透传，但不作为判据。
+ * 判据：剩余物品在当前棋盘里**是否还有任何合法落点**（含旋转）。
+ * 复用 rules 层的 `suggestNextPlacement`（返回 null = 没有任何托盘物品放得下），
+ * 不另写一遍扫描——"有无合法落点"的真相源只能有一处，否则会与工具栏 `canHint`
+ * 分叉。
  */
 export function checkDeadend(level: LevelSpec, state: LevelState): DeadendReport {
-  const index = buildIndex(level, state.placements);
-
-  // 只统计**被物品占用**的格。障碍格本身就不在 usableCellCount 里，
-  // 若把它也算成 used，可用空间会被双重扣减，导致几乎每关都误报「装不下」
-  // （M1-7 修复记录）。
-  let used = 0;
-  for (let r = 0; r < level.board.rows; r++) {
-    for (let c = 0; c < level.board.cols; c++) {
-      if (index.ownerAt(r, c) >= 0) used++;
-    }
-  }
-  const freeCells = usableCellCount(level) - used;
-
-  let requiredCells = 0;
-  const itemById = new Map(level.items.map((it) => [it.id, it]));
-  for (const id of state.tray) {
-    const item = itemById.get(id);
-    if (item) requiredCells += item.cells.length;
-  }
-
   // 空托盘（已通关）→ 不提示
-  if (state.tray.length === 0) return { stuck: false, freeCells, requiredCells };
+  if (state.tray.length === 0) return { stuck: false };
 
-  // 关键判据：是否**还有至少一件**剩余物品能找到合法落点（含旋转）。
-  // 一件都找不到 → 当前局面确定装不下。复用 rules 层 `suggestNextPlacement`
-  // （返回 null 即「没有任何托盘物品放得下」），不另写一遍扫描。
+  // 任何剩余物品都找不到合法落点 → 当前局面确定装不下
   const stuck = suggestNextPlacement(level, state) === null;
 
-  return { stuck, freeCells, requiredCells };
+  return { stuck };
 }
 
 /** 只需要一个布尔的便捷重载 */
 export function isDefinitelyStuck(level: LevelSpec, state: LevelState): boolean {
   return checkDeadend(level, state).stuck;
-}
-
-/**
- * 反向用途：**仅供调试与工具**，绝对不要用于游戏内逻辑。
- *
- * 它只回答「面积上够不够」，不回答「放得下吗」。
- * 起这个名字是为了让任何想在玩法里调用它的人先停一下。
- */
-export function areaIsNotObviouslyInsufficientForDebugOnly(
-  level: LevelSpec,
-  state: LevelState,
-): boolean {
-  const { stuck, freeCells, requiredCells } = checkDeadend(level, state);
-  if (stuck) return false;
-  return freeCells >= requiredCells;
 }
 
 /** 供 UI 拼提示文案用的数字：已放置物品数 / 总物品数 */

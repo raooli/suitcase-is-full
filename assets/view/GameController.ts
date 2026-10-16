@@ -776,6 +776,7 @@ export class GameController extends Component {
 
   /** 工具栏「重置」→ 弹确认框（UI Spec 149：二次确认） */
   private requestReset(): void {
+    this.guideOverlay?.hide(); // 开确认框前收起引导（与 showHint 同处理：非 dispatch 的 view 动作也收起引导）
     this.dialogOpen = true;
     this.confirmDialog?.show();
   }
@@ -795,6 +796,9 @@ export class GameController extends Component {
 
   /** 工具栏「提示」→ 用 core 的 `suggestNextPlacement` 高亮下一步落点（UI Spec 152 免费提示） */
   private showHint(): void {
+    // 引导出现时点「提示」= 玩家已动手（UI Spec 14「点击后即消失」）→ 收起引导，
+    // 避免提示高亮被引导蒙层压暗（二者同源、仅视觉冗余，M2-6 收尾修复）
+    this.guideOverlay?.hide();
     const session = this.gameSession;
     if (session === null) return;
     const suggestion = suggestNextPlacement(session.level, session.getState());

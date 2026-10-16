@@ -490,9 +490,7 @@ describe('GameSession：装不下提示（单向外加非阻断）', () => {
     const result = session.dispatch({ type: 'drop' });
 
     const warning = findEvent(result.events, 'deadlock-warning');
-    expect(warning).toBeDefined();
-    expect(warning?.freeCells).toBe(3);
-    expect(warning?.requiredCells).toBe(4);
+    expect(warning).toBeDefined(); // 剩余 2×2 物品放不进剩余 3 格 → 发信号（不附带任何数字，见 deadend.ts）
   });
 
   it('提示**不**阻断操作，也不判失败', () => {

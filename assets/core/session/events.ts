@@ -33,12 +33,8 @@ export type GameEvent =
       readonly elapsedMs: number;
       readonly moves: number;
     }
-  /** 面积守恒快检判定「一定装不下」。**单向断言、非阻断**（PRD R-10 / TDD 8.4） */
-  | {
-      readonly type: 'deadlock-warning';
-      readonly freeCells: number;
-      readonly requiredCells: number;
-    };
+  /** 确定「装不下」（棋盘里已无任何合法落点）。**单向断言、非阻断**（PRD R-10 / TDD 8.4） */
+  | { readonly type: 'deadlock-warning' };
 
 /** `dispatch()` 的返回值。**唯一**的状态读出口 */
 export interface SessionResult {

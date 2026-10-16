@@ -331,7 +331,7 @@ export const UI_GUIDE_TAP_DIP_PX = 10;
 /** 引导文案：字号、行高、可用宽度 */
 export const UI_GUIDE_TEXT_SIZE = 17;
 export const UI_GUIDE_TEXT_LINE_HEIGHT = 22;
-export const UI_GUIDE_TEXT_WIDTH = 300;
+export const UI_GUIDE_TEXT_WIDTH = 330;
 
 /**
  * 文案中心 y。放在棋盘**上方**的信息带：棋盘带中心 +68，L3/L4（5 行）棋盘半高

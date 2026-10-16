@@ -188,7 +188,7 @@ describe('OccupancyIndex', () => {
   });
 });
 
-describe('deadend：面积守恒快检', () => {
+describe('deadend：无合法落点判据（装不下）', () => {
   it('空间不足时报 stuck，并给出两个数字', () => {
     const level: LevelSpec = {
       levelId: 1,
@@ -207,8 +207,6 @@ describe('deadend：面积守恒快检', () => {
       selectedId: null,
     };
     const report = checkDeadend(level, state);
-    expect(report.freeCells).toBe(3);
-    expect(report.requiredCells).toBe(4);
     expect(report.stuck).toBe(true);
   });
 
@@ -231,7 +229,7 @@ describe('deadend：面积守恒快检', () => {
     expect(checkDeadend(level, state).stuck).toBe(false);
   });
 
-  it('障碍格不计入剩余空间（否则会低估困难程度）', () => {
+  it('障碍情境下仍正确判 stuck（旧面积快检会误判）', () => {
     const level: LevelSpec = {
       levelId: 3,
       title: 'blocked',
@@ -251,9 +249,7 @@ describe('deadend：面积守恒快检', () => {
       selectedId: null,
     };
     const report = checkDeadend(level, state);
-    expect(report.freeCells).toBe(2); // 4 - 2 障碍（障碍不计入剩余空间）
-    expect(report.requiredCells).toBe(8); // 2 件 × 4 格
-    expect(report.stuck).toBe(true);
+    expect(report.stuck).toBe(true); // 2×2 棋盘 + 2 障碍占满唯一落点 → 任何 2×2 都放不进
   });
 
   it('面积够但碎片化为「装不下」仍能检出（旧面积守恒快检的盲区）', () => {
@@ -276,9 +272,7 @@ describe('deadend：面积守恒快检', () => {
       selectedId: null,
     };
     const report = checkDeadend(level, state);
-    expect(report.freeCells).toBe(8); // 9 - 1 障碍
-    expect(report.requiredCells).toBe(4); // 一件 2×2
-    expect(report.stuck).toBe(true); // 面积够但中心障碍切断，2×2 无处落
+    expect(report.stuck).toBe(true); // 面积够（8≥4）但中心障碍切断，2×2 无处落——旧面积快检的盲区
   });
 });
 

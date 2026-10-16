@@ -360,11 +360,10 @@ export class GameSession {
   private afterCommit(events: GameEvent[]): void {
     const deadend = checkDeadend(this.level, this.state);
     if (deadend.stuck) {
-      events.push({
-        type: 'deadlock-warning',
-        freeCells: deadend.freeCells,
-        requiredCells: deadend.requiredCells,
-      });
+      // 只发「发生了」信号，视图层据此弹 Toast；不附带任何数字——
+      // freeCells/requiredCells 是 M2-4 旧面积判据的残留，作为判据已被
+      // 「无合法落点」取代、且从未被任何视图消费，故不再透传（见 deadend.ts）
+      events.push({ type: 'deadlock-warning' });
     }
 
     if (this.phase === 'WinAnimating' || this.phase === 'Completed') return;

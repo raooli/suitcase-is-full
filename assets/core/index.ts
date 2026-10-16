@@ -142,7 +142,6 @@ export type {
   SolveResult,
 } from './solver/packer';
 export {
-  areaIsNotObviouslyInsufficientForDebugOnly,
   checkDeadend,
   isDefinitelyStuck,
   occupiedCellsOf,
