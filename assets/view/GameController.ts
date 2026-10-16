@@ -29,6 +29,7 @@ import {
   markCleared,
   parseLevelBundle,
   rotateBy,
+  setLearnedLevels,
   suggestNextPlacement,
   UI_DESIGN_HEIGHT,
   UI_DESIGN_WIDTH,
@@ -122,8 +123,10 @@ export class GameController extends Component {
   /**
    * 引导记忆：「本关已学会后不再弹出」（UI Spec 7）。
    *
-   * 目前只在内存里（进程内有效）；M2-8 的存档接上后用 `learnedLevels()` /
-   * `restore()` 两个方向持久化，本组件不用改。
+   * M2-8 起与进度同命名空间持久化：① `onLoad` 用 `loadProgress().learnedLevelIds`
+   * 经 `restore()` 灌入（杀进程后「已学会」仍在）；② 学会时 `setLearnedLevels`
+   * + `saveProgress` 落盘。`GuideMemory` 仍只在内存里跑逻辑，`learnedLevels()` /
+   * `restore()` 是它与存档的两个对接方向。
    */
   private guideMemory = new GuideMemory();
 
@@ -164,6 +167,10 @@ export class GameController extends Component {
     // levelId；没有（直接预览 Game 场景 / 旧链路）则按场景属性默认（首关）。
     const pending = takePendingLevel();
     if (pending !== null) this.levelId = pending;
+
+    // M2-8：把存档里的「已学会引导」灌进内存记忆，必须在 `startLevel` 之前——
+    // 首关首次引导是否弹出由它决定，灌晚了会漏弹或错弹。
+    this.guideMemory.restore(loadProgress().learnedLevelIds);
 
     // 装配与"换一关"是同一条路径（M2-1）：首启就是载入第 `levelId` 关
     this.startLevel(this.levelId);
@@ -512,6 +519,9 @@ export class GameController extends Component {
       if (learned && !this.guideMemory.isLearned(this.levelId)) {
         this.guideMemory.markLearned(this.levelId);
         this.guideOverlay?.hide();
+        // M2-8：落地盘，与进度同命名空间（key `suitcase.progress.v1`）。
+        // 读改存：先取当前全量存档再覆盖 learnedLevelIds，避免丢通关/解锁记录。
+        saveProgress(setLearnedLevels(loadProgress(), this.guideMemory.learnedLevels(), Date.now()));
         if (DEBUG) {
           console.log(
             `[GameController] 引导已学会：L${this.levelId}（${guideKind}）→ 本关不再弹出`,
@@ -761,6 +771,10 @@ export class GameController extends Component {
     const levelId = session.level.levelId;
     const kind = guideKindOf(levelId);
     if (kind === null || !this.guideMemory.shouldShow(levelId)) {
+      if (DEBUG && kind !== null) {
+        // 有关引导但已学会：取证用（首进该关应看到「引导显示」，重启后再进应看到「引导跳过」）
+        console.log(`[GameController] 引导跳过：L${levelId} 已学会（不弹）`);
+      }
       overlay.hide();
       return;
     }
@@ -770,6 +784,7 @@ export class GameController extends Component {
       overlay.hide();
       return;
     }
+    if (DEBUG) console.log(`[GameController] 引导显示：L${levelId}（${kind}）`);
     overlay.show(request);
   }
 

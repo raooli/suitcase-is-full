@@ -126,6 +126,7 @@ export {
   isCleared,
   isUnlocked,
   markCleared,
+  setLearnedLevels,
 } from './progress';
 
 // 会话

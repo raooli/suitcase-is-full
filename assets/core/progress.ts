@@ -13,15 +13,33 @@
 
 import type { SaveDataV1 } from './model/types';
 
-/** 新存档默认值：`maxUnlockedLevelId = 1`（首关即解锁）、无通关记录、未静音。 */
+/** 新存档默认值：`maxUnlockedLevelId = 1`（首关即解锁）、无通关记录、无已学引导、未静音。 */
 export function defaultProgress(now: number): SaveDataV1 {
   return {
     schemaVersion: 1,
     maxUnlockedLevelId: 1,
     clearedLevelIds: [],
+    learnedLevelIds: [],
     muted: false,
     updatedAt: now,
   };
+}
+
+/**
+ * 把"关卡号数组"规整成合法的升序去重数组（M2-7 通关集合 / M2-8 已学引导集合共用）。
+ *
+ * 过滤非正整数（0 / 负数 / 小数 / 非数字），去重，升序排序。非法输入（非数组）
+ * 一律回退空数组——`coerceProgress` 与 `setLearnedLevels` 都靠它兜底脏数据。
+ */
+function cleanLevelIds(arr: unknown): number[] {
+  if (!Array.isArray(arr)) return [];
+  return Array.from(
+    new Set(
+      arr.filter(
+        (x): x is number => typeof x === 'number' && Number.isInteger(x) && x >= 1,
+      ),
+    ),
+  ).sort((a, b) => a - b);
 }
 
 /**
@@ -43,22 +61,15 @@ export function coerceProgress(value: unknown, now: number): SaveDataV1 {
       ? v.maxUnlockedLevelId
       : 1;
 
-  const clearedLevelIds = Array.isArray(v.clearedLevelIds)
-    ? Array.from(
-        new Set(
-          v.clearedLevelIds.filter(
-            (x): x is number => typeof x === 'number' && Number.isInteger(x) && x >= 1,
-          ),
-        ),
-      ).sort((a, b) => a - b)
-    : [];
-
+  const clearedLevelIds = cleanLevelIds(v.clearedLevelIds);
+  const learnedLevelIds = cleanLevelIds(v.learnedLevelIds);
   const muted = typeof v.muted === 'boolean' ? v.muted : false;
 
   return {
     schemaVersion: 1,
     maxUnlockedLevelId,
     clearedLevelIds,
+    learnedLevelIds,
     muted,
     updatedAt: typeof v.updatedAt === 'number' ? v.updatedAt : now,
   };
@@ -110,4 +121,23 @@ export function markCleared(p: SaveDataV1, levelId: number, maxLevelId: number, 
 export function continueLevelId(p: SaveDataV1, maxLevelId: number): number {
   const cap = Math.max(maxLevelId, 1);
   return Math.min(Math.max(p.maxUnlockedLevelId, 1), cap);
+}
+
+/**
+ * 记录已学会首次引导的关卡（M2-8：与进度同命名空间持久化）。
+ *
+ * 返回**新**进度（不可变），`learnedLevelIds` 经 `cleanLevelIds` 去重 + 排序、
+ * 过滤非正整数。调用方（`GameController`）传入 `guideMemory.learnedLevels()` 即可，
+ * 写入与读入（存档 → `restore`）共用同一数组语义，杜绝两份真相互相漂移。
+ */
+export function setLearnedLevels(
+  p: SaveDataV1,
+  levels: readonly number[],
+  now: number,
+): SaveDataV1 {
+  return {
+    ...p,
+    learnedLevelIds: cleanLevelIds(levels),
+    updatedAt: now,
+  };
 }

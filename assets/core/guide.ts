@@ -30,11 +30,13 @@
  * 判据写错的表现是"该教的时候不教 / 不该弹的时候反复弹"，只有跑起来才发现。
  * 进 core 后成为可断言的常量（`test/guide.spec.ts`）。
  *
- * ## 持久化（M2-8 再接）
+ * ## 持久化（M2-8 已接）
  *
- * `GuideMemory` 目前只存活在内存里（进程内有效）。M2-8 的 `StorageAdapter` 落地后，
- * 用 `learnedLevels()` / `restore()` 两个方向接上即可，调用方（`GameController`）
- * 无需改动。
+ * `GuideMemory` 只在内存里跑判定逻辑；它的"已学会"状态经 `learnedLevels()` /
+ * `restore()` 两个方向与存档（`SaveDataV1.learnedLevelIds`，同一 key
+ * `suitcase.progress.v1`）对接。`GameController` 负责：① `onLoad` 用
+ * `restore(loadProgress().learnedLevelIds)` 灌入；② 学会时 `setLearnedLevels`
+ * + `saveProgress` 落盘。两条真相互推导，不另存一份。
  */
 
 import type { GameEvent } from './session/events';

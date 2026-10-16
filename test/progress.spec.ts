@@ -18,17 +18,19 @@ import {
   isCleared,
   isUnlocked,
   markCleared,
+  setLearnedLevels,
 } from '../assets/core/progress';
 import type { SaveDataV1 } from '../assets/core/model/types';
 
 const MAX = 10;
 
 describe('defaultProgress：首启默认值', () => {
-  it('仅第 1 关解锁、无通关记录', () => {
+  it('仅第 1 关解锁、无通关记录、无已学引导', () => {
     const p = defaultProgress(1000);
     expect(p.schemaVersion).toBe(1);
     expect(p.maxUnlockedLevelId).toBe(1);
     expect(p.clearedLevelIds).toEqual([]);
+    expect(p.learnedLevelIds).toEqual([]);
     expect(p.muted).toBe(false);
     expect(p.updatedAt).toBe(1000);
   });
@@ -152,14 +154,57 @@ describe('coerceProgress：脏数据容错', () => {
     expect(p.clearedLevelIds).toEqual([1, 2, 3]);
   });
 
-  it('合法的存档原样保真（含 muted / updatedAt）', () => {
+  it('合法的存档原样保真（含 muted / updatedAt / learnedLevelIds）', () => {
     const saved: SaveDataV1 = {
       schemaVersion: 1,
       maxUnlockedLevelId: 6,
       clearedLevelIds: [1, 2, 3, 4, 5],
+      learnedLevelIds: [1, 3],
       muted: true,
       updatedAt: 999,
     };
     expect(coerceProgress(saved, 7)).toEqual(saved);
+  });
+
+  it('learnedLevelIds 混入非正整数会被过滤并排序', () => {
+    const p = coerceProgress(
+      { schemaVersion: 1, maxUnlockedLevelId: 5, learnedLevelIds: [3, 1, 0, -2, 1] },
+      7,
+    );
+    expect(p.learnedLevelIds).toEqual([1, 3]);
+  });
+});
+
+describe('setLearnedLevels：已学引导持久化（M2-8）', () => {
+  it('去重 + 排序 + 过滤非正整数，返回新对象', () => {
+    const p = setLearnedLevels(defaultProgress(0), [3, 1, 1, -2, 0, 2], 99);
+    expect(p.learnedLevelIds).toEqual([1, 2, 3]);
+    expect(p.updatedAt).toBe(99);
+  });
+
+  it('不可变：原对象不被修改', () => {
+    const original = defaultProgress(0);
+    const snapshot = JSON.parse(JSON.stringify(original));
+    setLearnedLevels(original, [1], 1);
+    expect(original).toEqual(snapshot);
+  });
+
+  it('非数组 / 缺省输入安全退化', () => {
+    expect(setLearnedLevels(defaultProgress(0), null as never, 1).learnedLevelIds).toEqual([]);
+    expect(setLearnedLevels(defaultProgress(0), undefined as never, 1).learnedLevelIds).toEqual([]);
+  });
+
+  it('与 markCleared 互不覆盖：先学引导再通关，两者都在', () => {
+    let p = setLearnedLevels(defaultProgress(0), [1], 1);
+    p = markCleared(p, 1, MAX, 2);
+    expect(p.learnedLevelIds).toEqual([1]);
+    expect(p.clearedLevelIds).toEqual([1]);
+    expect(p.maxUnlockedLevelId).toBe(2);
+  });
+
+  it('markCleared 透传已学引导（不丢）', () => {
+    const base = setLearnedLevels(defaultProgress(0), [1, 3], 1);
+    const after = markCleared(base, 2, MAX, 2);
+    expect(after.learnedLevelIds).toEqual([1, 3]);
   });
 });

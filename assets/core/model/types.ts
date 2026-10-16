@@ -158,6 +158,15 @@ export interface SaveDataV1 {
   /** 1..10 */
   readonly maxUnlockedLevelId: number;
   readonly clearedLevelIds: readonly number[];
+  /**
+   * 已学会首次引导的关卡（M2-8：与进度同命名空间持久化）。
+   *
+   * 「本关已学会后不再弹出」的依据（UI Spec 7）。只记 `levelId`，不记"显示过几次"
+   * —— 跳过（拖动/点击让引导消失）**不记学会**，重进本关仍会再提示一次（见
+   * `guide.ts` 文件头语义）。与 `clearedLevelIds` 一样，脏数据由 `coerceProgress`
+   * 兜底过滤（非正整数 / 重复 / 乱序都归一成升序去重数组）。
+   */
+  readonly learnedLevelIds: readonly number[];
   readonly muted: boolean;
   /** 时间戳，仅调试用 */
   readonly updatedAt: number;
