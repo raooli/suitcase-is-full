@@ -690,7 +690,7 @@ export type GameEvent =
   | { type: 'undo-applied'; steps: number }
   | { type: 'level-reset' }
   | { type: 'level-cleared'; levelId: number; elapsedMs: number; moves: number }
-  | { type: 'deadlock-warning'; freeCells: number; requiredCells: number };  // 见 8.4
+  | { type: 'deadlock-warning' };  // 见 8.4
 ```
 
 ### 8.3 铁律
@@ -705,17 +705,19 @@ export type GameEvent =
 按 0.1 节的数据，L05～L08 的随机落位死局率 >99%。玩家一定会卡，而 PRD 明确"不判失败"。**折中方案：只在物理上确定装不下时提示，不做求解、不判失败。**
 
 ```ts
-// solver/deadend.ts：面积守恒快检
-export function isDefinitelyStuck(level: LevelSpec, state: LevelState): boolean {
-  const freeCells = 可用格数 - 已占用格数;
-  const remaining = state.tray.reduce((s, id) => s + itemCellCount(id), 0);
-  return freeCells < remaining;      // 剩余空间 < 剩余物品总面积 ⇒ 必然装不下
+// solver/deadend.ts：无合法落点判据（复用 rules 层 suggestNextPlacement，
+// 返回 null 即「没有任何托盘物品放得下」，不另写一遍扫描）
+export interface DeadendReport { readonly stuck: boolean }
+
+export function checkDeadend(level: LevelSpec, state: LevelState): DeadendReport {
+  if (state.tray.length === 0) return { stuck: false }; // 已通关
+  return { stuck: suggestNextPlacement(level, state) === null };
 }
 ```
 
-触发时给一个**非阻断**提示：「剩下的空间装不下啦，试试挪一挪或者撤回一步」。O(1) 计算，每次提交后跑一次。
+触发时给一个**非阻断**提示：「剩下的空间装不下啦，试试挪一挪或者撤回一步」。每次提交后跑一次（复用 `suggestNextPlacement`，不另写扫描）。
 
-**注意边界：** 这个检查是**充分不必要**的——`freeCells >= remaining` 不代表装得下（形状不匹配）。所以它只能报"确定装不下"，不能报"确定装得下"。别把它写成"无解弹窗"，也不要用它触发任何失败态。
+**注意边界：** 这个检查是「确定装不下」的**必要信号**——只要还有一件物品能在当前空格里找到（含旋转的）合法落点，就不提示；一件都找不到才提示。它仍然**单向**：不提示只说明"至少能放下一件"，不代表最终一定装得下（形状 / 邻域约束可能仍无解）。所以它绝不触发失败态或禁用操作。
 
 **完整求解式提示（P1）** 才用 `solver.packer`，且只用于"给一个安全落位建议"，不用于判定失败。
 

@@ -23,6 +23,16 @@
 
 ## 提交记录（倒序）
 
+### `aa3004b` · fix: M2-6 复审三处 [低]（引导收起漏点 / L3 文案孤字 / M2-4 遥测残留）
+
+| 项 | 内容 |
+| --- | --- |
+| 日期 | 2026-10-16 15:04 |
+| 文件 | `assets/core/config.ts`、`assets/core/index.ts`、`assets/core/session/GameSession.ts`、`assets/core/session/events.ts`、`assets/core/solver/deadend.ts`、`assets/view/GameController.ts`、`test/model.spec.ts`、`test/session.spec.ts`（8 文件，+23/−74） |
+| 要点 | ① **非 dispatch 的 view 动作不收起引导**：`showHint()`（提示按钮）与 `requestReset()`（开确认框）不走 `dispatch`，故不触发 `afterDispatch` 的收起逻辑 → 引导显示时点「提示」，提示高亮被引导蒙层压暗（二者同源 `suggestNextPlacement`、无矛盾仅视觉冗余；「重置」开框同理但 L1/L3 首启 `canReset=false` 实际不可达）。两处各补 `guideOverlay?.hide()`（`hide` 幂等、`show()` 内部本就会先 `hide`）——UI Spec 14「点击后即消失」对非 dispatch 的点击同样成立 ② **L3 文案换行孤字**：`放不下？选中物品后点「旋转」换个方向` = 18 全角字 × 字号 17 = **306px > `UI_GUIDE_TEXT_WIDTH` 300** → 折 2 行、第 2 行只余「向」一字。加宽常量 **300 → 330**（24px 余量）单行容纳；drag 文案 170px 不受影响 ③ **M2-4 遥测残留清理**：`deadlock-warning` 事件的 `freeCells`/`requiredCells` 自「无合法落点」判据取代面积守恒后即**无消费方**（`Toast` 只显固定文案，全仓无 view 读这两字段）——彻底移除：`events.ts` 事件类型收敛为 `{ type: 'deadlock-warning' }`、`GameSession.afterCommit` 不再透传数字、`deadend.ts` 删除两项计算与 `DeadendReport` 字段、**连带删除唯一消费它们的死代码 `areaIsNotObviouslyInsufficientForDebugOnly`**（全仓无调用）、`core/index.ts` 移除该导出。**判据行为完全不变**（`stuck` 仍 = `suggestNextPlacement(...) === null`） |
+| 验收 | **`npm run check` 281/281**（纯清理 + 常量 + 4 行 view，用例数不变）；**无头预览零 Console 错误**：L3（临时置场景 `levelId=3`，验完 `git checkout -- assets/scenes/Game.scene` 还原）引导文案**单行无孤字**（截图确认「放不下？选中物品后点『旋转』换个方向」一行排开）；`--tap 330,796` 点「提示」→ `[ToolbarView] 点击「提示」` → `[GuideOverlay] 收起` → `[BoardView] 提示高亮 3 格` + `[GameController] 提示：L03_A → (0,0) rot=0`（修复①实证：非 dispatch 点击也收起引导） |
+| 关联 | 收口 **M2-6**（`2de79e0` + 文档 `899d35f`）复审提出的三条 [低]（均不阻塞）；同步 **docs/04-TDD 8.4** 节示例（面积守恒快检 → 无合法落点判据、边界说明改为「单向信号而非充分不必要」）；测试 `describe` 名「面积守恒快检」→「无合法落点判据」（判据早已替换，名字不留误导）；无 core 契约变化，`cellSize/cellPx` 算术仍仅存在于 `BoardView.ts` + `config.ts` |
+
 ### `2de79e0` · feat: M2-6 首次引导层（PRD F13：L1 拖拽教学 / L3 旋转教学，可跳过、学会后不再弹）
 
 | 项 | 内容 |
