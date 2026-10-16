@@ -19,8 +19,11 @@ import { DEBUG } from 'cc/env';
 
 import {
   GameSession,
+  GuideMemory,
   LevelDataError,
   findItem,
+  guideKindOf,
+  guideLearnedBy,
   itemAtCell,
   levelIdsOf,
   parseLevelBundle,
@@ -30,10 +33,13 @@ import {
   UI_DESIGN_WIDTH,
   UI_HINT_AUTO_CLEAR_MS,
   UI_TOOLBAR_BAND_CENTER_Y,
+  UI_TOOLBAR_BUTTON_HEIGHT,
+  UI_TOOLBAR_BUTTON_WIDTH,
   UI_TOOLBAR_HEIGHT,
 } from '../core';
 import type {
   BoardSpec,
+  GuideKind,
   Intent,
   LevelSpec,
   LevelState,
@@ -41,7 +47,11 @@ import type {
 } from '../core';
 import { BoardView } from './BoardView';
 import { ConfirmDialog } from './ConfirmDialog';
+import { boxRectIn, centerRectIn } from './designRect';
+import type { DesignRect } from './designRect';
 import { DragController } from './DragController';
+import { GuideOverlay } from './GuideOverlay';
+import type { GuideRequest } from './GuideOverlay';
 import { ItemLayer } from './ItemLayer';
 import { PreviewLayer } from './PreviewLayer';
 import { SuccessOverlay } from './SuccessOverlay';
@@ -99,6 +109,17 @@ export class GameController extends Component {
   /** 「装不下」非阻断提示条（M2-4）：运行时代码注入 SafeAreaRoot，置于最顶层 */
   private toastView: Toast | null = null;
 
+  /** 首次引导层（M2-6）：运行时代码注入 SafeAreaRoot，夹在工具栏与确认框之间 */
+  private guideOverlay: GuideOverlay | null = null;
+
+  /**
+   * 引导记忆：「本关已学会后不再弹出」（UI Spec 7）。
+   *
+   * 目前只在内存里（进程内有效）；M2-8 的存档接上后用 `learnedLevels()` /
+   * `restore()` 两个方向持久化，本组件不用改。
+   */
+  private guideMemory = new GuideMemory();
+
   /** 确认框是否打开（期间冻结拖拽手势，双保险） */
   private dialogOpen = false;
 
@@ -117,14 +138,21 @@ export class GameController extends Component {
       // 尺寸体检表：逐关打印 cellSize 折算（G1-D3 要盯它在 320px 屏是否过 44 下限）
       BoardView.logSizingTable(this.bundleLevels());
     }
-    // 装配与"换一关"是同一条路径（M2-1）：首启就是载入第 `levelId` 关
-    this.startLevel(this.levelId);
     this.wireSuccessOverlay();
-    // M2-2 工具栏 + M2-3 重置确认框：运行时代码注入 SafeAreaRoot（场景 JSON 的
-    // `__type__` 编码易碎，故不手改场景，改由代码建节点 + addComponent）
+    // M2-2 工具栏 / M2-6 引导层 / M2-3 确认框 / M2-4 提示条：运行时代码注入
+    // SafeAreaRoot（场景 JSON 的 `__type__` 编码易碎，故不手改场景，改由代码
+    // 建节点 + addComponent）。
+    //
+    // **必须在 `startLevel` 之前建好**：首关的首次引导由 `startLevel` 触发，
+    // 那时得有挂载点（M2-6 之前这几行在 startLevel 之后，引导层一加就会踩到）。
+    // 层序 = 工具栏 → 引导 → 确认框 → 提示条（后者盖住前者；引导要压暗工具栏，
+    // 但确认框与提示条都不该被压暗）。
     this.buildToolbar();
+    this.buildGuide();
     this.buildDialog();
     this.buildToast();
+    // 装配与"换一关"是同一条路径（M2-1）：首启就是载入第 `levelId` 关
+    this.startLevel(this.levelId);
   }
 
   /**
@@ -162,6 +190,9 @@ export class GameController extends Component {
     this.successOverlay?.hide();
     // 工具栏可用态随关卡刷新（首关 / 换关后重算）
     this.updateToolbarState();
+    // 首次引导（M2-6）：**放在 refreshAll 之后**——引导要圈住托盘槽位与棋盘格，
+    // 那两个节点得先存在。换关 / 重开都走这里，学会过或无关引导的关会自己收起。
+    this.maybeShowGuide();
 
     if (DEBUG) {
       const next = this.hasNextLevel() ? `L${levelId + 1}` : '（已是最后一关）';
@@ -327,6 +358,20 @@ export class GameController extends Component {
     // 任何状态变更都清掉提示高亮（提示是临时态，不该残留到下一步操作）
     this.clearHint();
 
+    // M2-6：引导**可跳过**——玩家一动手就收起（UI Spec 14），但**不记学会**：
+    // 规格写的是"已学会后不再弹出"，手一抖点掉引导不该让人永久失去这次教学。
+    //
+    // 两个刻意的例外：
+    // - `move`：拖拽途中的连续事件，收起会让引导在第一帧就闪没（drop 之前必然
+    //   有 grab，那时已经收过）；
+    // - 第 3 关（rotate）的 `select`：**选中是"点旋转按钮"的前置步骤**，这时
+    //   收起等于把教学掐断在半路——UI Spec 14 的"点击后即消失"指的是点了被教
+    //   的那个东西。拖动 / 旋转 / 放入照常收起。
+    if (this.guideOverlay?.isShowing === true && intent.type !== 'move') {
+      const keepingForRotateStep = guideKindOf(this.levelId) === 'rotate' && intent.type === 'select';
+      if (!keepingForRotateStep) this.guideOverlay.hide();
+    }
+
     // ① 拖拽生命周期：被拖物品在两个视图里都排除；松手/取消/取出后恢复。
     //    grab 用 `result.phase === 'Dragging'` 判断 session 是否收下这次起拖
     //    （冻结期会被拒），不靠猜。
@@ -427,6 +472,23 @@ export class GameController extends Component {
           );
           this.successOverlay?.show(event, this.hasNextLevel());
           break;
+      }
+    }
+
+    // M2-6：学会判定（UI Spec 7「本关已学会后不再弹出」）。判据问 core
+    // （`guideDoneEventOf`：第 1 关 = 成功放入一件，第 3 关 = 成功旋转一次），
+    // view 不自己解释事件含义。
+    const guideKind = guideKindOf(this.levelId);
+    if (guideKind !== null) {
+      const learned = result.events.some((event) => guideLearnedBy(guideKind, event.type));
+      if (learned && !this.guideMemory.isLearned(this.levelId)) {
+        this.guideMemory.markLearned(this.levelId);
+        this.guideOverlay?.hide();
+        if (DEBUG) {
+          console.log(
+            `[GameController] 引导已学会：L${this.levelId}（${guideKind}）→ 本关不再弹出`,
+          );
+        }
       }
     }
 
@@ -585,6 +647,111 @@ export class GameController extends Component {
     root.addChild(node); // 末尾追加 → 最顶层（盖住成功浮层与确认框，且不挡手势）
     this.toastView = node.addComponent(Toast);
     if (DEBUG) console.log('[GameController] 装不下提示条已注入 SafeAreaRoot');
+  }
+
+  // ───────────────────────── M2-6 首次引导（代码注入 SafeAreaRoot） ─────────────────────────
+
+  /**
+   * 创建引导层节点并挂到 `SafeAreaRoot`，夹在工具栏与确认框之间。
+   *
+   * 与 `buildToast` 同构：**不注册任何触摸监听、不 `propagationStopped`**
+   * （见 `GuideOverlay.ts` 头部约束）——引导层是整屏遮罩，一旦吃掉事件，
+   * "引导出现时棋盘仍可被拖拽 / 玩家拖动或点击即跳过"（UI Spec 5.2·14）就废了。
+   * 节点初始 `active=false`（`GuideOverlay.onLoad`）。
+   */
+  private buildGuide(): void {
+    const root = this.dragController?.gestureRoot ?? this.node;
+    const node = new Node('GuideOverlay');
+    node.layer = root.layer;
+    root.addChild(node); // 追加在工具栏之后、确认框与提示条之前
+    this.guideOverlay = node.addComponent(GuideOverlay);
+    if (DEBUG) console.log('[GameController] 首次引导层已注入 SafeAreaRoot');
+  }
+
+  /**
+   * 载入关卡后决定弹不弹引导（M2-6）。
+   *
+   * 三条出口：① 这一关没有引导 / ② 已学会 → **收起**（换关到无关卡时必须显式
+   * 收，否则上一关的引导会残留到下一关）；③ 该弹 → 组装洞与手指路径后显示。
+   */
+  private maybeShowGuide(): void {
+    const overlay = this.guideOverlay;
+    const session = this.gameSession;
+    if (overlay === null || session === null) return;
+
+    const levelId = session.level.levelId;
+    const kind = guideKindOf(levelId);
+    if (kind === null || !this.guideMemory.shouldShow(levelId)) {
+      overlay.hide();
+      return;
+    }
+
+    const request = this.buildGuideRequest(kind, session);
+    if (request === null) {
+      overlay.hide();
+      return;
+    }
+    overlay.show(request);
+  }
+
+  /**
+   * 组装一次引导请求：要挖洞高亮哪些区域、手指从哪走到哪。
+   *
+   * - **拖拽型（第 1 关）**：高亮"托盘里的下一件"+"它该去的格子"，手指演示
+   *   这条路径（GDD 3.1）。落点**不查硬编码的标准解**，而是复用工具栏「提示」
+   *   用的同一个纯函数 `suggestNextPlacement`——引导与提示必须是同一个答案，
+   *   各算一份就会出现"引导指这格、提示指那格"。
+   * - **点击型（第 3 关）**：只高亮「旋转」按钮，手指在按钮上做点按循环
+   *   （UI Spec 5.2「第 3 关首次进入展示点击旋转按钮引导」）。GDD 3.3 的
+   *   "优先引导 `L03_D`"是内容层面的意图（那件长柄伞必须转才能放），视觉引导
+   *   按 UI Spec 指向按钮。
+   *
+   * @returns `null` = 定位不到目标（缺节点 / 没有可用落点）→ 调用方收起引导，
+   *   降级而不报错（引导是锦上添花，绝不能因为定位失败挡住开局）。
+   */
+  private buildGuideRequest(kind: GuideKind, session: GameSession): GuideRequest | null {
+    const root = this.dragController?.gestureRoot ?? this.node;
+    const holes: DesignRect[] = [];
+
+    if (kind === 'rotate') {
+      const button = this.toolbarView?.rotateButtonNode() ?? null;
+      if (button === null) return null;
+      const rect = centerRectIn(
+        root,
+        button,
+        UI_TOOLBAR_BUTTON_WIDTH,
+        UI_TOOLBAR_BUTTON_HEIGHT,
+      );
+      if (rect === null) return null;
+      holes.push(rect);
+      return { kind, holes, from: null, to: [rect.x + rect.w / 2, rect.y + rect.h / 2] };
+    }
+
+    // 拖拽型：托盘里的下一件 + 它该去的格子
+    const state = session.getState();
+    const hint = suggestNextPlacement(session.level, state);
+    const tray = this.trayView;
+    const board = this.boardView;
+    if (hint === null || tray === null || board === null) return null;
+
+    const slot = tray.slotNodeOf(hint.itemId);
+    const slotSize = tray.slotPixelSize();
+    const trayRect = slot === null ? null : centerRectIn(root, slot, slotSize, slotSize);
+
+    const box = board.cellsLocalBox(hint.cells, [hint.row, hint.col]);
+    const boardRect = boxRectIn(root, board.node, box.cx, box.cy, box.w, box.h);
+
+    if (trayRect !== null) holes.push(trayRect);
+    if (boardRect !== null) holes.push(boardRect);
+    if (holes.length === 0) return null;
+
+    // 手指：托盘槽位中心 → 棋盘目标格中心（任一缺失就退化为"只画洞不画手指"）
+    const from: [number, number] | null =
+      trayRect === null ? null : [trayRect.x + trayRect.w / 2, trayRect.y + trayRect.h / 2];
+    const to: [number, number] | null =
+      boardRect === null ? null : [boardRect.x + boardRect.w / 2, boardRect.y + boardRect.h / 2];
+
+    return { kind, holes, from, to };
   }
 
   /** 重算工具栏四个按钮的可用态（由当前 session 状态推出） */

@@ -264,6 +264,25 @@ export class TrayView extends Component {
     }
   }
 
+  /**
+   * 槽位节点（引导层定位高亮洞用，M2-6）。
+   *
+   * 返回**节点**而不是坐标：槽位挂在 `TrayContent` 上，M2-11 的横向滚动会平移
+   * 容器，节点的世界位置天然带着当前 `scrollOffset`；自己按静态布局算会算错
+   * （滚过之后高亮圈会停在错误的位置）。
+   */
+  slotNodeOf(itemId: string): Node | null {
+    for (const slot of this.slots) {
+      if (slot.getItemId() === itemId) return slot.node;
+    }
+    return null;
+  }
+
+  /** 当前槽位边长（M2-11 会按件数夹取，故要问当前值而不是常量） */
+  slotPixelSize(): number {
+    return this.slotSize;
+  }
+
   /** 槽位在内容坐标系里的中心 x：左对齐逐个排开（算术在 core `traySlotCenterX`） */
   static slotCenterX(index: number, slotSize: number): number {
     return traySlotCenterX(index, slotSize, UI_TRAY_GAP, TrayView.contentWidth());

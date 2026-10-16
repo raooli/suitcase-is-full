@@ -237,6 +237,24 @@ export class BoardView extends Component {
     return isTakeoutPosition(centerX, centerY, this.boardWidth(), this.boardHeight(), unit);
   }
 
+  /**
+   * 一组格按锚点落位后的**局部包围盒**（中心 + 尺寸），供引导层定位高亮洞
+   * （M2-6：「突出 `L01_A` 以及它在标准解中的目标位置」）。
+   *
+   * 与 `isTakeout` 同一口径（锚点 = 包围盒左上角、y 向上），同样只在本文件做
+   * 格→像素换算（R-A6）；调用方拿到的已是像素，只负责把它转到引导层坐标系。
+   */
+  cellsLocalBox(
+    cells: readonly RC[],
+    anchor: RC,
+  ): { cx: number; cy: number; w: number; h: number } {
+    const corner = this.gridToLocal(anchor[0], anchor[1]);
+    const box = bboxOf(cells);
+    const w = box.width * this.cellPx;
+    const h = box.height * this.cellPx;
+    return { cx: corner.x + w / 2, cy: corner.y - h / 2, w, h };
+  }
+
   private boardWidth(): number {
     return (this.board?.cols ?? 0) * this.cellPx;
   }

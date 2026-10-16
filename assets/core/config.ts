@@ -296,6 +296,62 @@ export const UI_TOAST_RADIUS = 22;
  */
 export const UI_TOAST_Y = 330;
 
+// ─────────────── 首次引导层（M2-6 / PRD F13 / UI Spec 5.2·7·14） ───────────────
+
+/**
+ * 引导遮罩 alpha（0–1）。**比通关浮层（0.55）轻**：引导要让玩家看清被引导区域
+ * 的上下文（棋盘格线、托盘里的物品长什么样），压太黑反而学不会。
+ */
+export const UI_GUIDE_MASK_ALPHA = 0.45;
+
+/** 高亮矩形（洞）的描边宽度与圆角 */
+export const UI_GUIDE_HOLE_BORDER_PX = 3;
+export const UI_GUIDE_HOLE_RADIUS = 14;
+
+/**
+ * 洞相对目标矩形的外扩（px）。让描边圈在目标**外面**，不压住目标本身的边缘
+ * （托盘槽位有自己的选中描边，叠在一起会糊）。
+ */
+export const UI_GUIDE_HOLE_PADDING = 6;
+
+/** 手指示意：指身尺寸（程序绘制，无贴图；圆角取半宽 → 胶囊形） */
+export const UI_GUIDE_FINGER_WIDTH = 26;
+export const UI_GUIDE_FINGER_HEIGHT = 34;
+
+/** 手指示意的描边宽度（棕描边，与奶油填充配成 UI Spec 的暖色系） */
+export const UI_GUIDE_FINGER_BORDER_PX = 2;
+
+/** 手指循环动画：单程滑动时长与两端停顿（ms） */
+export const UI_GUIDE_FINGER_MOVE_MS = 900;
+export const UI_GUIDE_FINGER_PAUSE_MS = 260;
+
+/** 「点击」型引导（第 3 关旋转）手指的点按幅度（px） */
+export const UI_GUIDE_TAP_DIP_PX = 10;
+
+/** 引导文案：字号、行高、可用宽度 */
+export const UI_GUIDE_TEXT_SIZE = 17;
+export const UI_GUIDE_TEXT_LINE_HEIGHT = 22;
+export const UI_GUIDE_TEXT_WIDTH = 300;
+
+/**
+ * 文案中心 y。放在棋盘**上方**的信息带：棋盘带中心 +68，L3/L4（5 行）棋盘半高
+ * 约 +214 → 棋盘顶 ≈ +282，所以 `+285` 始终在棋盘之上、Toast（+330）之下，
+ * 与两者都不叠，也不遮挡被引导的棋盘 / 托盘 / 工具栏。
+ */
+export const UI_GUIDE_TEXT_Y = 285;
+
+/**
+ * 引导文案（UI Spec 14「可跳过」：只说"怎么做"，不写"点击继续"这类阻断措辞，
+ * 也不放按钮——玩家**拖动或点击**即消失）。
+ *
+ * - 第 1 关：GDD 3.1「长按任一物品并拖到箱子里」。
+ * - 第 3 关：GDD 3.3「转个方向试试？选中后点击一次顺时针旋转即可放下」。
+ */
+export const UI_GUIDE_TEXT = {
+  drag: '按住物品，拖进行李箱',
+  rotate: '放不下？选中物品后点「旋转」换个方向',
+} as const;
+
 // ───────────────────────── 通关浮层（UI Spec 5.3） ─────────────────────────
 
 /**

@@ -87,6 +87,17 @@ export class ToolbarView extends Component {
   }
 
   /**
+   * 「旋转」按钮节点（第 3 关引导要圈出它，M2-6 / GDD 3.3）。
+   *
+   * 返回**节点**而不是常量坐标：按钮位置由 `buildOnce` 按 config 的按钮宽与间距
+   * 排出来，让调用方另算一遍就是第二份布局真相（两份必然分叉）。
+   * 按钮是懒建的，`show()` / `updateState()` 之前返回 `null`。
+   */
+  rotateButtonNode(): Node | null {
+    return this.buttons.get('rotate')?.node ?? null;
+  }
+
+  /**
    * 重算四个按钮的可用态。**每次状态变更都要调**（选中变化、撤回栈变化、进度
    * 变化都会改可用态）——不是懒加载的 `built` 提前 return 能吞掉的（M1-7 教训）。
    */

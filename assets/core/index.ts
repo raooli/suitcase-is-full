@@ -87,6 +87,8 @@ export {
   traySlotInWindow,
 } from './geometry/trayScroll';
 export { isTakeoutPosition } from './geometry/takeout';
+export { maskBands, screenRect } from './geometry/maskHoles';
+export type { Rect as MaskRect } from './geometry/maskHoles';
 
 // 规则
 export {
@@ -111,6 +113,10 @@ export {
   trayRotationOf,
 } from './rules/placement';
 export type { HintSuggestion, RotateResult } from './rules/placement';
+
+// 首次引导规则（M2-6 / PRD F13）
+export { GuideMemory, guideDoneEventOf, guideKindOf, guideLearnedBy } from './guide';
+export type { GuideDoneEvent, GuideKind } from './guide';
 
 // 会话
 export { GameSession } from './session/GameSession';
