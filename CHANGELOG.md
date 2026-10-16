@@ -23,6 +23,16 @@
 
 ## 提交记录（倒序）
 
+### `2de79e0` · feat: M2-6 首次引导层（PRD F13：L1 拖拽教学 / L3 旋转教学，可跳过、学会后不再弹）
+
+| 项 | 内容 |
+| --- | --- |
+| 日期 | 2026-10-16 10:00 |
+| 文件 | `assets/core/config.ts`、`assets/core/guide.ts`、`assets/core/geometry/maskHoles.ts`、`assets/core/index.ts`、`assets/view/GuideOverlay.ts`、`assets/view/designRect.ts`、`assets/view/BoardView.ts`、`assets/view/TrayView.ts`、`assets/view/ToolbarView.ts`、`assets/view/GameController.ts`、`test/guide.spec.ts`、`test/maskHoles.spec.ts`（16 文件，+1160/−4，含 4 个新 `.ts` + `.meta`） |
+| 要点 | ① **`GuideOverlay`（新组件）**：整屏蒙层按 core `maskBands` 挖洞 + 洞亮色描边 + 程序绘制手指循环动画（拖拽型 起点↔终点；点击型 原地按压）+ 文案 `Label`。与 `Toast` 同范式——**不注册触摸监听、不设 `propagationStopped`**，引导出现时棋盘仍可拖拽、按钮仍可点（UI Spec 14「可跳过」）；`onLoad` 置 `active=false`，`hide()` 停 tween 并**归位手指**（M1-5/M1-7 教训：`Tween.stopAllByTarget` 只停动画不动节点）② **`core/guide.ts`（新）**：`guideKindOf`（L1=`drag`/L3=`rotate`/其余无，PRD F13「实际关次以 GDD 为准」）+ `guideDoneEventOf`（drag→`placement-committed`、rotate→`item-rotated`，用 `Extract<GameEvent,...>` 取类型防事件改名静默失配）+ `GuideMemory`「**已学会**后本关不再弹出」——**语义关键**：跳过（拖动/点击让引导消失）**不记学会**，重进本关仍再提示一次；持久化留 M2-8 的 `learnedLevels()`/`restore()` 两个方向，调用方无需改 ③ **`core/geometry/maskHoles.ts`（新）**：整屏遮罩挖多洞的条带切割（纯几何，与 `trayScroll`/`lift`/`takeout` 同思路进 core 以求单测兜底）④ **`view/designRect.ts`（新）**：节点→设计坐标矩形，走 `convertToWorldSpaceAR → convertToNodeSpaceAR` **两点转换**（不依赖层级、自动带 Fit Width 缩放与 M2-11 托盘滚动偏移；手算常量相加必然在滚动/换关后错位）⑤ **三个高亮矩形出口**：`BoardView.cellsLocalBox`（格算术仍只在本文件，R-A6）、`TrayView.slotNodeOf`/`slotPixelSize`、`ToolbarView.rotateButtonNode`——一律返回**节点/局部盒**而非裸坐标，避免调用方复制第二份布局真相 ⑥ **`GameController` 接线**：代码注入 `GuideOverlay`（夹在工具栏与确认框之间：压暗工具栏、但不压在确认框/提示条上）；`startLevel` 末尾 `maybeShowGuide()`；L1 落点**复用工具栏「提示」同一纯函数 `suggestNextPlacement`**（引导与提示必须是同一答案，各算一份必然分叉）；**可跳过** = 任何非 `move` 意图收起引导，**唯 `rotate` 关的 `select` 例外**（选中是"点旋转按钮"的前置步骤，收起等于把教学掐断在半路）⑦ **清理**：删除未被引用的 `UI_GUIDE_FINGER_RADIUS`（`buildFinger` 用 `radius = halfW` 画胶囊，本就是派生量） |
+| 验收 | **`npm run check` 281/281**（+23：`guide.spec` 12 例语义 + `maskHoles.spec` 11 例面积守恒/不重叠/越界夹取/并集去重/非正方屏）；**无头预览零 Console 错误**，两关端到端取证——**L1**：首启 `[GuideOverlay] 显示：drag 引导，高亮 2 处`（截图确认整屏压暗 + 托盘 0 号槽与棋盘目标格 (0,0)+(0,1) 两洞 + 手指 + 文案）→ 起拖即 `[GuideOverlay] 收起`（跳过）→ 放入 A 后 `[GameController] 引导已学会：L1（drag）→ 本关不再弹出`（截图确认引导消失、A 落于 (1,0)+(1,1)）；**L3**（临时置场景 `levelId=3`，验完 `git checkout -- assets/scenes/Game.scene` 还原）：首启 `显示：rotate 引导，高亮 1 处`（截图：旋转按钮挖洞 + 手指点按 + 文案）→ 点选 L03_A 后**无「收起」日志**（select 例外生效，截图确认引导仍在、槽位转红选中态）→ 点「旋转」后 `收起` + `旋转 L03_A → 朝向 1` + `引导已学会：L3（rotate）`（截图确认 A 由横条变竖条、引导消失） |
+| 关联 | 落地 **PRD F13**（P0）/ UI Spec 5.2·7·14 / GDD 3.1·3.3 / 实施计划 M2-6；`GuideMemory` 的持久化接口为 **M2-8**（存档）预留；`maskBands` 复用了 M2-11 `trayScroll` 确立的「纯几何进 core + 中性参数名避 R-A6」手法；无 core 契约变更，`cellSize/cellPx` 算术仍仅存在于 `BoardView.ts` + `config.ts` |
+
 ### `30a0f14` · fix: 托盘滚动偏移不再被每次重建归零（M2-11×M2-5 交互缺陷）
 
 | 项 | 内容 |

@@ -5,8 +5,8 @@
 - **引擎**：Cocos Creator **3.8.8**（锁定，MVP 周期内不升级）
 - **语言**：TypeScript（`core` 纯 TS 零引擎依赖 / `view` 唯一允许 `import 'cc'`）
 - **设计分辨率**：390×844 竖屏 + Fit Width
-- **测试**：Vitest **258 条**（13 个文件）
-- **当前阶段**：**M2 进行中**（M0 ✅ / M1 ✅ / M2-1～M2-5 ✅ / M3 待做 / M4 美术 12.7%）
+- **测试**：Vitest **281 条**（15 个文件）
+- **当前阶段**：**M2 进行中**（M0 ✅ / M1 ✅ / M2-1～M2-6 ✅ / M2-7～M2-10 待做 / M3 待做 / M4 美术 12.7%）
 
 ---
 
@@ -45,7 +45,7 @@ npm run preview:game     # ★ 无头预览：CLI 构建 Game 场景 + 真实跑
 | 命令 | 作用 |
 | --- | --- |
 | `npm run check` | **提交门禁**：typecheck + typecheck:view + check:arch + verify:levels + test |
-| `npm run test` / `test:watch` | Vitest 单测（258 条） |
+| `npm run test` / `test:watch` | Vitest 单测（281 条） |
 | `npm run typecheck` | core / tools / test 的类型检查（[tsconfig.node.json](./tsconfig.node.json)） |
 | `npm run typecheck:view` | **view 层**类型检查（[tsconfig.view.json](./tsconfig.view.json)） |
 | `npm run check:arch` | 架构守卫 R-A1/3/4/6/9/10（[tools/check-arch.ts](./tools/check-arch.ts)） |
