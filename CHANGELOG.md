@@ -23,6 +23,16 @@
 
 ## 提交记录（倒序）
 
+### `162faac` · feat: M2-8 存档——引导记忆并入同一存档命名空间（杀进程后「已学会」保留）
+
+| 项 | 内容 |
+| --- | --- |
+| 日期 | 2026-10-16 23:00 |
+| 文件 | `assets/core/model/types.ts`、`assets/core/progress.ts`、`assets/core/guide.ts`、`assets/core/index.ts`、`assets/view/GameController.ts`、`test/progress.spec.ts`（6 文件，+121/−19） |
+| 要点 | ① **存档扩成单一命名空间存全部持久态**：`SaveDataV1` 增 `learnedLevelIds`（`core/model/types.ts`）——M2-7 只存通关进度，M2-8 把 `GuideMemory` 的「已学会引导」也纳入同一份（同 key `suitcase.progress.v1`），**一次序列化整份、加字段不动存取层** ② **两条真相共用一套归一**：抽出 `cleanLevelIds`（去重 / 升序 / 滤非正整数），`coerceProgress` 的读入与新增纯函数 `setLearnedLevels` 的写入共用它，读写同一语义、杜绝两份真相互漂移；`markCleared` 经 `...p` 透传 `learnedLevelIds`（不丢） ③ **读改存接线（`view/GameController.ts`）**：`onLoad` 先 `restore(loadProgress().learnedLevelIds)` **再** `startLevel`——首关引导是否弹出由它决定，灌晚了会漏弹/错弹；学会时 `setLearnedLevels(loadProgress(), guideMemory.learnedLevels(), now)` + `saveProgress`（**先取当前全量再覆盖 learnedLevelIds**，不丢通关/解锁）；`maybeShowGuide` 加 `DEBUG` 日志「引导显示：L…」/「引导跳过：L… 已学会」，供无头取证比对 ④ **`core/guide.ts` 文件头更正**：M2-8 已接（原文「调用方无需改动」不成立——需在 `onLoad` 灌入、学会时落盘），改述 `learnedLevels()`/`restore()` 两个对接方向 |
+| 验收 | **`npm run check` 307/307**（+6：`progress.spec` 覆盖 `defaultProgress.learnedLevelIds`、`coerceProgress` 对已学集合去重排序、`setLearnedLevels` 纯函数/不可变/非数组退化、`markCleared` 透传、两条链互不覆盖）；**无头预览零 Console 错误**，同一 profile 一条会话跑完整链路——全新 profile → Boot→Home → 进 L1 → `[GameController] 引导显示：L1（drag）`（截图：蒙层 + 「按住物品，拖进行李箱」+ 高亮托盘槽与落点 + 手指动画）→ **4 次拖拽通关** → `[GameController] 进度已保存：L1 通关 → 最高解锁 L2 / 已通关 1 关` → **`--reload`（模拟杀进程重开）** → `[BootController] 载入存档：最高解锁 L2 / 已通关 1 关`（截图：L1 已通关 / L2 继续）→ **再进 L1** → `[GameController] 引导跳过：L1 已学会（不弹）`（截图：无蒙层、棋盘直接可操作）——**M2-8「杀进程后进度保留」把「已学会引导」也纳入了** |
+| 关联 | 落地 **实施计划 M2-8**；M2-7 的 `view/storage.ts`（适配器）零改动即承载新字段；`GuideMemory`（M2-6）自此跨重启有效；无 core 契约变更，`cellSize/cellPx` 算术仍仅存在于 `BoardView.ts` + `config.ts` |
+
 ### `c1f26d5` · feat: M2-7 首页选关（Home.scene + 关卡选择 + 进度，未解锁关卡不可进）
 
 | 项 | 内容 |

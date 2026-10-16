@@ -91,7 +91,7 @@ assets/core/              ★ 纯 TS 游戏逻辑，零 cc 依赖，100% 可单�
   index.ts                唯一对外出口（view/tools 只许从这里导）
   config.ts               全部可调参数（布局 / 阈值 / 色板 / 明度倍率）
   palette.ts              明度阶梯着色（TDD 17.4）
-  progress.ts             关卡进度模型（已通关集合 → 最高解锁 / 最新待玩关，纯函数）
+  progress.ts             存档模型（通关进度 + 已学引导 + 解锁推导，全纯函数）
   geometry/
     shape.ts              归一化、旋转、包围盒、连通性
     coords.ts             网格坐标 ↔ 线性索引
@@ -110,7 +110,7 @@ assets/view/              ★ 唯一允许 import 'cc' 的层
   BootController.ts       启动场景：读存档 → loadScene('Home')
   HomeController.ts       首页：选关网格三态 + 解锁门禁（未解锁不可进）
   GameController.ts       接线中枢：intent → dispatch → 刷新
-  storage.ts              存档读写（sys.localStorage，坏数据容错退化）
+  storage.ts              存档读写（sys.localStorage，整份序列化 + 坏数据容错退化）
   route.ts                场景间传参单例（待进关卡号，换场景存活）
   DragController.ts       触摸生命周期 → Intent（挂在整屏 SafeAreaRoot）
   PreviewLayer.ts         合法/非法/取出三态 ghost
@@ -205,5 +205,6 @@ npm run verify:levels     # 输出 assets/data/levels.json
 - **`.scene` 的真相源是 [`tools/scene-build.mjs`](./tools/scene-build.mjs)**，不是 GUI 编辑器。一旦在 GUI 里手改过场景就别再跑它（会覆盖）；改动脚本 `.meta` 后必须重跑生成脚本再开编辑器，否则编辑器按 `__type__` 找不到类 → `Script attached to '%s' is missing or invalid.`（4600）。
 - **无头构建偶发吃到旧场景缓存。** 改场景（如换 `levelId` 验某关）后重跑，构建有一次仍按旧内容跑出上一关、截图与旧关一模一样。**判据**：必须核 Console 里的 `载入 L<n>` 行（或重跑一次）确认改动生效，别只看截图下结论。
 - **多格物品从托盘起手时抓取偏移非零。** 按缩略图中心按下 → `grabOffset ≠ 0` → 松手点必须按该偏移修正；按「格中心」直接落点会被 `canPlace` 拒（表现是「拖了没反应」，不是引擎回归）。
+- **一份存档 key 上并存多个状态时，写入方必须「读改存」。** 存档 `suitcase.progress.v1` 同时存通关进度与已学引导（M2-8），任何一处落盘都要 `setLearnedLevels(loadProgress(), …)` / `markCleared(loadProgress(), …)`——先取全量再改自己那一个字段。若各自 `{…新建小对象}` 直接 `saveProgress`，后写的一方会把另一份状态抹掉（表现为「通关记录莫名回退」或「引导又弹了」）。`coerceProgress` 的读入归一与各写方的字段语义共用，是防漂移的关键。
 
 > 更完整的踩坑记录与取证手法见项目记忆 [`.workbuddy/memory/MEMORY.md`](./.workbuddy/memory/MEMORY.md)。
