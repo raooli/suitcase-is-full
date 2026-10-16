@@ -23,6 +23,16 @@
 
 ## 提交记录（倒序）
 
+### `bb1fccd` · fix: M2-7 复审三处（浮层期返回键失效 / 当前卡标记缺失 / 已通关对勾压数字）
+
+| 项 | 内容 |
+| --- | --- |
+| 日期 | 2026-10-16 23:37 |
+| 文件 | `assets/view/GameController.ts`、`assets/view/HomeController.ts`（2 文件，+64/−12） |
+| 要点 | ① **浮层期「返回首页」失效（功能性）**：原返回键用 `isFrozen()`（= `WinAnimating ∨ Completed ∨ dialogOpen`）做闸门，而 `Completed` 是**终态**（不点「下一关 / 再来一次」不离开）→ 通关浮层关闭前返回键一直被压住。**新增 `canLeaveToHome()`**：只挡 `WinAnimating`（入场动画中）与 `dialogOpen`，**放行 `Completed`**——与 SuccessOverlay「动画播完按钮才可用」同口径。`isFrozen()` **保持不变**（棋盘输入在浮层期仍冻结、防误触拖拽）——两处**故意不同口径**。连带解决 **L10**（`hasNextLevel()=false`、不显「下一关」）：原只剩「再来一次」，回首页要绕「重开 L10 → 再返回」两步；现浮层期可直接回首页。② **当前可玩卡右上角三角标记漏画（文档/实现不一致）**：`HomeController` 头注释与 `c1f26d5` 提交信息都写「粉填充 + 粗粉描边 + 右上角三角标记」，但 `drawCardFace` 的 `current` 分支只画填充 + 描边。补 `drawSelectedMark()` 用**路径填充**画 ▲（Cocos 3.8.8 `Graphics` **无 `fillTriangle`**，`moveTo→lineTo→lineTo→close→fill`）。UI Spec 5.4「不能只用颜色区分」本就由「继续」文案满足，此为第二重图形佐证。③ **已通关卡对勾压关卡数字（视觉）**：`drawCheck(g, 0, 6)` 与大号数字 Label（`yOffset=6`、`fontSize=40`）同中心 → √ 压在数字上。对勾挪到**右上角徽标位并缩小**；**三态徽标统一右上角**（已完成✓ / 当前▲ / 未解锁🔒），中央只放数字、底部放状态小字 |
+| 验收 | **`npm run check` 307/307**（改动全在 view 层，无 core 契约变更）；**无头预览零 Console 错误**。L1 通关（`🎉 通关！L1 4 步 5.6s → SuccessOverlay`、浮层 up）→ 点返回 `(30,60)` → **`[GameController] 返回首页`**（修复前同坐标无日志）→ `[HomeController] 首页：最高解锁 L2 / 已通关 1 关 → 当前可玩 L2`。截图实证：浮层期返回键可用；Home 已通关卡 **✓ 在右上、不再压数字**，当前可玩卡 **▲ 已绘制**。返回闸门与关卡无关（只查 `phase`/`dialogOpen`），L1 的 `Completed` 实证即覆盖 L10 无「下一关」场景 |
+| 关联 | 修复 **M2-7 用户复审**三处 [低]（其中①为功能性、影响 L10 回首页路径）；`GameController` / `HomeController`（M2-7）；`SuccessOverlay`（M1-7）按钮冻结口径；无 core 变更，`cellSize/cellPx` 算术仍仅存在于 `BoardView.ts` + `config.ts` |
+
 ### `162faac` · feat: M2-8 存档——引导记忆并入同一存档命名空间（杀进程后「已学会」保留）
 
 | 项 | 内容 |

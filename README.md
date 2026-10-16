@@ -206,5 +206,6 @@ npm run verify:levels     # 输出 assets/data/levels.json
 - **无头构建偶发吃到旧场景缓存。** 改场景（如换 `levelId` 验某关）后重跑，构建有一次仍按旧内容跑出上一关、截图与旧关一模一样。**判据**：必须核 Console 里的 `载入 L<n>` 行（或重跑一次）确认改动生效，别只看截图下结论。
 - **多格物品从托盘起手时抓取偏移非零。** 按缩略图中心按下 → `grabOffset ≠ 0` → 松手点必须按该偏移修正；按「格中心」直接落点会被 `canPlace` 拒（表现是「拖了没反应」，不是引擎回归）。
 - **一份存档 key 上并存多个状态时，写入方必须「读改存」。** 存档 `suitcase.progress.v1` 同时存通关进度与已学引导（M2-8），任何一处落盘都要 `setLearnedLevels(loadProgress(), …)` / `markCleared(loadProgress(), …)`——先取全量再改自己那一个字段。若各自 `{…新建小对象}` 直接 `saveProgress`，后写的一方会把另一份状态抹掉（表现为「通关记录莫名回退」或「引导又弹了」）。`coerceProgress` 的读入归一与各写方的字段语义共用，是防漂移的关键。
+- **冻结闸门要分场景，别拿同一道门挡所有意图。** `isFrozen()`（`WinAnimating ∨ Completed ∨ dialogOpen`）是**棋盘输入**的冻结线——`Completed` 期要冻住拖拽、防玩家被浮层误导误触。但「离开本关」这类明确意图不该被它一起挡：通关浮层期「返回首页」若也用 `isFrozen()`，`Completed` 是终态（不点浮层按钮不离开），返回键会被一直压住；L10 无「下一关」时回首页得绕两步。**解法**：给不同意图单独设闸门（返回键用 `canLeaveToHome()` = 只挡 `WinAnimating` + `dialogOpen`，放行 `Completed`，与 SuccessOverlay「动画播完按钮才可用」同口径）。
 
 > 更完整的踩坑记录与取证手法见项目记忆 [`.workbuddy/memory/MEMORY.md`](./.workbuddy/memory/MEMORY.md)。
