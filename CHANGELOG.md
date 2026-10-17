@@ -23,6 +23,17 @@
 
 ## 提交记录（倒序）
 
+### `f3c59ea` · feat(view): M4-5a 真图接线——25 张已交付物品图接入游戏（propAssets 加载器 + ItemView 子节点贴图）
+
+| 项 | 内容 |
+| --- | --- |
+| 日期 | 2026-10-18 01:52 |
+| 文件 | `assets/view/propAssets.ts`（新）+ `.meta`、`ItemView.ts`、`ItemLayer.ts`、`TrayView.ts`、`GameController.ts`、`art/review-pixels.py` |
+| 要点 | ① `propAssets.ts`：`resources.load('sprites/props/<itemType>/spriteFrame')`；模块级缓存 + 在飞去重 + 负结果缓存；晚到帧由调用方判 `node.isValid`。② `ItemLayer.buildNode` / `TrayView.mountItem` 创建后 `ensureFrame` 回调换帧；`startLevel` 前 `preloadFrames` 预热。③ `ItemView.setSpriteFrame` 落地：有帧在**子节点**挂 Sprite 并关主节点 Graphics，无帧保持占位色块；`spriteFrame` 字段从「只登记」变为真贴图 |
+| 踩坑（三条引擎事实，均有源码/实测依据） | ⑴ **一节点一 renderable**：`Graphics` 在 `__preload` 占住 `node._uiProps.uiComp`，`onDisable` 不让位，同帧「禁 Graphics + 加 Sprite」吃 warnID 12002 且 Sprite 不被注册 → **Sprite 必须挂子节点**。⑵ **`spriteFrame` setter 会按当时 sizeMode 跑 `_applySpriteSize`**：默认 TRIMMED 把节点啃成 trimmed 尺寸 → **必须先设 `type`/`sizeMode=CUSTOM` 再设 frame**。⑶ **自动图集运行时重建帧**：缓存里的 SpriteFrame 的 `rect` 会被换成图集页坐标（实测 `(10,12)` → `(304,14)`），用 `rect.x/y` 算 trim 位置的节点在图集切换后创建就被摆出盘外（**盘上手机整件隐形、托盘却正常——同一 bug 两种表现全凭创建时机**）→ trim 偏移改用图集稳定的 `frame.offset` 反解（`left=画布宽/2+offset.x−trim宽/2`，`top=画布高/2−offset.y−trim高/2`），四件 L1 图 meta 逐一代数验证 |
+| 复验 | L1 四拖配方 E2E：手机真图落位 bbox 407×160 vs 期望 408×169（x 向误差 1px，余量为底部 AA）；托盘三件真图正常；**零 Console 错误**。L6 无图回退：6 件全部「无真图，保持占位色块」，引擎对缺失路径**无任何噪音**，零 Console 错误。`npm run check` 330/330；`check:art` 已交付 25 张全格；`preview:game` 零错误 |
+| 影响 | 25/63 张真图进入游戏（L1~L5 全换真图，L6~L10 自动回退占位）；每交付一批对应关卡自动换图，63 张不必齐。微信包重建 = **2,253,262 B / 104 文件**（较 `4c49a30` 的 2,251,371 +1,891 为本次代码增量），63 张齐预测 ≈2.41MB < 3.5MB 线，G2 无需 ADR。分支保护文件（`package.json`/`.github/`/`tools/protect-branch.mjs`）按约定未提交 |
+
 ### `4c49a30` · art: 补 8 张新图的 .meta 导入件（prop_04_E/F + prop_05_A~F）
 
 | 项 | 内容 |
