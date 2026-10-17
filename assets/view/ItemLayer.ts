@@ -30,10 +30,10 @@
  * - **不持有玩法状态副本**：只读 dispatch 返回的 `state`。
  */
 
-import { Component, Node, Tween, Vec3, _decorator } from 'cc';
+import { Component, Node, Tween, Vec3, tween, _decorator } from 'cc';
 import { DEBUG } from 'cc/env';
 
-import { findItem, rotateBy } from '../core';
+import { findItem, rotateBy, UI_WIN_BOUNCE_SCALE } from '../core';
 import type { ItemSpec, LevelSpec, LevelState, Placement } from '../core';
 import { BoardView } from './BoardView';
 import { ItemView } from './ItemView';
@@ -96,6 +96,31 @@ export class ItemLayer extends Component {
     if (entry === undefined) return;
     if (DEBUG) console.log(`[ItemLayer] 抖动 ${itemId}（转不动）`);
     shakeX(entry.node, entry.base);
+  }
+
+  /**
+   * 通关庆祝①「回弹」（M2-10 / UI Spec 5.3）：最后入箱的物品缩一下再归位。
+   *
+   * **只做缩放不做位移**：缩放的静止态就是 1，任何被打断的场景都不会留下
+   * 持久偏移（位移 tween 会——M1-7 实测教训）。幅度问 config
+   * （`UI_WIN_BOUNCE_SCALE`），时长由调用方给（序列编排在 `SuccessOverlay`）。
+   *
+   * 找不到节点就安静返回：庆祝是表现层，不该为它抛错打断通关流程。
+   */
+  bounceItem(itemId: string, durationMs: number): void {
+    const entry = this.nodes.get(itemId);
+    if (entry === undefined) return;
+    if (DEBUG) console.log(`[ItemLayer] 回弹 ${itemId}（${durationMs}ms）`);
+    const node = entry.node;
+    // 幂等：停掉可能在飞的旧动画，并从 1 起（残留的中间倍率会让峰值算不准）
+    Tween.stopAllByTarget(node);
+    node.setScale(1, 1, 1);
+    const peak = UI_WIN_BOUNCE_SCALE;
+    const half = durationMs / 2 / 1000;
+    tween(node)
+      .to(half, { scale: new Vec3(peak, peak, 1) }, { easing: 'sineOut' })
+      .to(half, { scale: new Vec3(1, 1, 1) }, { easing: 'sineIn' })
+      .start();
   }
 
   /**

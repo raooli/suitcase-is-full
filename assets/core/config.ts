@@ -380,6 +380,89 @@ export const UI_OVERLAY_BUTTON_HEIGHT = 48;
  */
 export const UI_OVERLAY_BUTTON_SECONDARY_HEIGHT = 44;
 
+// ─────────────── 通关庆祝序列（M2-10 / UI Spec 5.3） ───────────────
+//
+// UI Spec 5.3 原文：「最后一件物品回弹（100–180ms）→ 行李箱合盖（250–450ms）
+// → 轻微星光与『整理完成！』→ 下一关按钮可用」。四段各自的时长集中在这里，
+// 序列总时长由末尾的 `UI_WIN_SETTLE_MS` **推导**（改任何一段自动跟着走）。
+
+/** ① 回弹：最后一件物品入箱后的缩放回弹。取规格区间 100–180ms 的中段 */
+export const UI_WIN_BOUNCE_MS = 140;
+
+/**
+ * 回弹的缩放峰值（1 → 1.12 → 1）。
+ *
+ * 只做**缩放**不做位移：位移 tween 若被打断会留下持久偏移（M1-7 实测教训），
+ * 而缩放的静止态就是 1，天然可恢复。幅度「看得出锁进去了、又不至于让占位
+ * 格数失真」——再大玩家会误判这件占几格。
+ */
+export const UI_WIN_BOUNCE_SCALE = 1.12;
+
+/** ② 合盖：行李箱盖板下滑总时长。取规格区间 250–450ms 的中段 */
+export const UI_WIN_LID_MS = 350;
+
+/** 盖板比棋盘每侧宽出的像素——视觉上「盖住」而不是「对齐」 */
+export const UI_WIN_LID_OVERHANG_PX = 8;
+
+/** 盖板起始位在闭合位之上额外的间距（完全跳出棋盘上方，不与物品叠） */
+export const UI_WIN_LID_START_GAP_PX = 24;
+
+/**
+ * 合盖越过闭合位后回弹的幅度（px）——「啪」地合上那一抖。
+ *
+ * 两段式（快速下滑略过头 → 短回正）而不是 backOut 一次性缓动：backOut 的
+ * 回挑量随距离等比放大（342px 的棋盘会挑出 30+px，像撞歪了），固定小幅度
+ * 才像合盖的惯量。**结束值恒为闭合位**，不留下持久偏移。
+ */
+export const UI_WIN_LID_DIP_PX = 10;
+
+/** 盖板体的圆角（UI Spec 4.1「圆润简化」；比 overhang 大，角上会露出一点点棋盘角） */
+export const UI_WIN_LID_RADIUS = 14;
+
+/** 盖板把手（棕色小圆角块，贴在盖板顶边中央，下滑时领头） */
+export const UI_WIN_LID_HANDLE_WIDTH = 48;
+export const UI_WIN_LID_HANDLE_HEIGHT = 12;
+
+/** ③ 浮层面板淡入时长（ms）。遮罩**不**淡入（立即盖上，避免半透明期闪出底板） */
+export const UI_WIN_PANEL_FADE_MS = 200;
+
+/** 面板弹跳两段（M1-7 既有手感）：0.8 → 1.06（backOut）→ 1.0 */
+export const UI_WIN_PANEL_GROW_MS = 220;
+export const UI_WIN_PANEL_SNAP_MS = 80;
+export const UI_WIN_PANEL_START_SCALE = 0.8;
+export const UI_WIN_PANEL_PEAK_SCALE = 1.06;
+
+/**
+ * ④ 星光呼吸：单程半周期与最低透明度。
+ *
+ * 「轻微星光、**减弱频闪**」（UI Spec 8）：透明度只呼吸到 45% 不到 0，
+ * 周期 900ms——看得出是活的，又不至于像警示灯。
+ */
+export const UI_WIN_TWINKLE_HALF_MS = 450;
+export const UI_WIN_TWINKLE_MIN_ALPHA = 0.45;
+
+/** 星光缩放呼吸的谷值（峰值恒 1）与相邻星光的错峰（避免四颗同时喘） */
+export const UI_WIN_TWINKLE_SCALE_MIN = 0.85;
+export const UI_WIN_TWINKLE_STAGGER_MS = 150;
+
+/**
+ * 收敛余量（ms）：帧量化会把 tween 拖长（M1-5 实测 160ms 的抖动跑了 174ms，
+ * 约 +9%），按钮解冻必须**晚于**所有画面结束——早一点就是「动画中误触」。
+ */
+export const UI_WIN_SETTLE_MARGIN_MS = 80;
+
+/**
+ * 序列总时长（ms）= 回弹 + 合盖 + max(面板淡入, 面板弹跳) + 余量。
+ *
+ * `SuccessOverlay` 的 `scheduleOnce` 解冻回调用它；改上面任何一段时长，
+ * 这里自动跟着走，但要复核余量仍够覆盖帧量化。
+ */
+export const UI_WIN_SETTLE_MS =
+  UI_WIN_BOUNCE_MS +
+  UI_WIN_LID_MS +
+  Math.max(UI_WIN_PANEL_FADE_MS, UI_WIN_PANEL_GROW_MS + UI_WIN_PANEL_SNAP_MS) +
+  UI_WIN_SETTLE_MARGIN_MS;
+
 /**
  * 负反馈抖动（「放不下」「转不动」共用）：横向位移幅度与总时长。
  *

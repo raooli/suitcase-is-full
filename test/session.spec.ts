@@ -417,6 +417,9 @@ describe('GameSession：通关判定', () => {
     const cleared = findEvent(result.events, 'level-cleared');
     expect(cleared).toBeDefined();
     expect(cleared?.levelId).toBe(2);
+    // M2-10：事件带「最后放入的是哪件」——通关庆祝的回弹段对准它，
+    // view 不必反查 state 猜。提交瞬间就知道，故由 core 透传。
+    expect(cleared?.lastItemId).toBe('X');
     expect(result.phase).toBe('WinAnimating');
   });
 

@@ -1,25 +1,36 @@
 /**
- * 通关浮层（实施计划 M1-7）。
+ * 通关浮层（M1-7 最小入场 → **M2-10 完整庆祝序列** / UI Spec 5.3）。
  *
  * ## 触发与生命周期
  *
  * `level-cleared` 事件（`GameSession` 在最后一件物品合法落盘后、把 phase 推到
- * `WinAnimating` 时发）到达 `GameController`，由它调本组件的 `show()`：
+ * `WinAnimating` 时发）到达 `GameController`，由它调本组件的 `show()`。
  *
- * 1. **懒加载构建**：节点初始 `active=false`，首次 `show()` 才搭 UI
- *    （M1 其余视图同理：场景只承载结构节点，内容由代码建）；
- * 2. **入场动画**（UI Spec 5.3「回弹→合盖→星光→整理完成！」的最小版）：
- *    `UIOpacity` 0→1 淡入 200ms + 面板 scale 0.8→1.06→1 弹一下 280ms；
- * 3. **播完汇报**：`scheduleOnce(SETTLE_MS)` 后调 `onSettled` 回调，
+ * M2-10 起 `show()` 跑的是 UI Spec 5.3 的**完整序列**（四段，时长集中在
+ * `core/config.ts` 的 `UI_WIN_*`，总解冻时长 `UI_WIN_SETTLE_MS` 由各段推导）：
+ *
+ * 1. **回弹**（100–180ms）：最后一件物品缩放回弹——目标由事件带的 `lastItemId`
+ *    指定，动作经装配方注入的 `onBounceLastItem` 转给 `ItemLayer`；
+ * 2. **合盖**（250–450ms）：行李箱盖板滑下盖住棋盘——`onCloseLid` 转给
+ *    `SuitcaseLid`。**遮罩要到这段结束才盖上**：此前的舞台是棋盘与盖板，
+ *    盖浮层等于把演出挡住；
+ * 3. **星光与面板**：遮罩立即盖上（不淡入——半透明期会闪出底板），面板
+ *    淡入 + 弹跳，装饰星光开始**呼吸**（UI Spec 8「轻微星光、减弱频闪」：
+ *    透明度只到 45%、不到 0，相邻星光错峰）；
+ * 4. **按钮可用**：序列收敛（`UI_WIN_SETTLE_MS`）后 `onSettled` 回调，
  *    `GameController` 借此调 `session.completeWinAnimation()` 把 phase 推到
- *    `Completed`——**冻结的解除时机在 view 手里**，core 不自己数时间；
- * 4. **按钮门控**：动画期间 `settled=false`，按钮不响应（点了也没反应比
- *    动画中误触好）；播完才可点。
+ *    `Completed`——**冻结的解除时机在 view 手里**，core 不自己数时间。
+ *
+ * ## 为什么序列在 `refreshAll` 之后才启动（GameController 的活）
+ *
+ * `state-changed` 在事件数组最前（unshift），`level-cleared` 处理时物品层还
+ * **没重画**——刚入箱的那件节点可能还不存在，回弹会打空。所以 GameController
+ * 把 `level-cleared` 暂存，`refreshAll` 之后才调 `show()`。
  *
  * ## 边界
  *
  * - **不持有玩法状态**：只消费 `level-cleared` 事件里的一次性数据
- *   （`levelId / elapsedMs / moves`），不读 `GameSession`；
+ *   （`levelId / elapsedMs / moves / lastItemId`），不读 `GameSession`；
  * - **输入隔离是双重兜底**：整屏遮罩在 `onLoad` 显式 `propagationStopped`
  *   吸收所有触摸（Cocos 把触摸派发给**所有**命中节点，"整屏节点挡住触摸"
  *   必须显式停，光有 UITransform 尺寸没用——与 ConfirmDialog 同构）；遮罩管
@@ -28,13 +39,12 @@
  *   `DragController.inputFrozen` 双保险。两层各管一件事：遮罩管"看不见的输入"，
  *   状态门管"改不了的状态"（P1 修复：此前遮罩只画不挡，WinAnimating 期重置能
  *   穿透它打开确认框）；
+ * - **动画中按钮不响应**：`settled` 之前点了只记一条 DEBUG 线——动画中误触
+ *   比「点了没反应」更糟（会打断庆祝节奏）。
  *
  * ## 两个入口的主次（M2-1，UI Spec 5.3）
  *
  * 「**下一关**」是主按钮（粉实心），「**再来一次**」是次入口（白底描边）。
- * M1 只建了「再来一次」并做成主按钮——那时没有关卡推进机制（M2-1 才加载多关），
- * 建「下一关」就是 UI Spec 禁止的空按钮。M2-1 接上后按规格把主次调回。
- *
  * **最后一关（当前第 10 关）不显示「下一关」**，也不留空位——由
  * `show(event, hasNextLevel)` 的第二个参数决定，次入口此时居中到主按钮的位置。
  * 有没有下一关是 `GameController` 从 core 的 `levelIdsOf()` 问出来的，
@@ -55,6 +65,18 @@ import {
   UI_OVERLAY_PANEL_RADIUS,
   UI_OVERLAY_PANEL_WIDTH,
   UI_PALETTE,
+  UI_WIN_BOUNCE_MS,
+  UI_WIN_LID_MS,
+  UI_WIN_PANEL_FADE_MS,
+  UI_WIN_PANEL_GROW_MS,
+  UI_WIN_PANEL_PEAK_SCALE,
+  UI_WIN_PANEL_SNAP_MS,
+  UI_WIN_PANEL_START_SCALE,
+  UI_WIN_SETTLE_MS,
+  UI_WIN_TWINKLE_HALF_MS,
+  UI_WIN_TWINKLE_MIN_ALPHA,
+  UI_WIN_TWINKLE_SCALE_MIN,
+  UI_WIN_TWINKLE_STAGGER_MS,
 } from '../core';
 import type { GameEvent } from '../core';
 
@@ -62,22 +84,6 @@ const { ccclass } = _decorator;
 
 /** `level-cleared` 事件的形状（从 core 事件联合体派生，不为它单开出口） */
 type LevelClearedEvent = Extract<GameEvent, { type: 'level-cleared' }>;
-
-/** 遮罩/面板淡入时长（ms） */
-const FADE_MS = 200;
-/** 面板弹跳两段：0.8→1.06（backOut）→1.0（ms） */
-const PANEL_GROW_MS = 220;
-const PANEL_SNAP_MS = 80;
-
-/**
- * 动画收敛判定窗口（ms）。
- *
- * 两个约束：① 必须大于**并行**两个 tween 的较长者（弹跳 220+80=300ms；
- * 淡入 200ms 先结束），否则按钮会比动画先解冻；② tween 经帧量化会被拖长——
- * M1-5 实测 160ms 的抖动跑了 174ms（约 9%），按同比例 300ms 可能到 ~330ms，
- * 所以留 30ms 余量。改上面任何一段时长后，这里要跟着复核。
- */
-const SETTLE_MS = 360;
 
 /**
  * 面板内布局（设计单位，画布中心为原点，+y 向上）。
@@ -102,6 +108,12 @@ const DECO_OFFSETS = [
   [64, 12],
 ] as const;
 
+/** 一颗装饰星光：节点 + 它的 UIOpacity（呼吸改透明度，见 `playSparkle`） */
+interface DecoStar {
+  readonly node: Node;
+  readonly opacity: UIOpacity;
+}
+
 @ccclass('SuccessOverlay')
 export class SuccessOverlay extends Component {
   /**
@@ -120,10 +132,21 @@ export class SuccessOverlay extends Component {
    */
   onNextLevel: (() => void) | null = null;
 
+  /**
+   * 庆祝序列①：最后一件物品回弹。装配方转给 `ItemLayer.bounceItem`。
+   *
+   * 不接（null）= 跳过该段的画面，序列仍按完整时长走——解冻时机由时长
+   * 常量决定，不由"这段有没有画面"决定。
+   */
+  onBounceLastItem: ((itemId: string) => void) | null = null;
+
+  /** 庆祝序列②：行李箱合盖。装配方转给 `SuitcaseLid.close` */
+  onCloseLid: (() => void) | null = null;
+
   /** 懒加载：UI 是否已建。节点初始 active=false，首次 show 才建 */
   private built = false;
 
-  /** 入场动画是否播完（按钮门控） */
+  /** 序列是否已收敛（按钮门控） */
   private settled = false;
 
   private panelNode: Node | null = null;
@@ -132,6 +155,12 @@ export class SuccessOverlay extends Component {
   private statsLabel: Label | null = null;
   private nextButton: Node | null = null;
   private replayButton: Node | null = null;
+
+  /** 装饰星光（M2-10：从面板 Graphics 上的静态圆升级为可呼吸的子节点） */
+  private decoStars: DecoStar[] = [];
+
+  /** 序列起点（`performance.now()`，DEBUG 分段计时用；0 = 未启动） */
+  private seqStartMs = 0;
 
   override onLoad(): void {
     const transform = this.node.getComponent(UITransform) ?? this.node.addComponent(UITransform);
@@ -150,7 +179,7 @@ export class SuccessOverlay extends Component {
   }
 
   /**
-   * 显示通关浮层。`event` = `level-cleared` 的一次性数据。
+   * 显示通关浮层并开跑完整庆祝序列。`event` = `level-cleared` 的一次性数据。
    *
    * **可重复调用，且每次都必须重刷文案**：`replayLevel()` 换新会话后，同一关
    * 会再发一次 `level-cleared`，战绩（步数/用时）是**新的**。所以节点结构留给
@@ -160,7 +189,7 @@ export class SuccessOverlay extends Component {
    * 冻结期内没有 intent 能改状态，AC12「只触发一次」指的是**这个**。）
    */
   show(event: LevelClearedEvent, hasNextLevel: boolean): void {
-    // 上一次入场遗留的 settle 回调作废：360ms 内二次 show() 不该叠两个回调
+    // 上一次入场遗留的整串序列回调作废：收敛前二次 show() 不该叠两串时间线
     this.unscheduleAllCallbacks();
 
     this.buildOnce();
@@ -170,31 +199,51 @@ export class SuccessOverlay extends Component {
     // return 会吞掉第二关的差异，症状是"第 10 关还显示着下一关"）
     this.applyButtons(hasNextLevel);
     this.settled = false;
-    this.node.active = true;
+    // 遮罩要到合盖之后才亮：此前的舞台是棋盘与盖板（见文件头序列说明）
+    this.node.active = false;
 
+    this.seqStartMs = performance.now();
     if (DEBUG) {
       console.log(
-        `[SuccessOverlay] 通关浮层入场：L${event.levelId} ${event.moves} 步` +
+        `[SuccessOverlay] 通关浮层序列启动：L${event.levelId} ${event.moves} 步` +
           ` ${(event.elapsedMs / 1000).toFixed(1)}s` +
-          ` 下一关=${hasNextLevel ? '显示' : '不显示（最后一关）'}`,
+          ` 下一关=${hasNextLevel ? '显示' : '不显示（最后一关）'}` +
+          `（回弹 ${UI_WIN_BOUNCE_MS}ms → 合盖 ${UI_WIN_LID_MS}ms → 面板 → ${UI_WIN_SETTLE_MS}ms 解冻）`,
       );
     }
 
-    this.playEntrance();
-
-    // 动画收敛后汇报。scheduleOnce 挂在组件自己的节点上，组件/节点销毁时
-    // 引擎会自动取消未执行的回调，不会出现悬空调用
+    // ① 回弹：对准刚锁进去的那一件（事件带 lastItemId，见 core events.ts）
+    this.logPhase('回弹');
+    this.onBounceLastItem?.(event.lastItemId);
+    // ② 合盖：回弹播完
+    this.scheduleOnce(() => {
+      this.logPhase('合盖');
+      this.onCloseLid?.();
+    }, UI_WIN_BOUNCE_MS / 1000);
+    // ③ 浮层入场：合盖播完——遮罩此刻才盖上，面板淡入 + 弹跳 + 星光呼吸
+    this.scheduleOnce(() => {
+      this.logPhase('面板与星光');
+      this.node.active = true;
+      this.playEntrance();
+      this.playSparkle();
+    }, (UI_WIN_BOUNCE_MS + UI_WIN_LID_MS) / 1000);
+    // ④ 解冻汇报：整条序列收敛后（时长 = 序列 + 帧量化余量，见 config）
     this.scheduleOnce(() => {
       this.settled = true;
-      if (DEBUG) console.log('[SuccessOverlay] 入场动画播完，按钮解冻');
+      this.logPhase('按钮解冻');
       this.onSettled?.();
-    }, SETTLE_MS / 1000);
+    }, UI_WIN_SETTLE_MS / 1000);
   }
 
-  /** 隐藏浮层（「再来一次」后由装配方调，恢复可拖拽状态） */
+  /** 隐藏浮层（「再来一次 / 下一关」后由装配方调，恢复可拖拽状态） */
   hide(): void {
-    this.node.active = false;
+    // 收敛前的二次 show/hide（理论上不会发生：两个按钮都要 settled 才响应，
+    // 返回键被 WinAnimating 挡着）——防御性作废未执行完的序列回调
+    this.unscheduleAllCallbacks();
     this.settled = false;
+    this.node.active = false;
+    this.stopEntranceTweens();
+    this.stopSparkle();
   }
 
   // ───────────────────────── 懒加载构建 ─────────────────────────
@@ -260,20 +309,30 @@ export class SuccessOverlay extends Component {
     // 战绩行：步数 + 用时（同上）。数据只来自事件，不反查 session
     this.statsLabel = this.addLabel(panel, 'Stats', '', STATS_Y, 22, UI_PALETTE.brown);
 
-    // 装饰星光：纯装饰小圆（UI Spec 5.3：无星级规则不得暗示星级）。
-    // 画在面板已有的 Graphics 上——**不能给 panel 再加一个 Graphics**：
-    // 一个节点只允许一个 renderable 组件，第二次 addComponent(Graphics) 会被
-    // 引擎静默拒绝（Console 一条 warning，圆一个都不画）
+    // 装饰星光：每颗一个子节点（Graphics 圆 + UIOpacity），呼吸见 playSparkle。
+    // **不能画在面板已有的 Graphics 上**：一节点一 renderable，第二次
+    // addComponent(Graphics) 会被引擎静默拒绝（M1-7 踩过）；且画进面板路径的
+    // 圆是静态的，没法单独呼吸（M2-10 从静态圆升级为呼吸星）。
     const decoColors = [
       UI_PALETTE.accentPink,
       UI_PALETTE.surfaceCream,
       UI_PALETTE.surfaceMint,
       UI_PALETTE.surfaceRose,
     ];
+    this.decoStars = [];
     for (let i = 0; i < DECO_RADII.length; i++) {
-      panelG.fillColor = Color.fromHEX(new Color(), decoColors[i]);
-      panelG.circle(DECO_OFFSETS[i][0], DECO_OFFSETS[i][1], DECO_RADII[i]);
-      panelG.fill();
+      const star = new Node(`Deco_${i}`);
+      star.layer = panel.layer;
+      panel.addChild(star);
+      star.setPosition(DECO_OFFSETS[i][0], DECO_OFFSETS[i][1], 0);
+      const starTransform = star.addComponent(UITransform);
+      starTransform.setContentSize(DECO_RADII[i] * 2, DECO_RADII[i] * 2);
+      starTransform.setAnchorPoint(0.5, 0.5);
+      const starG = star.addComponent(Graphics);
+      starG.fillColor = Color.fromHEX(new Color(), decoColors[i]);
+      starG.circle(0, 0, DECO_RADII[i]);
+      starG.fill();
+      this.decoStars.push({ node: star, opacity: star.addComponent(UIOpacity) });
     }
 
     // 主按钮「下一关」：粉实心（UI Spec：accent.pink = 主操作）
@@ -402,8 +461,10 @@ export class SuccessOverlay extends Component {
   // ───────────────────────── 动画与交互 ─────────────────────────
 
   /**
-   * 入场：遮罩下的面板淡入 + 弹跳缩放（UI Spec 5.3「轻微星光与整理完成！」的
-   * 最小实现——星光已在面板上画好，回弹/合盖的完整版留 M2 动效项）。
+   * 序列③的面板入场：遮罩下的面板淡入 + 弹跳缩放。
+   *
+   * 遮罩**不**在这里淡入（`show()` 里 `node.active = true` 立即盖上）——
+   * 半透明期会闪出底板，这是 M1-7 就定下的口径。
    */
   private playEntrance(): void {
     const panel = this.panelNode;
@@ -415,14 +476,74 @@ export class SuccessOverlay extends Component {
     Tween.stopAllByTarget(opacity);
 
     opacity.opacity = 0;
-    panel.setScale(new Vec3(0.8, 0.8, 1));
+    panel.setScale(new Vec3(UI_WIN_PANEL_START_SCALE, UI_WIN_PANEL_START_SCALE, 1));
     tween(opacity)
-      .to(FADE_MS / 1000, { opacity: 255 })
+      .to(UI_WIN_PANEL_FADE_MS / 1000, { opacity: 255 })
       .start();
     tween(panel)
-      .to(PANEL_GROW_MS / 1000, { scale: new Vec3(1.06, 1.06, 1) }, { easing: 'backOut' })
-      .to(PANEL_SNAP_MS / 1000, { scale: new Vec3(1, 1, 1) })
+      .to(UI_WIN_PANEL_GROW_MS / 1000, { scale: new Vec3(UI_WIN_PANEL_PEAK_SCALE, UI_WIN_PANEL_PEAK_SCALE, 1) }, { easing: 'backOut' })
+      .to(UI_WIN_PANEL_SNAP_MS / 1000, { scale: new Vec3(1, 1, 1) })
       .start();
+  }
+
+  /**
+   * 序列③的星光呼吸：每颗星透明度（45%↔100%）+ 轻微缩放（0.85↔1）循环，
+   * 相邻星错峰起步（`UI_WIN_TWINKLE_STAGGER_MS`）。
+   *
+   * 「轻微星光、**减弱频闪**」（UI Spec 8）：透明度谷值 45% 不到 0，周期
+   * 900ms——看得出是活的，又不像警示灯。循环到 `hide()` 才停。
+   */
+  private playSparkle(): void {
+    const half = UI_WIN_TWINKLE_HALF_MS / 1000;
+    const minAlpha = Math.round(255 * UI_WIN_TWINKLE_MIN_ALPHA);
+    for (const [i, star] of this.decoStars.entries()) {
+      const stagger = (i * UI_WIN_TWINKLE_STAGGER_MS) / 1000;
+      star.opacity.opacity = 255;
+      star.node.setScale(1, 1, 1);
+      tween(star.opacity)
+        .delay(stagger)
+        .to(half, { opacity: minAlpha }, { easing: 'sineInOut' })
+        .to(half, { opacity: 255 }, { easing: 'sineInOut' })
+        .repeatForever()
+        .start();
+      tween(star.node)
+        .delay(stagger)
+        .to(half, { scale: new Vec3(UI_WIN_TWINKLE_SCALE_MIN, UI_WIN_TWINKLE_SCALE_MIN, 1) }, { easing: 'sineInOut' })
+        .to(half, { scale: new Vec3(1, 1, 1) }, { easing: 'sineInOut' })
+        .repeatForever()
+        .start();
+    }
+  }
+
+  /** 停掉面板入场动画并把面板放回静止态（hide / 重入用） */
+  private stopEntranceTweens(): void {
+    const panel = this.panelNode;
+    const opacity = this.panelOpacity;
+    if (panel !== null) {
+      Tween.stopAllByTarget(panel);
+      panel.setScale(1, 1, 1);
+    }
+    if (opacity !== null) {
+      Tween.stopAllByTarget(opacity);
+      opacity.opacity = 255;
+    }
+  }
+
+  /** 停掉所有星光呼吸并放回静止态（hide / 重入用） */
+  private stopSparkle(): void {
+    for (const star of this.decoStars) {
+      Tween.stopAllByTarget(star.node);
+      Tween.stopAllByTarget(star.opacity);
+      star.opacity.opacity = 255;
+      star.node.setScale(1, 1, 1);
+    }
+  }
+
+  /** DEBUG 分段计时：打「距序列起点 +Nms」——无头取证庆次序的判据 */
+  private logPhase(name: string): void {
+    if (!DEBUG) return;
+    const dt = this.seqStartMs === 0 ? 0 : performance.now() - this.seqStartMs;
+    console.log(`[SuccessOverlay] 庆祝序列 +${dt.toFixed(0)}ms：${name}`);
   }
 
   /**

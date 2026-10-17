@@ -253,7 +253,7 @@ export class GameSession {
       this.state = { ...this.state, placements };
       this.moveCount++;
       events.push({ type: 'item-rotated', itemId, rotation: result.placement.rotation });
-      this.afterCommit(events);
+      this.afterCommit(itemId, events);
       return;
     }
 
@@ -284,7 +284,7 @@ export class GameSession {
     this.state = removeToTray(this.level, this.state, itemId);
     this.moveCount++;
     events.push({ type: 'item-returned', itemId });
-    this.afterCommit(events);
+    this.afterCommit(itemId, events);
     // 收尾放在 afterCommit 之后：与 handleDrop 同构，防 afterCommit 把 phase
     // 推到 WinAnimating 后被无条件改写（取出不会通关，但结构上保持一致）
     this.preview = null;
@@ -348,7 +348,7 @@ export class GameSession {
       placement: { row: placement.row, col: placement.col, rotation: placement.rotation },
       from,
     });
-    this.afterCommit(events);
+    this.afterCommit(placement.itemId, events);
   }
 
   /**
@@ -356,8 +356,13 @@ export class GameSession {
    *
    * 通关判定用 **phase 转移**而不是"检查条件"来触发（TDD 6.6）：
    * 条件式触发在快速连点下会重复发出通关事件（PRD AC12 / G-14）。
+   *
+   * `lastItemId` = 本次提交的物品（M2-10 庆祝「回弹」段的目标）——
+   * 由调用方传入而不是在方法里反查：提交的瞬间就知道是哪一件。
+   * 三个调用方里只有 `commitPlacement` 真能触发通关（旋转 / 取出都不改变
+   * 占格数），另两处传入的 id 不会被打包进 `level-cleared`。
    */
-  private afterCommit(events: GameEvent[]): void {
+  private afterCommit(lastItemId: string, events: GameEvent[]): void {
     const deadend = checkDeadend(this.level, this.state);
     if (deadend.stuck) {
       // 只发「发生了」信号，视图层据此弹 Toast；不附带任何数字——
@@ -378,6 +383,7 @@ export class GameSession {
       levelId: this.level.levelId,
       elapsedMs: this.now() - this.startedAt,
       moves: this.moveCount,
+      lastItemId,
     });
   }
 

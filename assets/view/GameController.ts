@@ -42,9 +42,13 @@ import {
   UI_TOOLBAR_BUTTON_HEIGHT,
   UI_TOOLBAR_BUTTON_WIDTH,
   UI_TOOLBAR_HEIGHT,
+  UI_WIN_BOUNCE_MS,
+  UI_WIN_LID_MS,
+  UI_WIN_SETTLE_MS,
 } from '../core';
 import type {
   BoardSpec,
+  GameEvent,
   GuideKind,
   Intent,
   LevelSpec,
@@ -64,12 +68,16 @@ import { GuideOverlay } from './GuideOverlay';
 import type { GuideRequest } from './GuideOverlay';
 import { ItemLayer } from './ItemLayer';
 import { PreviewLayer } from './PreviewLayer';
+import { SuitcaseLid } from './SuitcaseLid';
 import { SuccessOverlay } from './SuccessOverlay';
 import { ToolbarView } from './ToolbarView';
 import { Toast } from './Toast';
 import { TrayView } from './TrayView';
 
 const { ccclass, property } = _decorator;
+
+/** `level-cleared` 事件形状（M2-10 庆祝序列的暂存态用） */
+type LevelClearedEvent = Extract<GameEvent, { type: 'level-cleared' }>;
 
 @ccclass('GameController')
 export class GameController extends Component {
@@ -109,6 +117,12 @@ export class GameController extends Component {
   /** 通关浮层（M1-7）：`level-cleared` 时入场，播完调 `completeWinAnimation` */
   @property(SuccessOverlay)
   successOverlay: SuccessOverlay | null = null;
+
+  /**
+   * 行李箱合盖（M2-10 庆祝序列第二段）。运行时代码注入 SafeAreaRoot，
+   * 插在通关浮层**正下方**（盖住棋盘、不盖浮层）。大小问 `boardView`。
+   */
+  private suitcaseLid: SuitcaseLid | null = null;
 
   /** 底部工具栏（M2-2）：撤回 / 旋转 / 重置 / 提示。运行时代码注入 SafeAreaRoot */
   private toolbarView: ToolbarView | null = null;
@@ -164,6 +178,8 @@ export class GameController extends Component {
     this.buildDialog();
     this.buildToast();
     this.buildBackButton();
+    // M2-10 合盖放在浮层之后建：它的兄弟序要紧盯浮层（见 buildLid）
+    this.buildLid();
 
     // M2-7：若从首页带「要进哪一关」进来（route 模块单例），覆盖场景属性里的
     // levelId；没有（直接预览 Game 场景 / 旧链路）则按场景属性默认（首关）。
@@ -225,6 +241,8 @@ export class GameController extends Component {
     this.trayView?.resetScroll();
     this.refreshAll(session.getState(), session.getPhase());
     this.successOverlay?.hide();
+    // M2-10：合盖层复位（停动画、藏节点）——上一场的盖板不能留到这一场
+    this.suitcaseLid?.reset();
     // 工具栏可用态随关卡刷新（首关 / 换关后重算）
     this.updateToolbarState();
     // 首次引导（M2-6）：**放在 refreshAll 之后**——引导要圈住托盘槽位与棋盘格，
@@ -278,6 +296,14 @@ export class GameController extends Component {
       // 真发生了也不能把玩家送进不存在的关卡（`parseLevelBundle` 会抛）
       if (!this.hasNextLevel()) return;
       this.startLevel(this.levelId + 1);
+    };
+    // M2-10：庆祝序列前两段的动作转给对应的视图组件（序列的编排与计时仍在
+    // SuccessOverlay——它按 config 的 UI_WIN_* 常量数时间，这里只出"手"）
+    overlay.onBounceLastItem = (itemId) => {
+      this.itemLayer?.bounceItem(itemId, UI_WIN_BOUNCE_MS);
+    };
+    overlay.onCloseLid = () => {
+      this.suitcaseLid?.close(UI_WIN_LID_MS);
     };
   }
 
@@ -445,6 +471,8 @@ export class GameController extends Component {
     // ④ 事件 → 表现
     let refresh = false;
     let resetTrayScroll = false;
+    /** M2-10：通关事件暂存。序列在 refreshAll 之后启动（见 celebrateWin） */
+    let pendingWin: LevelClearedEvent | null = null;
     for (const event of result.events) {
       switch (event.type) {
         case 'state-changed':
@@ -527,7 +555,10 @@ export class GameController extends Component {
           }
           // M2-9：成功扣锁声（UI Spec 8）。放在浮层入场之前——先有声、后有画面
           audio.play('success');
-          this.successOverlay?.show(event, this.hasNextLevel());
+          // M2-10：**不在这里启动庆祝**——暂存，等 refreshAll 之后才 show()
+          // （state-changed 被 unshift 到事件数组最前，此刻物品层还没重画，
+          // 最后一件物品的节点不存在，回弹会打空。见 celebrateWin）
+          pendingWin = event;
           break;
       }
     }
@@ -565,8 +596,31 @@ export class GameController extends Component {
     if (resetTrayScroll) this.trayView?.resetScroll();
     if (refresh) this.refreshAll(result.state, result.phase);
 
+    // M2-10：庆祝序列在 refreshAll **之后**启动。state-changed 被 unshift 到
+    // 事件数组最前，level-cleared 分支跑的时候物品层还是旧渲染——最后一件
+    // 物品的节点要等这次重画才存在，提前 show() 会让回弹打空（庆祝第一段
+    // 没画面），而日志/状态都是对的，只能靠截图对比发现。
+    if (pendingWin !== null) this.celebrateWin(pendingWin);
+
     // 任何状态变更都可能改写工具栏可用态（撤回栈 / 选中 / 进度 / 提示可行性）
     this.updateToolbarState();
+  }
+
+  /**
+   * 启动通关庆祝序列（M2-10 / UI Spec 5.3：回弹 → 合盖 → 星光面板 → 解冻）。
+   *
+   * 序列的编排与计时在 `SuccessOverlay`（按 `UI_WIN_*` 常量走），本方法只负责
+   * 在对的时机调它：`refreshAll` 之后（物品节点已存在）。音效已在
+   * `level-cleared` 分支先响过（M2-9「先声后画面」）。
+   */
+  private celebrateWin(event: LevelClearedEvent): void {
+    if (DEBUG) {
+      console.log(
+        `[GameController] 庆祝序列启动：回弹 ${event.lastItemId}` +
+          ` → 合盖 → 浮层（${UI_WIN_SETTLE_MS}ms 后按钮解冻）`,
+      );
+    }
+    this.successOverlay?.show(event, this.hasNextLevel());
   }
 
   /**
@@ -787,6 +841,37 @@ export class GameController extends Component {
       },
       this,
     );
+  }
+
+  // ───────────────────────── M2-10 行李箱合盖（代码注入 SafeAreaRoot） ─────────────────────────
+
+  /**
+   * 创建合盖节点并挂到 `SafeAreaRoot`，插在通关浮层**正下方**。
+   *
+   * 层序要求：盖板要盖住棋盘/托盘/预览（同辈里排在它们之后），又不能盖住
+   * 浮层遮罩（遮罩还得盖住它）——所以锚定浮层节点的兄弟序，往上插一位。
+   * 与工具栏/引导/确认框同范式代码注入，不手改场景 JSON。
+   *
+   * 盖板**不挂任何触摸监听**：合盖只发生在 `WinAnimating` 冻结期，输入已被
+   * 双重挡下（`DragController.inputFrozen` + core `isInputFrozen`）。
+   */
+  private buildLid(): void {
+    const root = this.dragController?.gestureRoot ?? this.node;
+    const node = new Node('SuitcaseLid');
+    node.layer = root.layer;
+    root.addChild(node);
+
+    // 插到浮层正下方：以浮层节点的当前兄弟序为锚（onLoad 里 buildLid 跑在
+    // 所有注入之后，此时序稳定）。取不到浮层（场景没挂 SuccessOverlay）时
+    // 退到末尾——那种配置下庆祝序列本来也跑不起来，层序错只是不挡遮罩。
+    const overlayIndex = this.successOverlay?.node.getSiblingIndex();
+    node.setSiblingIndex(overlayIndex ?? root.children.length);
+
+    const lid = node.addComponent(SuitcaseLid);
+    lid.boardView = this.boardView;
+    this.suitcaseLid = lid;
+
+    if (DEBUG) console.log('[GameController] 合盖层已注入 SafeAreaRoot（浮层之下）');
   }
 
   // ───────────────────────── M2-6 首次引导（代码注入 SafeAreaRoot） ─────────────────────────

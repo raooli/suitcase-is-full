@@ -32,6 +32,13 @@ export type GameEvent =
       readonly levelId: number;
       readonly elapsedMs: number;
       readonly moves: number;
+      /**
+       * 最后放入箱子的物品 id（M2-10 通关庆祝「回弹」段的目标）。
+       *
+       * 事件是描述性的：view 拿它把回弹动画对准**刚锁进去的那一件**
+       * （UI Spec 5.3「最后一件物品回弹」），不用反查 state 猜是哪一件。
+       */
+      readonly lastItemId: string;
     }
   /** 确定「装不下」（棋盘里已无任何合法落点）。**单向断言、非阻断**（PRD R-10 / TDD 8.4） */
   | { readonly type: 'deadlock-warning' };

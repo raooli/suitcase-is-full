@@ -263,6 +263,17 @@ export class BoardView extends Component {
     return (this.board?.rows ?? 0) * this.cellPx;
   }
 
+  /**
+   * 棋盘像素尺寸（设计单位）的公开出口（M2-10 合盖动效用）。
+   *
+   * 盖板要「正好盖住棋盘」，大小必须问这里——格算术只允许出现在本文件与
+   * `core/config.ts`（R-A6），视图层自己乘 `cols × cellPx` 就是第二次真相。
+   * 棋盘未渲染（`board === null`）时返回 0×0，调用方按「没有可盖的东西」处理。
+   */
+  boardSizePx(): { width: number; height: number } {
+    return { width: this.boardWidth(), height: this.boardHeight() };
+  }
+
   // ───────────────────────── 尺寸推算 ─────────────────────────
 
   /**
