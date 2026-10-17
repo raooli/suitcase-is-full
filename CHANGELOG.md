@@ -23,6 +23,17 @@
 
 ## 提交记录（倒序）
 
+### `4c49a30` · art: 补 8 张新图的 .meta 导入件（prop_04_E/F + prop_05_A~F）
+
+| 项 | 内容 |
+| --- | --- |
+| 日期 | 2026-10-18 00:19 |
+| 文件 | `assets/resources/sprites/props/prop_04_E.png.meta`、`prop_04_F.png.meta`、`prop_05_A.png.meta` ~ `prop_05_F.png.meta`（8 个） |
+| 背景 | `3788630` 批次只提交了 PNG；编辑器自 22:49 后未运行，Cocos 未导入故无 `.meta`，8 张图不在 library 里 |
+| 处置 | 跑一次无头预览（`preview-check --scene Boot`）即触发导入，25 个 meta 全部生成；trim 值与像素 bbox 余量逐项吻合（`prop_05_A` trimX=58/trimY=10 ↔ 实测 L58/T10） |
+| 复验 | `npm run check` 330/330；Boot 预览零 Console 错误；真微信包重建 = **2,251,371 B / 104 文件**（旧 2,149,729 + 本批图 101,642），63 张齐预测 ≈2.69MB < 3.5MB 自设线 |
+| 影响 | 25 张图全部 PNG+meta 成对入库，M4-5 接线前提就绪；分支保护文件按既定约定未提交 |
+
 ### `abc298f` · art: M4-3 批次产物归档——AI 件的「源」是提示词而非 SVG + 原图 512 缩略留档
 
 | 项 | 内容 |
