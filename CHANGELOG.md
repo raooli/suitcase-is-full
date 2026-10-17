@@ -23,6 +23,18 @@
 
 ## 提交记录（倒序）
 
+### `56a27a0` · fix: M3-1 真机校准——拖拽 ghost 上浮 24px 清零，修复「对不上格」手感问题（G1-D1 闭环）
+
+| 项 | 内容 |
+| --- | --- |
+| 日期 | 2026-10-17 20:48 |
+| 文件 | `assets/core/config.ts`、`assets/core/geometry/lift.ts`、`assets/view/PreviewLayer.ts`（3 文件，+47/−21） |
+| 真机反馈 | 微信开发者工具真机试玩：「手指拖动移动到方格上时位移有点大，总感觉没放到正确的方格上」 |
+| 根因 | G1-1 遮挡补偿 `UI_DRAG_LIFT_PX=24` **只改画法不改判定**——ghost 画在落点格上方 24 设计单位，松手落手指正下方的格；玩家按 ghost 对格 → 落点系统偏下一格（3×3 偏 0.21 格 / 6×6 偏 0.42 格）。像素实测：修复前 ghost 中心 (251.8, 329.8) vs 落点格 (1,1) 中心 (252, 354)，差正好 24 |
+| 修复 | 上浮校准为 **0**（只改 `config.ts` 数值，`lift.ts` 机制与 12 条单测不动）；复测 ghost 中心 (251.8, 353.8)，误差 0.2px——G1-2「松手落格 = 预览所示格」视觉级成立。为什么去掉上浮而非补偿判定：盘上物品起拖锚点须等于原位（M2-11 约束），两问不可兼得；63 件物品最小 1×2、无 1 格物品，遮挡担忧经内容核对不成立，可读性由描边 + 半透明填充 + 1.05 放大补住 |
+| 验收 | `npm run check` 330/330；E2E 四拖落点不变 + 🎉 通关 + 庆祝序列 +0/+153/+504/+875ms + 零 Console 错误；微信包已重建（3,236,262 字节） |
+| 关联 | G1 报告 V1.2（G1-D1 闭环 / G1-4 真机部分闭合）、docs/05 M3-3 ◐ 首轮记档 |
+
 ### `docs` · chore: M3-1/M3-2 落地——微信小游戏构建产物就绪 + libVersion 已 widelyUsed + G2 首包实测 3.24MB
 
 - M3-1：编辑器 CLI `--build platform=wechatgame;startScene=Boot` 出包 `build/wechatgame/`（86 文件 / 3,236,263 字节 / portrait / 启动场景 `db://assets/scenes/Boot.scene` 已核）；web 预览同款 env（`ELECTRON_DISABLE_SANDBOX=1`、退出码 36 以 `build Task (wechatgame) Finished in` 判成功）。`cli open --project build/wechatgame` 因 IDE 服务端口未开未能自动加载，用户侧手动导入即达 M3-1 验收
