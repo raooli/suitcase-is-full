@@ -23,6 +23,13 @@
 
 ## 提交记录（倒序）
 
+### `docs` · chore: M3-1/M3-2 落地——微信小游戏构建产物就绪 + libVersion 已 widelyUsed + G2 首包实测 3.24MB
+
+- M3-1：编辑器 CLI `--build platform=wechatgame;startScene=Boot` 出包 `build/wechatgame/`（86 文件 / 3,236,263 字节 / portrait / 启动场景 `db://assets/scenes/Boot.scene` 已核）；web 预览同款 env（`ELECTRON_DISABLE_SANDBOX=1`、退出码 36 以 `build Task (wechatgame) Finished in` 判成功）。`cli open --project build/wechatgame` 因 IDE 服务端口未开未能自动加载，用户侧手动导入即达 M3-1 验收
+- M3-2：3.8.8 构建默认即 `libVersion: widelyUsed`，全包 grep 无写死引擎版本，无需手动改
+- G2 首包读数落表：3.24 MB < 3.5MB ✅（余量 0.26MB，M4-5 美术接入后需复测）；帧率待真机
+- appid 为 Cocos 默认游客号 `wx6ac3f5090a6b99c5`：本地预览/真机预览可用，**不可上传发布**，提审前需换真实小游戏 appid
+
 ### `8fc62a7` · fix: M2-11 复审两条 [低]——playSparkle 幂等前置停止 + 托盘起拖锚点改按当前手指位推导
 
 | 项 | 内容 |

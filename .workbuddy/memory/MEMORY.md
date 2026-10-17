@@ -1,6 +1,6 @@
 # 项目长期记忆 —— 《行李箱装不下啦！》
 
-> 跨会话约定与手法；日常进展写 `YYYY-MM-DD.md`。M2（M2-1~M2-11）已全部收官；M2-11 复审两条 [低] 已修复（`8fc62a7`）。
+> 跨会话约定与手法；日常进展写 `YYYY-MM-DD.md`。M2（M2-1~M2-11）已全部收官；M2-11 复审两条 [低] 已修复（`8fc62a7`）。M3-1/M3-2 微信小游戏构建已落地（`build/wechatgame/` 3.24MB，G2 首包过线；帧率待真机）。
 
 ## 工程基线
 - Cocos Creator 3.8.8（锁版本 `/Applications/Cocos/Creator/3.8.8/`）；设计 390×844 + Fit Width。
@@ -18,6 +18,7 @@
 
 ## 无头预览与取证（preview-check.mjs）
 - 构建：`env -u ELECTRON_RUN_AS_NODE`、`ELECTRON_DISABLE_SANDBOX=1`；编辑器退出码恒 36，以 `build Task (web-mobile) Finished in` 判成功。Chrome 须 `--no-sandbox --no-zygote`。`--grep` 纯子串；`--gap/--drag-wait` 全局单值只作用于 drag 后等待；Console 段只印后 80 行。
+- **微信小游戏构建（M3-1）**：同款 env + `--build "platform=wechatgame;startScene=<Boot uuid>"`，4 秒出 `build/wechatgame/`；启动场景真相在 `src/settings.json` 的 `launch.launchScene`（startScene 参数不是来源）；3.8.8 默认 `libVersion: widelyUsed`（M3-2 自动满足）；appid 是游客号 `wx6ac3f5090a6b99c5`（可预览不可上传）；`cli open --project build/wechatgame`（`/Applications/wechatwebdevtools.app/Contents/MacOS/cli`）需先在 IDE 安全设置开服务端口。
 - 三套坐标：`--tap/--drag`=CSS 页面；世界坐标 y 自下（`uiY=844−pageY`）；设计=world−(195,422)。**`--shot` PNG 是 dpr=2（780×1688）**，页面值 ×2 换算。`getLocation` 是设备像素别对设计值。
 - 设计→页面：`pageX=195+designX`、`pageY=422−designY`。
 - **改 `Game.scene` 的 `levelId` 换关（第 841 行），构建偶发吃缓存跑旧关**：必须核 Console `载入 L<n>` 行确认，否则结论可能是假的。跑完 `git checkout -- assets/scenes/Game.scene` 还原。
