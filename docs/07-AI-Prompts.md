@@ -418,6 +418,18 @@ Flat with slight volume. Transparent background, PNG-24.
 
 > 结论先行：**本机图像模型给不出真透明底**（请求 `background=transparent` 仍返回 colorType 2 的无 alpha RGB，甚至把「透明棋盘格」直接画进像素）。因此流水线固定为「文本生成 → 阈值抠底 → 裁边 → 面积平均缩放 → 居中合版 → check-art」。
 
+**脚本（已在仓库，剩余 38 张直接复用）**：
+
+```bash
+# 1) 生成：ImageGen，提示词 = 5.1 Style Block + 5.11 批次补充段 + 5.6 的 Object Block + Spec/Output
+# 2) 后处理：抠底 + 缩放到画布 + 量化，一条命令写进 sprites/props/
+node tools/art-batch-proc.mjs fit <raw.png> <itemType> <W> <H> 10
+# 3) 验规格（尺寸/命名/朝向/透明底）
+npm run check:art
+# 4) 观感比对（奶油底接触表，2~3x）
+node tools/art-contact-sheet.mjs <out.png> 3 <新图.png> <参考锚点.png> ...
+```
+
 | 环节 | 做法 | 为什么（实测依据） |
 | --- | --- | --- |
 | 生成尺寸 | 取与画布比例最接近的模型上限（1:2→1024×1536、3:2→1536×1024、1:1→1024×1024），绝不直接要 96/288 这类小尺寸 | 模型不接受精确小画布；按最近上限出图再缩放，缩放后必须重跑 `check:art` |
@@ -428,6 +440,7 @@ Flat with slight volume. Transparent background, PNG-24.
 | 投影 | **提示词侧禁止**（`no ground shadow, no cast shadow`）；后处理不做自动去投影 | C 家族织物就是 `#E5E5E5`（彩度 0、L=0.898），与浅灰投影颜色上不可分——实测自动去投影把 `prop_05_B` 包体误删 45.8 万 px |
 | 缩放 | 面积平均（box filter，预乘 alpha 后归一化） | 1024→96 是 10:1 的缩小，双线性会出锯齿；`预乘分子用 0–255、分母用 0–1` 会让整图变黑（踩过） |
 | 合版 | 等比缩到「画布 − 2×margin」内后**居中**，margin 8~10 | 居中必须基于抠图后的真实包围盒；残留碎块会让物体整体偏到一边 |
+| 量化 | **16 色调色板（median cut）+ alpha 16 级**，`QN` 可调 | 面积平均缩放保留 AI 的柔和渐变、颜色种类暴增：不量化 36KB/张，63 张会顶到 3.5MB；16 色后 11.7KB/张，肉眼无差 |
 
 **并行出图的坑（必踩）**：同一批并行调用的文件名由「提示词前缀 + 秒级时间戳」拼成，**同秒会互相覆盖**（本次 `prop_05_C` 被 `prop_05_B` 覆盖后丢失）。对策：每张给独立 `output_dir`，出图后立刻改成稳定名。
 
