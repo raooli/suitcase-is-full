@@ -1,6 +1,6 @@
 # 项目长期记忆 —— 《行李箱装不下啦！》
 
-> 跨会话约定与手法；日常进展写 `YYYY-MM-DD.md`。M2（M2-1~M2-11）已全部收官；M2-11 复审两条 [低] 已修复（`8fc62a7`）。M3-1/M3-2 微信构建已落地（首包 3.24MB 过 G2）；M3-1 真机校准：拖拽 ghost 上浮清零（`56a27a0`）。素材 17/63 全合格（两张锚点齐，放量不阻塞）；UI 7 类 + 音效 + 代码接线未动（M4）。
+> 跨会话约定与手法；日常进展写 `YYYY-MM-DD.md`。M2（M2-1~M2-11）已全部收官；M2-11 复审两条 [低] 已修复（`8fc62a7`）。M3-1/M3-2 微信构建已落地（首包 3.24MB 过 G2）；M3-1 真机校准：拖拽 ghost 上浮清零（`56a27a0`）；M3-3 手感 ✅（机型 iPhone 15 Pro 393pt）。**M4-2 定稿**：色彩板/明度阶梯/提示词包 V1.2（实测锚定 5 色相家族 + 63 件逐关分配 + A-02 裁决待回签）。素材 17/63 全合格；UI 7 类 + 音效 + 代码接线未动（M4-3~M4-5）。
 
 ## 工程基线
 - Cocos Creator 3.8.8（锁版本 `/Applications/Cocos/Creator/3.8.8/`）；设计 390×844 + Fit Width。
@@ -16,8 +16,7 @@
 - 懒加载 `built` 提前 return 必须抽 `applyEvent()` 无条件入口（防复玩不刷新）。
 - **Cocos 触摸派发给「所有」命中节点**：整屏节点挡触摸必须显式 `event.propagationStopped = true`（3.8.8 无 `stopPropagation` 方法，只有标志位）。触摸三事实：全局 `input.on(TOUCH_START)` 收不到（用节点级）；触摸由最深节点认领、松手不在内→引擎改 `TOUCH_CANCEL`（监听挂覆盖整屏的 SafeAreaRoot）；必须 `touch-action:none`。
 
-## 无头预览与取证（preview-check.mjs）
-- 构建：`env -u ELECTRON_RUN_AS_NODE`、`ELECTRON_DISABLE_SANDBOX=1`；编辑器退出码恒 36，以 `build Task (web-mobile) Finished in` 判成功。Chrome 须 `--no-sandbox --no-zygote`。`--grep` 纯子串；`--gap/--drag-wait` 全局单值只作用于 drag 后等待；Console 段只印后 80 行。
+## 无头预览与取证（preview-check.mjs）- 构建：`env -u ELECTRON_RUN_AS_NODE`、`ELECTRON_DISABLE_SANDBOX=1`；编辑器退出码恒 36，以 `build Task (web-mobile) Finished in` 判成功。Chrome 须 `--no-sandbox --no-zygote`。`--grep` 纯子串；`--gap/--drag-wait` 全局单值只作用于 drag 后等待；Console 段只印后 80 行。
 - **微信小游戏构建（M3-1）**：同款 env + `--build "platform=wechatgame;startScene=<Boot uuid>"`，4 秒出 `build/wechatgame/`；启动场景真相在 `src/settings.json` 的 `launch.launchScene`（startScene 参数不是来源）；3.8.8 默认 `libVersion: widelyUsed`（M3-2 自动满足）；appid 是游客号 `wx6ac3f5090a6b99c5`（可预览不可上传）；`cli open --project build/wechatgame`（`/Applications/wechatwebdevtools.app/Contents/MacOS/cli`）需先在 IDE 安全设置开服务端口。
 - 三套坐标：`--tap/--drag`=CSS 页面；世界坐标 y 自下（`uiY=844−pageY`）；设计=world−(195,422)。**`--shot` PNG 是 dpr=2（780×1688）**，页面值 ×2 换算。`getLocation` 是设备像素别对设计值。
 - 设计→页面：`pageX=195+designX`、`pageY=422−designY`。
@@ -46,3 +45,10 @@
 - **L1 四拖配方（教训：托盘每次放置后从 0 号槽重排 + grabOffset 未补偿会全盘皆错）**：全部从 0 号槽 (62,668) 起手，落点=cellCenter(目标锚+offset)−(10,10)：A (62,668)→(299,344) 落(1,1)；B (62,668)→(71,458) 落(1,0)；C (62,668)→(299,458) 落(2,1)；D (62,668)→(185,230) 落(0,0)。判据：Console `放入 L01_X → (r,c)` + 关底 `level-cleared`。实证日志：`起拖 L01_B grabOffset=(1,0)`（槽心按下）。
 - **grab 锚点按物品来源分**（M2-11 复审修复 `8fc62a7`）：**盘上物品用按下点**（= 物品原位不跳，offset 与 pickAt 同源）；**托盘物品用当前手指位**（= 此刻松手落点）。托盘按下点映射过棋盘格只能得棋盘下方界外值（旧代码 `grab anchor=(4,-1)`），无意义且埋 stale-anchor——一次大幅 move 越过阈值后无更多 move 时，松手拿旧锚点判取出态→把能落盘的一拖误判成 cancel。托盘带内首帧仍出界外值是**诚实的**（手指在托盘里本就不能落盘，overTray 谓词 + 后续每个 move 接管，ghost 按取出态画在手指下方）。
 - **ghost 上浮 = 0**（M3-1 真机校准 `56a27a0`，G1-D1 闭环）：非 0 上浮只改画法不改判定 → ghost 画在落点格上方而松手落手指正下方格，玩家按 ghost 对格系统偏下一格（3×3 偏 0.21 格 / 6×6 偏 0.42 格）。真机反馈即此。为什么去上浮而不补偿锚点：盘上物品起拖锚点须=原位（M2-11），不可兼得；63 件最小 1×2 无 1 格物品，遮挡不成立。遗留逆反方案=双视觉拆分（落点描边画落点+物品形悬浮指上），**不把上浮调回非 0**。中途态取证：`--drag x1,y1,x2,y2,shot.png`（第 5 段=松手前截图），绿扫 `#50B88A` 量 bbox 中心；L1 ghost 应=落点格中心（页 (252,354)）。
+
+## M4 美术规格（M4-2 定稿，2026-10-17）
+- **5 色相家族**（docs/07-AI-Prompts.md 5.2，实测锚定）：C 织物（`#E5E5E5` L=0.784 主 / `#D4CFCD` 中档 / 无深档）/ R 粉（`#FFE0E7` 浅 / `#FA91A8` 深）/ M 青（`#BCEAD5` 浅 / `#87CBB8` 中 / `#559E91` 深）/ B 蓝（`#BDE4F7` 浅 / `#8FBBD9` 深=**唯一建议新色待确认**）/ N 褐（`#C2A28A` 浅 / `#7A5C4F` 深）。实测结构规律：织物 9 张走灰白、伞类 teal 深档、每件=浅主填充+深 accent（`#FA91A8`/`#559E91`/`#979798`）。**「三色轮换」占位模型在真图阶段已解体**
+- **逐关分配规则**：≥3 家族/关、同家族 ≤2 件、≥1 重色（L<0.6）；同名变体分不同家族或档（05_A 碎花 R浅 vs 06_A 条纹 R深）。63 件分配全在 07-AI-Prompts 5.6 表（家族+状态两列）
+- **A-02 裁决**：不加三基色明度偏置、回签「色相+描边」（待用户回签）；判定从「亮度差」改为「家族分配合规 + 缩略图剪影」
+- **锚点 SVG 实际用色**（写提示词/评审时对表）：伞面渐变 `#C4F0DE→#89CCB9→#5FB3A4`、高光 `#F3FFF7`、伞杆 `#C2A28A/#E0AE91`、伞把 `#F8ABBE` 描 `#CE758F`；手机壳 `#FFE0E7` 描 `#7A5C4F`、屏 `#FFF8EE`、bezel+摄像头 `#FA91A8`。**旧文档写的「#559E91 纯色伞面」与 SVG 不符**
+- **md 大表加列的坑**：`split(' | ')` 对 markdown 行首/行尾管道返回 7 段（首段带 `| T`、末段带 `rot |`），不是首尾空串 9 段；按 9 段取 cells[7]→undefined 全表污染。修正：正则 `^\| (.+?) \| …` 分组重建。itemType 含大写（`prop_01_A`），字符类别写 `[a-z0-9_]`

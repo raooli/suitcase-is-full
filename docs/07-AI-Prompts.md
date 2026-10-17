@@ -1,8 +1,10 @@
-# 《行李箱装不下啦！》AI / WorkBuddy 提示词 V1.1
+# 《行李箱装不下啦！》AI / WorkBuddy 提示词 V1.2
 
 > 用途：供 WorkBuddy、Codex 或其他 AI 助手继续开发、制作美术与评审交付。规则冲突时，以 PRD 为业务基线、GDD 与关卡 JSON 为关卡事实、TDD 为技术/资源规格、UI Spec 为视觉规范。
 >
 > **V1.1 变更（2026-10-13）：** ① 基准图锚点由不存在的 `prop_03_D` 改为 `prop_umbrella`；② 交付路径随目录重构更新（`art/` + `assets/resources/sprites/props/`）；③ 资源键裁决为 `itemType`（`spriteKey` 降级）；④ **新增第 5 节「63 件物品出图提示词包」**（可直接复制使用）。
+>
+> **V1.2 变更（2026-10-17，M4-2 锚点确认后定稿）：** ① 5.2 色彩板由「令牌推导」升级为 **17 张已交付图实测取色锚定**，新增 5 色相家族系统与逐关分配规则；② 新增 5.2.1 **A-02 裁决**（M4-1 遗留：不给三基色加明度偏置，回签「色相+描边」方案，待用户回签）；③ 5.6 清单补「色相家族 / 交付状态」两列，已交付 17 件可直接作 image reference；④ 5.7 批次计划按当前进度刷新；⑤ 5.5 示例颜色与锚点 SVG 实际用色对齐。
 
 ## 1. 技术方案与开发提示词
 
@@ -95,16 +97,57 @@ photorealistic, textured canvas background, grid lines, white background,
 border, frame, blurry, cropped subject, multiple views, 4 rotations
 ```
 
-### 5.2 色彩板（填充只能从这里派生）
+### 5.2 色彩板（V1.2 重写：实测锚定，填充只能从这里派生）
 
-| 层级 | 色值 | 用途 |
-| --- | --- | --- |
-| L3 物品浅 | `#FFE0E7` rose / `#BCEAD5` mint / `#BDE4F7` blue | 物品填充，三色轮换保相邻可辨 |
-| L3' 物品深 | `#FA91A8` / `#559E91` | 同色系强调件 |
-| L4 结构 | `#E8CFBC` / `#7A5C4F` | 边框、描边 |
-| L1/L2 背景 | `#FFF8EE` / `#FFFFFF` | 评审底 |
+> **色板来源**：不是想象配色——下表由 M4-1 已交付 17 张合格图的**像素级主色聚类**得出（`tools` 侧 PNG 解码 + 16 级量化聚类，跳过透明/近白/近棕描边像素后取 top3 主色并算相对亮度）。锚点实测（2026-10-17）：
+>
+> | 实测对象 | 主色（占比 / 相对亮度） |
+> | --- | --- |
+> | `prop_01_A` 手机 | `#FFE0E7`(39%, L=0.803) / `#FB9AAE`(L=0.467) |
+> | `prop_umbrella` 横伞 | `#87CBB8`(15%, L=0.513) / `#9AD6C3`(L=0.589) / `#A4DCCA`(L=0.633) |
+> | `prop_02_A` 帆布袋 | `#E5E5E5`(56%, L=0.784) / `#BCEAD5`(L=0.743) |
+> | `prop_04_D` 收纳袋 | `#E5E5E5`(46%) / `#C3E9D8`(L=0.748) / `#559E91`(L=0.284) |
+>
+> 实测揭示的结构规律（**比任何色表都重要**）：① **织物/衣物类走灰白 `#E5E5E5`**（L2/L3/L4 共 9 张），这是帆布/海绵/针织的本色，不是「偷懒的中性色」；② **伞类走 teal 深档**（L=0.51~0.63），比 mint 令牌深一整档；③ **每件 = 浅色主填充 + 一个深色 accent**（深粉 `#FA91A8` / 深 teal `#559E91` / 深灰 `#979798` 三选一）。
+
+**5 色相家族（M4-2 定稿，填充从这里派生）：**
+
+| 家族 | 浅档（主填充） | 深档（accent / 重色件） | 适用物件 |
+| --- | --- | --- | --- |
+| **C 织物** | `#E5E5E5`(L=0.784) / `#F5EFE3` / 纸板中档 `#D4CFCD`(L=0.630) | 靠 accent，不设深档（织物加深显脏） | 衣物、帆布包、围巾、针织、伞面、纸盒 |
+| **R 粉** | `#FFE0E7`(L=0.803) | `#FA91A8`(L=0.434) | 手机、相机、化妆/洗漱用品、外套 |
+| **M 青** | `#BCEAD5`(L=0.743) | `#87CBB8`(L=0.513) → `#559E91`(L=0.284) 两档深 | 钱包、伞、收纳、洗漱 |
+| **B 蓝** | `#BDE4F7`(L=0.730) | `#8FBBD9`（**建议新色，M4-3 首批跟图确认；不接受新色则深档任务交回 M 深**） | 墨镜、香水玻璃、衬衫、电子小件 |
+| **N 褐** | `#C2A28A`(L≈0.40) / `#E0AE91` | `#7A5C4F`(L=0.086) | 皮鞋、皮革制品、三脚架、木/金属件 |
+
+**描边与阴影（全家族统一）：** 描边 `#7A5C4F` ≤2px@2x；左上柔光 + 右下短淡阴影（阴影色 = 主填充同色相降明度 10~15%，**禁用纯黑阴影**）。
+
+**逐关分配规则（A-02 操作化，替代字面亮度口径，见 5.2.1）：**
+
+1. 每关 ≤10 件**至少覆盖 3 个家族**；
+2. 同家族同关 ≤2 件，且形状（剪影）可辨；
+3. 每关**至少 1 件重色压阵**（深档件 L<0.6），防止整关浅色糊成一片；
+4. 同名变体按 5.6「变体提示」分到**不同家族或不同明度档**（如 `prop_05_A` 碎花裙 R 浅 / `prop_06_A` 条纹裙 R 深）；
+5. 兜底不依赖填充：2px brown 描边 + 格内缩缝 + 缩略图测试（A-01 剪影）三通道共同保证可区分。
+
+> 已交付 17 件的逐关家族分配见 5.6 清单「家族」列，剩余 46 件的分配已排定（同表），**M4-3 按表执行，不自由发挥**。
 
 验收唯一方式：**缩略图测试**——把界面缩到 25%，看剪影能否读出占格数。
+
+### 5.2.1 A-02 裁决（M4-1 遗留项，2026-10-17 M4-2 定稿）
+
+> 背景：TDD 17.6 的 A-02 字面口径「同图集内任意两件相邻物品颜色明度差 ≥1 阶梯」，M1-2 已裁决「字面口径在占位阶段结构性不可满足，真图阶段随 M4-1 基准图确认一并裁决是否给三基色加明度偏置」。
+
+**裁决：不给三基色加明度偏置——回签「色相 + 描边」方案（状态：待用户回签）。**
+
+依据（全部有实测或既有裁决支撑）：
+
+1. **「三基色轮换」模型在真图阶段已解体。** 17 件实测显示填充按物件自然本色走（织物灰白 / 伞青 / 手机粉），不存在一个统一的「三基色」可供加偏置；强行加偏置等于让雨伞不青、让织物不灰，破坏 Art Style V1.0 的自然联想。
+2. **加偏置 = 修改 UI Spec 已确认令牌**（M1-2 裁决边界：改色号须过美术确认），连锁影响占位色块、进度条、全部 UI 表面，收益仅是字面口径好看。
+3. **可区分性实际由四通道完成，亮度只是其一**：色相 + 2px brown 描边 + 剪影（A-01）+ 每件深色 accent。17 件已交付图同屏验证无投诉（真机 L1/L2/L3 全关卡已玩）。
+4. **字面口径的前提不成立**：棋盘上谁挨谁由玩家摆放决定，且同形同色场景由 5.6「同名变体提示」结构性处理（不同家族/不同档）。
+
+**替代验收（M4-3 起执行）**：按 5.2 逐关分配规则（≥3 家族/关、同家族 ≤2 件、≥1 重色）+ 缩略图测试；A-02 的判定从「亮度差」改为「同关家族分配合规 + 缩略图剪影可辨」。
 
 ### 5.3 提示词四段结构
 
@@ -161,9 +204,10 @@ no glow, no specular highlight, no thick impasto. Transparent background,
 PNG-24.
 
 A closed smartphone drawn HORIZONTALLY (lying flat, landscape orientation),
-screen side up, 1 row tall and 2 columns wide. Rounded corners, thin pink
-bezel, small camera dot, subtle screen reflection. Rose #FFE0E7 body with
-#FA91A8 accent. Two grid cells wide, one cell tall.
+screen side up, 1 row tall and 2 columns wide. Rounded corners. Rose #FFE0E7
+body with warm brown #7A5C4F outline (2px); cream #FFF8EE screen inset; thin
+#FA91A8 inner bezel and matching small camera dot; one subtle white
+reflection line at 85% opacity. Two grid cells wide, one cell tall.
 
 Canvas exactly 192x96 pixels, single cell = 96px, @2x. The object must fill
 the canvas edge to edge with no margin. Subject stays fully inside the shape
@@ -184,10 +228,11 @@ border, frame, blurry, cropped subject, multiple views, 4 rotations
 
 ```text
 A closed long-handled umbrella lying HORIZONTALLY as a 1-row, 5-column
-strip. Slim body, small curved handle at one end, fabric texture suggested
-with two thin stripes only. Teal #559E91 canopy with cream #F3FFF7 panel
-and a tiny pink #F8ABBE tip. The strip must stay perfectly straight — this
-item occupies five grid cells in a row.
+strip. Slim body, small curved wooden handle at one end, fabric suggested by
+a vertical gradient only: #C4F0DE top → #89CCB9 middle → #5FB3A4 bottom, with
+one cream #F3FFF7 highlight stripe along the shaft and a tiny pink #F8ABBE
+handle tip. Shaft in warm light brown #C2A28A / #E0AE91. The strip must stay
+perfectly straight — this item occupies five grid cells in a row.
 ```
 Spec Block 用 `480x96`，其余段不变。
 
@@ -204,72 +249,73 @@ Spec Block 用 `96x480`，其余段不变。
 
 > 形状列为 **行×列**，画布 = 列×96 × 行×96。`rot` = 数据是否允许旋转（不影响出图张数）。
 > **同名不同 itemType 必须按「变体提示」画出可区分差异。**
+> **`家族`列（V1.2 新增）= 5.2 色相家族分配，M4-3 按表执行**；`状态`列：✅ = 已交付合格，可直接作 image reference；⬜ = 待产（当前 17 ✅ / 46 ⬜）。
 
-| itemType | 中文名 | 英文对象描述 | 变体提示 | 形状 | 画布 px | rot |
-| --- | --- | --- | --- | --- | --- | --- |
-| `prop_01_A` | 手机 | closed smartphone, horizontal | 横放，粉边 | 1×2 | 192×96 | 否 |
-| `prop_01_B` | 钱包 | bi-fold wallet | 竖放短款 | 2×1 | 96×192 | 否 |
-| `prop_01_C` | 墨镜 | folded sunglasses | 横放折起 | 1×2 | 192×96 | 否 |
-| `prop_01_D` | 折叠雨伞 | compact folded umbrella | 横放短折叠 | 1×3 | 288×96 | 否 |
-| `prop_02_A` | 帆布袋 | canvas tote bag | 方鼓形，双提手 | 2×2 | 192×192 | 否 |
-| `prop_02_B` | 雨伞 | closed umbrella, short | 竖放 | 2×1 | 96×192 | 否 |
-| `prop_02_C` | 耳机 | over-ear headphones | 竖放，耳罩朝前 | 2×1 | 96×192 | 否 |
-| `prop_02_D` | 旅行手账 | travel notebook with band | 方本，绑带 | 2×2 | 192×192 | 否 |
-| `prop_04_A` | 薄外套 | light jacket, folded flat | 横长折叠 | 2×4 | 384×192 | 是 |
-| `prop_04_B` | 旅行相机 | compact travel camera | 横放，带腕带 | 3×2 | 192×288 | 是 |
-| `prop_04_C` | 眼镜盒 | round hard glasses case | 圆盒横放 | 2×2 | 192×192 | 是 |
-| `prop_04_D` | 收纳袋 | mesh organizer pouch | 网纱半透明 | 2×3 | 288×192 | 是 |
-| `prop_04_E` | 口红 | lipstick bullet in tube | 竖放单支 | 2×1 | 96×192 | 是 |
-| `prop_04_F` | 护照 | passport booklet | 横放，微开 | 1×2 | 192×96 | 是 |
-| `prop_05_A` | 长裙 | long dress | 碎花图案 | 3×3 | 288×288 | 是 |
-| `prop_05_B` | 旅行手提袋 | travel handbag | 横长，提手在两侧 | 2×3 | 288×192 | 是 |
-| `prop_05_C` | 高跟鞋 | pair of high heels | 一双横并 | 2×2 | 192×192 | 是 |
-| `prop_05_D` | 化妆包 | makeup bag, open with brush | 开盖露笔刷 | 2×3 | 288×192 | 是 |
-| `prop_05_E` | 香水 | round perfume bottle | 圆瓶，宽肩 | 2×2 | 192×192 | 是 |
-| `prop_05_F` | 发饰 | hair clip set | 横放三枚发夹 | 3×2 | 192×288 | 是 |
-| `prop_06_A` | 长裙 | long dress | 条纹图案（区别于 prop_05_A） | 3×3 | 288×288 | 是 |
-| `prop_06_B` | 手提袋 | handbag, upright | 竖立，单提手 | 3×2 | 192×288 | 是 |
-| `prop_06_C` | 高跟鞋 | single stiletto pump | 单只竖放 | 2×3 | 288×192 | 是 |
-| `prop_06_D` | 防晒套装 | sunscreen kit | 瓶+盒组合 | 2×2 | 192×192 | 是 |
-| `prop_06_E` | 香水 | tall perfume bottle | 高瓶窄肩（区别于 prop_05_E） | 2×2 | 192×192 | 是 |
-| `prop_06_F` | 旅行收纳袋 | slim travel organizer strip | 横长扁条 | 1×3 | 288×96 | 是 |
-| `prop_07_A` | 长柄伞 | closed long umbrella, vertical | 竖放（与 prop_umbrella 同款异向） | 5×1 | 96×480 | 是 |
-| `prop_07_B` | 三脚架 | mini tripod, legs folded | 竖放细长 | 4×1 | 96×384 | 是 |
-| `prop_07_C` | 针织衫 | knit sweater, folded stack | 叠放三件 | 3×3 | 288×288 | 是 |
-| `prop_07_D` | 方形收纳袋 | square pouch with zip | 方正拉链袋 | 2×2 | 192×192 | 是 |
-| `prop_07_E` | 折叠围巾 | folded scarf, square | 方折围巾 | 2×2 | 192×192 | 是 |
-| `prop_07_F` | 相机 | retro instant camera | 复古拍立得 | 2×2 | 192×192 | 是 |
-| `prop_07_G` | 鞋盒 | shoe box | 长盒，带盖缝 | 2×2 | 192×192 | 是 |
-| `prop_07_H` | 护照 | passport booklet, standing | 竖立（区别于 prop_04_F） | 2×1 | 96×192 | 是 |
-| `prop_08_A` | 旅行外套 | travel coat, folded vertical | 竖长折叠 | 3×1 | 96×288 | 是 |
-| `prop_08_B` | 护肤包 | skincare pouch | 圆角软袋 | 2×2 | 192×192 | 是 |
-| `prop_08_C` | 折叠衣物 | folded clothes stack | 叠放 T 恤两件 | 2×3 | 288×192 | 是 |
-| `prop_08_D` | 针织衫 | knit sweater, folded flat | 平折一件 | 2×2 | 192×192 | 是 |
-| `prop_08_E` | 收纳盒 | storage box, open lid | 开盖方盒 | 2×2 | 192×192 | 是 |
-| `prop_08_F` | 洗漱包 | hanging toiletry kit | 挂式，带挂钩 | 2×3 | 288×192 | 是 |
-| `prop_08_G` | 相机包 | soft camera bag | 软包圆角 | 2×2 | 192×192 | 是 |
-| `prop_09_A` | 旅行套装 | travel kit set | 三件套组合 | 3×3 | 288×288 | 是 |
-| `prop_09_B` | 化妆包 | zipped makeup pouch | 拉链扁平袋 | 2×2 | 192×192 | 是 |
-| `prop_09_C` | 衬衫 | shirt, folded | 横放折领 | 3×2 | 192×288 | 是 |
-| `prop_09_D` | 连衣裙 | summer dress | 竖长裙摆 | 2×3 | 288×192 | 是 |
-| `prop_09_E` | 卷发棒 | curling iron | 横放细长 | 1×3 | 288×96 | 是 |
-| `prop_09_F` | 鞋袋 | shoe bag with drawstring | 竖长束口袋 | 3×2 | 192×288 | 是 |
-| `prop_09_G` | 护肤包 | toiletry kit pouch | 方盒硬挺（区别于 prop_08_B） | 2×2 | 192×192 | 是 |
-| `prop_09_H` | 相机 | compact mirrorless camera | 现代微单 | 2×2 | 192×192 | 是 |
-| `prop_09_I` | 洗漱包 | travel wash bag | 方桶形（区别于 prop_08_F） | 2×3 | 288×192 | 是 |
-| `prop_10_A` | 旅行外套 | coat on hanger | 横长挂衣 | 4×2 | 192×384 | 是 |
-| `prop_10_B` | 相机包 | hard-shell camera case | 硬壳方盒 | 2×2 | 192×192 | 是 |
-| `prop_10_C` | 针织衫 | knit sweater, hanging | 挂起垂坠 | 2×3 | 288×192 | 是 |
-| `prop_10_D` | 旅行鞋 | pair of travel shoes | 一双鞋并排 | 2×3 | 288×192 | 是 |
-| `prop_10_E` | 护肤包 | cosmetic bag | 圆筒形（区别于另两款） | 2×2 | 192×192 | 是 |
-| `prop_10_F` | 香水盒 | square perfume box | 方盒横放 | 1×2 | 192×96 | 是 |
-| `prop_10_G` | 长围巾 | wool scarf, folded | 厚折围巾 | 2×3 | 288×192 | 是 |
-| `prop_10_H` | 眼镜盒 | slim glasses sleeve | 扁长套 | 2×1 | 96×192 | 是 |
-| `prop_10_I` | 登机牌夹 | boarding pass holder | 竖长票夹 | 3×1 | 96×288 | 是 |
-| `prop_jacket` | 折叠外套 | folding jacket | 折起成方块 | 2×3 | 288×192 | 是 |
-| `prop_pouch` | 收纳袋 | zip pouch | 通用拉链袋 | 2×3 | 288×192 | 是 |
-| `prop_scarf` | 长围巾 | knitted long scarf strip | 横长条针织 | 1×3 | 288×96 | 是 |
-| `prop_umbrella` | 长柄伞 | closed long umbrella, horizontal | 横放（与 prop_07_A 同款异向） | 1×5 | 480×96 | 是 |
+| itemType | 中文名 | 英文对象描述 | 变体提示 | 形状 | 画布 px | 家族 | 状态 | rot |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `prop_01_A` | 手机 | closed smartphone, horizontal | 横放，粉边 | 1×2 | 192×96 | R | ✅ | 否 |
+| `prop_01_B` | 钱包 | bi-fold wallet | 竖放短款 | 2×1 | 96×192 | M | ✅ | 否 |
+| `prop_01_C` | 墨镜 | folded sunglasses | 横放折起 | 1×2 | 192×96 | B | ✅ | 否 |
+| `prop_01_D` | 折叠雨伞 | compact folded umbrella | 横放短折叠 | 1×3 | 288×96 | M+R | ✅ | 否 |
+| `prop_02_A` | 帆布袋 | canvas tote bag | 方鼓形，双提手 | 2×2 | 192×192 | C | ✅ | 否 |
+| `prop_02_B` | 雨伞 | closed umbrella, short | 竖放 | 2×1 | 96×192 | C+B | ✅ | 否 |
+| `prop_02_C` | 耳机 | over-ear headphones | 竖放，耳罩朝前 | 2×1 | 96×192 | C+R | ✅ | 否 |
+| `prop_02_D` | 旅行手账 | travel notebook with band | 方本，绑带 | 2×2 | 192×192 | C+B | ✅ | 否 |
+| `prop_04_A` | 薄外套 | light jacket, folded flat | 横长折叠 | 2×4 | 384×192 | C+M | ✅ | 是 |
+| `prop_04_B` | 旅行相机 | compact travel camera | 横放，带腕带 | 3×2 | 192×288 | C+R+B | ✅ | 是 |
+| `prop_04_C` | 眼镜盒 | round hard glasses case | 圆盒横放 | 2×2 | 192×192 | C+R | ✅ | 是 |
+| `prop_04_D` | 收纳袋 | mesh organizer pouch | 网纱半透明 | 2×3 | 288×192 | C+M | ✅ | 是 |
+| `prop_04_E` | 口红 | lipstick bullet in tube | 竖放单支 | 2×1 | 96×192 | R 深 | ⬜ | 是 |
+| `prop_04_F` | 护照 | passport booklet | 横放，微开 | 1×2 | 192×96 | N 深 | ⬜ | 是 |
+| `prop_05_A` | 长裙 | long dress | 碎花图案 | 3×3 | 288×288 | R 浅 | ⬜ | 是 |
+| `prop_05_B` | 旅行手提袋 | travel handbag | 横长，提手在两侧 | 2×3 | 288×192 | C | ⬜ | 是 |
+| `prop_05_C` | 高跟鞋 | pair of high heels | 一双横并 | 2×2 | 192×192 | N | ⬜ | 是 |
+| `prop_05_D` | 化妆包 | makeup bag, open with brush | 开盖露笔刷 | 2×3 | 288×192 | R 浅 | ⬜ | 是 |
+| `prop_05_E` | 香水 | round perfume bottle | 圆瓶，宽肩 | 2×2 | 192×192 | B 浅 | ⬜ | 是 |
+| `prop_05_F` | 发饰 | hair clip set | 横放三枚发夹 | 3×2 | 192×288 | M | ⬜ | 是 |
+| `prop_06_A` | 长裙 | long dress | 条纹图案（区别于 prop_05_A） | 3×3 | 288×288 | R 深 | ⬜ | 是 |
+| `prop_06_B` | 手提袋 | handbag, upright | 竖立，单提手 | 3×2 | 192×288 | N | ⬜ | 是 |
+| `prop_06_C` | 高跟鞋 | single stiletto pump | 单只竖放 | 2×3 | 288×192 | N | ⬜ | 是 |
+| `prop_06_D` | 防晒套装 | sunscreen kit | 瓶+盒组合 | 2×2 | 192×192 | B 浅 | ⬜ | 是 |
+| `prop_06_E` | 香水 | tall perfume bottle | 高瓶窄肩（区别于 prop_05_E） | 2×2 | 192×192 | B 深 | ⬜ | 是 |
+| `prop_06_F` | 旅行收纳袋 | slim travel organizer strip | 横长扁条 | 1×3 | 288×96 | M 深 | ⬜ | 是 |
+| `prop_07_A` | 长柄伞 | closed long umbrella, vertical | 竖放（与 prop_umbrella 同款异向） | 5×1 | 96×480 | M 深 | ✅ | 是 |
+| `prop_07_B` | 三脚架 | mini tripod, legs folded | 竖放细长 | 4×1 | 96×384 | N | ⬜ | 是 |
+| `prop_07_C` | 针织衫 | knit sweater, folded stack | 叠放三件 | 3×3 | 288×288 | C | ⬜ | 是 |
+| `prop_07_D` | 方形收纳袋 | square pouch with zip | 方正拉链袋 | 2×2 | 192×192 | M 浅 | ⬜ | 是 |
+| `prop_07_E` | 折叠围巾 | folded scarf, square | 方折围巾 | 2×2 | 192×192 | R 浅 | ⬜ | 是 |
+| `prop_07_F` | 相机 | retro instant camera | 复古拍立得 | 2×2 | 192×192 | B 浅 | ⬜ | 是 |
+| `prop_07_G` | 鞋盒 | shoe box | 长盒，带盖缝 | 2×2 | 192×192 | C 中 | ⬜ | 是 |
+| `prop_07_H` | 护照 | passport booklet, standing | 竖立（区别于 prop_04_F） | 2×1 | 96×192 | N 深 | ⬜ | 是 |
+| `prop_08_A` | 旅行外套 | travel coat, folded vertical | 竖长折叠 | 3×1 | 96×288 | C | ⬜ | 是 |
+| `prop_08_B` | 护肤包 | skincare pouch | 圆角软袋 | 2×2 | 192×192 | M 浅 | ⬜ | 是 |
+| `prop_08_C` | 折叠衣物 | folded clothes stack | 叠放 T 恤两件 | 2×3 | 288×192 | C | ⬜ | 是 |
+| `prop_08_D` | 针织衫 | knit sweater, folded flat | 平折一件 | 2×2 | 192×192 | R 浅 | ⬜ | 是 |
+| `prop_08_E` | 收纳盒 | storage box, open lid | 开盖方盒 | 2×2 | 192×192 | B 浅 | ⬜ | 是 |
+| `prop_08_F` | 洗漱包 | hanging toiletry kit | 挂式，带挂钩 | 2×3 | 288×192 | R 深 | ⬜ | 是 |
+| `prop_08_G` | 相机包 | soft camera bag | 软包圆角 | 2×2 | 192×192 | N | ⬜ | 是 |
+| `prop_09_A` | 旅行套装 | travel kit set | 三件套组合 | 3×3 | 288×288 | C | ⬜ | 是 |
+| `prop_09_B` | 化妆包 | zipped makeup pouch | 拉链扁平袋 | 2×2 | 192×192 | R 浅 | ⬜ | 是 |
+| `prop_09_C` | 衬衫 | shirt, folded | 横放折领 | 3×2 | 192×288 | B 浅 | ⬜ | 是 |
+| `prop_09_D` | 连衣裙 | summer dress | 竖长裙摆 | 2×3 | 288×192 | M 浅 | ⬜ | 是 |
+| `prop_09_E` | 卷发棒 | curling iron | 横放细长 | 1×3 | 288×96 | N 深 | ⬜ | 是 |
+| `prop_09_F` | 鞋袋 | shoe bag with drawstring | 竖长束口袋 | 3×2 | 192×288 | C 中 | ⬜ | 是 |
+| `prop_09_G` | 护肤包 | toiletry kit pouch | 方盒硬挺（区别于 prop_08_B） | 2×2 | 192×192 | B 深 | ⬜ | 是 |
+| `prop_09_H` | 相机 | compact mirrorless camera | 现代微单 | 2×2 | 192×192 | N 深 | ⬜ | 是 |
+| `prop_09_I` | 洗漱包 | travel wash bag | 方桶形（区别于 prop_08_F） | 2×3 | 288×192 | M 深 | ⬜ | 是 |
+| `prop_10_A` | 旅行外套 | coat on hanger | 横长挂衣 | 4×2 | 192×384 | C | ⬜ | 是 |
+| `prop_10_B` | 相机包 | hard-shell camera case | 硬壳方盒 | 2×2 | 192×192 | N 深 | ⬜ | 是 |
+| `prop_10_C` | 针织衫 | knit sweater, hanging | 挂起垂坠 | 2×3 | 288×192 | R 浅 | ⬜ | 是 |
+| `prop_10_D` | 旅行鞋 | pair of travel shoes | 一双鞋并排 | 2×3 | 288×192 | C | ⬜ | 是 |
+| `prop_10_E` | 护肤包 | cosmetic bag | 圆筒形（区别于另两款） | 2×2 | 192×192 | R 深 | ⬜ | 是 |
+| `prop_10_F` | 香水盒 | square perfume box | 方盒横放 | 1×2 | 192×96 | B | ⬜ | 是 |
+| `prop_10_G` | 长围巾 | wool scarf, folded | 厚折围巾 | 2×3 | 288×192 | M 浅 | ⬜ | 是 |
+| `prop_10_H` | 眼镜盒 | slim glasses sleeve | 扁长套 | 2×1 | 96×192 | N | ⬜ | 是 |
+| `prop_10_I` | 登机牌夹 | boarding pass holder | 竖长票夹 | 3×1 | 96×288 | B 深 | ⬜ | 是 |
+| `prop_jacket` | 折叠外套 | folding jacket | 折起成方块 | 2×3 | 288×192 | C+R | ✅ | 是 |
+| `prop_pouch` | 收纳袋 | zip pouch | 通用拉链袋 | 2×3 | 288×192 | C+B | ✅ | 是 |
+| `prop_scarf` | 长围巾 | knitted long scarf strip | 横长条针织 | 1×3 | 288×96 | C+M | ✅ | 是 |
+| `prop_umbrella` | 长柄伞 | closed long umbrella, horizontal | 横放（与 prop_07_A 同款异向） | 1×5 | 480×96 | M 深 | ✅ | 是 |
 
 **重名区分速查：**
 
@@ -291,18 +337,20 @@ Spec Block 用 `96x480`，其余段不变。
 | 收纳袋 | `prop_04_D` / `prop_pouch` | 网纱 / 通用拉链 |
 | 长柄伞 | `prop_umbrella` / `prop_07_A` | 横 / 竖（同款异向） |
 
-### 5.7 批次计划（每批 ≤10 张）
+### 5.7 批次计划（每批 ≤10 张；V1.2 按当前进度刷新）
 
-| 批次 | 物品 | 张数 | 备注 |
+| 批次 | 物品 | 张数 | 状态 |
 | --- | --- | --- | --- |
-| B0 锚点 | `prop_01_A`、`prop_umbrella` | 2 | **必须先过**，不过不放量 |
-| B1 | L1 四件 + `prop_02_A/B/C/D` | 8 | 小尺寸为主，验证「1 格一眼读出」 |
-| B2 | `prop_scarf`、`prop_jacket`、`prop_pouch`、L4 六件 | 9 | 首次出现 2×4、1×3 |
-| B3 | L5、L6 全部 | 12 | 重名变体最多，重点核对 |
-| B4 | L7 全部 | 8 | 含 5×1、4×1 细长件 |
-| B5 | L8、L9 全部 | 16 | 拆成 8+8 两次跑 |
-| B6 | L10 全部 | 9 | — |
-| B7 | UI 组件（见 5.8） | 7 类 | 与物品图分开跑 |
+| B0 锚点 | `prop_01_A`、`prop_umbrella` | 2 | ✅ 已交付且合格 |
+| B1 | L1 四件 + `prop_02_A/B/C/D` | 8 | ✅ 已交付且合格 |
+| B2 | `prop_scarf`、`prop_jacket`、`prop_pouch`、L4 六件 | 9 | ✅ 8/9（`prop_04_E`、`prop_04_F` 待产） |
+| B3 | L5、L6 全部 | 12 | ⬜ 待产（拆 6+6 跑，重名变体最多） |
+| B4 | L7 全部 | 8 | ◐ 1/8（`prop_07_A` 已交付） |
+| B5 | L8、L9 全部 | 16 | ⬜ 待产（拆 8+8 跑） |
+| B6 | L10 全部 | 9 | ⬜ 待产 |
+| B7 | UI 组件（见 5.9） | 7 类 | ⬜ 待产，与物品图分开跑 |
+
+> 每批开跑前对照 5.6「家族」列做同关分配合规检查（≥3 家族/关、同家族 ≤2 件、≥1 重色）；已交付 17 张的家族分配已按此校验通过。
 
 ### 5.8 必须人工精修的 6 处（不能交给模型收尾）
 
