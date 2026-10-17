@@ -492,11 +492,22 @@ export class SuccessOverlay extends Component {
    *
    * 「轻微星光、**减弱频闪**」（UI Spec 8）：透明度谷值 45% 不到 0，周期
    * 900ms——看得出是活的，又不像警示灯。循环到 `hide()` 才停。
+   *
+   * **幂等**（M2-11 复审补齐）：与 `playEntrance` 同构，开头对每颗星先停旧
+   * 呼吸再起新的。呼吸是 `repeatForever`，不前置停止的话 `show()` 双调而不经
+   * `hide()` 会叠两串 tween 打架（两颗心各写一半透明度，观感是星光抽搐）。
+   * 当前调用图不可达（一次通关只发一次 `level-cleared`，新会话必经
+   * `startLevel → hide() → stopSparkle`），但两道防线不该只靠"调用图碰巧
+   * 到不了"——`stopSparkle` 也是这两行，停止逻辑单一出处。
    */
   private playSparkle(): void {
     const half = UI_WIN_TWINKLE_HALF_MS / 1000;
     const minAlpha = Math.round(255 * UI_WIN_TWINKLE_MIN_ALPHA);
     for (const [i, star] of this.decoStars.entries()) {
+      // 幂等：重入先停旧动画（与 playEntrance 的前置停止同构），避免两串
+      // repeatForever 呼吸叠在一起各写各的值
+      Tween.stopAllByTarget(star.node);
+      Tween.stopAllByTarget(star.opacity);
       const stagger = (i * UI_WIN_TWINKLE_STAGGER_MS) / 1000;
       star.opacity.opacity = 255;
       star.node.setScale(1, 1, 1);

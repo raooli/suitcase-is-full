@@ -495,12 +495,23 @@ export class DragController extends Component {
     this.dragging = true;
     this.consumedByDrag = true;
 
-    // grab 锚点用**按下点**算，与 pickAt 算 offset 的位置同源：
-    // offset = snap(按下) − A，故 anchor = snap(按下) − offset = A（物品原位），
-    // 不跳。若改用阈值跨越那一刻的 move 点，按下与跨越两个 snap 在格中心附近
-    // 会因 round(0.5) 抖动差出一格，于是 ghost 一开始就错位（实测：抓 L01_D
-    // 中心，grab 锚点跑到 [0,−1] 而非原位 [0,0]）。
-    const anchor = this.anchorAt(this.startX, this.startY, pending.offset);
+    // grab 锚点的算法按**物品来源**分（托盘分支为 M2-11 复审补齐）：
+    //
+    // - **盘上物品**用**按下点**算，与 pickAt 算 offset 的位置同源：
+    //   offset = snap(按下) − A，故 anchor = snap(按下) − offset = A（物品原位），
+    //   不跳。若改用阈值跨越那一刻的 move 点，按下与跨越两个 snap 在格中心附近
+    //   会因 round(0.5) 抖动差出一格，于是 ghost 一开始就错位（实测：抓 L01_D
+    //   中心，grab 锚点跑到 [0,−1] 而非原位 [0,0]）。
+    // - **托盘物品**没有盘上原位要保，按**当前手指位**算——语义统一成「此刻
+    //   松手落在哪」。按下点在托盘带内，映射过棋盘格只能得到棋盘下方的界外值
+    //   （M2-11 复审记录的 `grab anchor=(4,−1)`）：那不是任何有意义的位置；
+    //   更实的危害是「一次大幅 move 直接越过阈值、其后没有更多 move」时，松手
+    //   仍拿这个陈旧锚点判取出态，把本该落盘的一拖误判成取消（托盘物品发
+    //   cancel 回巢）。托盘带内的首帧仍会算出棋盘下方的锚点——这是诚实的：
+    //   手指在托盘里本就不能落盘，取出态谓词（overTray）与随后每个 move 会
+    //   接管，ghost 也按取出态画在手指下方（PreviewLayer 口径）。
+    const fromTray = pending.from === 'tray';
+    const anchor = this.anchorAt(fromTray ? uiX : this.startX, fromTray ? uiY : this.startY, pending.offset);
     this.lastAnchor = anchor;
     this.emit({ type: 'grab', itemId: pending.itemId, anchor });
     this.emitPreview(uiX, uiY);
