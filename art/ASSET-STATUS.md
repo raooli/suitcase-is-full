@@ -71,11 +71,16 @@ SVG 源只有 3 张（不含这 11 张），走像素级抠图（脚本存档于
 
 | 目录 | 内容 | 是否进包 |
 | --- | --- | --- |
-| `art/art-source/props/` | SVG 矢量源，可编辑，允许语义后缀（`prop_01_A_phone.svg`） | ❌ 不进包（在 `assets/` 之外） |
-| `art/previews/props/` | PNG 评审图，供人工评审与 AI 理解风格 | ❌ 不进包 |
+| `art/art-source/props/` | **手绘件**的 SVG 矢量源，可编辑，允许语义后缀（`prop_01_A_phone.svg`）。现有 3 件 | ❌ 不进包（在 `assets/` 之外） |
+| `art/art-source/props/ai/` | **AI 生成件**的「源」= 逐件提示词 + 生成参数 + 后处理命令（`<itemType>.prompt.md`） | ❌ 不进包 |
+| `art/previews/props/` | 生成原图留档（白底未抠，长边 512 JPEG，`<itemType>_reference.jpg`）+ 早期 2 张 PNG 参考图 | ❌ 不进包 |
 | `assets/resources/sprites/props/` | **Cocos 实际使用的透明 PNG**，文件名**严格 = `itemType`** | ✅ 进包 |
 
 > 为什么 sprites 必须在 `assets/resources/` 下：Cocos 只有 `resources/` 目录支持 `resources.load()` 动态加载。物品按 `itemType` 运行时加载，不做 63 项手工映射。
+
+**AI 件为什么不产 SVG**：图像模型只出位图（实测连 alpha 通道都不给）。把成品再矢量化，得到的是对「16 色量化结果」的二次近似——边缘失真、半透明光晕丢失，且体积不减。这种假源比无源更危险（后人照它改图，误差会累积且不可查）。所以 AI 件的源定义为**能重新生成它的最小输入**，落在 `ai/*.prompt.md`；公共 Style Block 仍在 `docs/07` §5.1，不复制以免两处漂移。
+
+**原图为什么只存 512 缩略**：原图 1024×1536 级、单张 1–2 MB（本批 8 张共 10 MB），63 张齐会到 ~80 MB，git 吃不住。原图只用于人工比对与 image reference，模型侧还会再降采样，512 长边够用（重出图靠提示词重新生成，不是拿旧图放大）。本批 8 张缩略合计 266 KB。详见 `art/art-source/props/ai/README.md`。
 
 ## 4. 批次核对记录
 

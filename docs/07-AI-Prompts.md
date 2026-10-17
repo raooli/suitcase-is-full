@@ -457,3 +457,13 @@ gradient, no vignette, no checkerboard or transparency grid, no texture.
 
 **已确认的家族色实测（供后续批次对表）**：R 深实测落在 `#E08890`(L=0.609)~`#F890A8`(L=0.658)，**不是** `#FA91A8` 的暗色版；N 家族 `#C2A28A` 在文档的线性亮度口径下 L≈0.40，天然充当「重色压阵」件——L5 的 `prop_05_C` 即靠它满足规则 3。
 
+**产出物归档（每批次收尾必做）**：原图默认落在 `/tmp`，不归档就会丢，且丢的是「以后想重抠 / 想对风格」的唯一依据。
+
+| 产物 | 落点 | 做法 |
+| --- | --- | --- |
+| 逐件提示词（Object Block + 生成参数 + 后处理命令 + 踩坑备注） | `art/art-source/props/ai/<itemType>.prompt.md` | 照 `ai/README.md` 的模板写；公共 Style Block **不复制**，只写差异段 |
+| 生成原图（白底未抠） | `art/previews/props/<itemType>_reference.jpg` | `sips -s format jpeg -Z 512 <raw.png> --out <target>`（长边 512；原图 1–2MB/张，全量存会到 ~80MB） |
+| 成品（透明底） | `assets/resources/sprites/props/<itemType>.png` | `art-batch-proc.mjs fit` 已直接写入 |
+
+> **不产 SVG**：AI 件没有矢量源，硬把成品矢量化只是对 16 色量化结果的二次近似（边缘失真、光晕丢失、体积不减），属于会误导后人的假源。可重新生成的最小输入是提示词，已落在 `ai/*.prompt.md`。手绘件（`prop_01_A/B`、`prop_07_A`）的 SVG 仍在 `art-source/props/` 根目录。
+
