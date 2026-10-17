@@ -37,6 +37,7 @@ import { findItem, rotateBy, UI_WIN_BOUNCE_SCALE } from '../core';
 import type { ItemSpec, LevelSpec, LevelState, Placement } from '../core';
 import { BoardView } from './BoardView';
 import { ItemView } from './ItemView';
+import { ensureFrame } from './propAssets';
 import { shakeX } from './shake';
 
 const { ccclass, property } = _decorator;
@@ -157,6 +158,12 @@ export class ItemLayer extends Component {
 
     const view = node.addComponent(ItemView);
     view.init(item, board.getCellPx(), board.shapeMetrics(cells));
+    // M4-5a：真图（异步就绪；缓存已热则同步换上）。回调里判 node.isValid——
+    // 晚到的帧可能撞上下一次全量重建（本层 clear() 已销毁旧节点）。
+    ensureFrame(item.itemType, (frame) => {
+      if (frame === null || !node.isValid) return;
+      view.setSpriteFrame(frame);
+    });
     return node;
   }
 

@@ -68,6 +68,7 @@ import { GuideOverlay } from './GuideOverlay';
 import type { GuideRequest } from './GuideOverlay';
 import { ItemLayer } from './ItemLayer';
 import { PreviewLayer } from './PreviewLayer';
+import { preloadFrames } from './propAssets';
 import { SuitcaseLid } from './SuitcaseLid';
 import { SuccessOverlay } from './SuccessOverlay';
 import { ToolbarView } from './ToolbarView';
@@ -239,6 +240,10 @@ export class GameController extends Component {
     // 换关 / 重开才把托盘滚回开头：**`render` 保留偏移**（每次状态变更重建都归零
     // 会让 L7+ 刚取回的物品滚出视野），所以归零必须由这里显式声明
     this.trayView?.resetScroll();
+    // M4-5a：预热本关物品的真图（只发起不等待——首关首批节点可能赶上在飞
+    // 加载，晚到的帧由 ItemLayer/TrayView 的 ensureFrame 回调补上，
+    // 见 propAssets.ts 文件头「晚到帧」条）
+    preloadFrames(level.items.map((item) => item.itemType));
     this.refreshAll(session.getState(), session.getPhase());
     this.successOverlay?.hide();
     // M2-10：合盖层复位（停动画、藏节点）——上一场的盖板不能留到这一场

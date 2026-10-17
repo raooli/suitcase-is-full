@@ -65,6 +65,7 @@ import {
 import type { ItemSpec, LevelSpec, LevelState } from '../core';
 import { ItemView } from './ItemView';
 import type { ShapeSource } from './ItemView';
+import { ensureFrame } from './propAssets';
 import { TraySlot } from './TraySlot';
 
 const { ccclass } = _decorator;
@@ -438,6 +439,12 @@ export class TrayView extends Component {
     const cells = rotateBy(item.cells, trayRotationOf(state, item.id));
     const view = node.addComponent(ItemView);
     view.init(item, cellPx, source.shapeMetrics(cells));
+    // M4-5a：真图（异步就绪；缓存已热则同步换上）。回调里判 node.isValid——
+    // 托盘每次 render 也全量重建（与 ItemLayer 同机制），晚到的帧可能已无主。
+    ensureFrame(item.itemType, (frame) => {
+      if (frame === null || !node.isValid) return;
+      view.setSpriteFrame(frame);
+    });
 
     const box = bboxOf(cells);
     const slot = slotNode.getComponent(TraySlot);
