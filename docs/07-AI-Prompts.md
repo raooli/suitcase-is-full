@@ -249,7 +249,7 @@ Spec Block 用 `96x480`，其余段不变。
 
 > 形状列为 **行×列**，画布 = 列×96 × 行×96。`rot` = 数据是否允许旋转（不影响出图张数）。
 > **同名不同 itemType 必须按「变体提示」画出可区分差异。**
-> **`家族`列（V1.2 新增）= 5.2 色相家族分配，M4-3 按表执行**；`状态`列：✅ = 已交付且合格（**含透明底**——其中 11 张于 2026-10-17 经描边抠图修复「均匀灰底假透明」回归，过程见 `art/ASSET-STATUS.md` §2），可直接作 image reference；⬜ = 待产（当前 17 ✅ / 46 ⬜）。
+> **`家族`列（V1.2 新增）= 5.2 色相家族分配，M4-3 按表执行**；`状态`列：✅ = 已交付且合格（**含透明底**——其中 11 张于 2026-10-17 经描边抠图修复「均匀灰底假透明」回归，过程见 `art/ASSET-STATUS.md` §2），可直接作 image reference；⬜ = 待产（当前 **25 ✅ / 38 ⬜**，2026-10-17 23:4x 批次推进 8 张）。
 
 | itemType | 中文名 | 英文对象描述 | 变体提示 | 形状 | 画布 px | 家族 | 状态 | rot |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -265,14 +265,14 @@ Spec Block 用 `96x480`，其余段不变。
 | `prop_04_B` | 旅行相机 | compact travel camera | 横放，带腕带 | 3×2 | 192×288 | C+R+B | ✅ | 是 |
 | `prop_04_C` | 眼镜盒 | round hard glasses case | 圆盒横放 | 2×2 | 192×192 | C+R | ✅ | 是 |
 | `prop_04_D` | 收纳袋 | mesh organizer pouch | 网纱半透明 | 2×3 | 288×192 | C+M | ✅ | 是 |
-| `prop_04_E` | 口红 | lipstick bullet in tube | 竖放单支 | 2×1 | 96×192 | R 深 | ⬜ | 是 |
-| `prop_04_F` | 护照 | passport booklet | 横放，微开 | 1×2 | 192×96 | N 深 | ⬜ | 是 |
-| `prop_05_A` | 长裙 | long dress | 碎花图案 | 3×3 | 288×288 | R 浅 | ⬜ | 是 |
-| `prop_05_B` | 旅行手提袋 | travel handbag | 横长，提手在两侧 | 2×3 | 288×192 | C | ⬜ | 是 |
-| `prop_05_C` | 高跟鞋 | pair of high heels | 一双横并 | 2×2 | 192×192 | N | ⬜ | 是 |
-| `prop_05_D` | 化妆包 | makeup bag, open with brush | 开盖露笔刷 | 2×3 | 288×192 | R 浅 | ⬜ | 是 |
-| `prop_05_E` | 香水 | round perfume bottle | 圆瓶，宽肩 | 2×2 | 192×192 | B 浅 | ⬜ | 是 |
-| `prop_05_F` | 发饰 | hair clip set | 横放三枚发夹 | 3×2 | 192×288 | M | ⬜ | 是 |
+| `prop_04_E` | 口红 | lipstick bullet in tube | 竖放单支 | 2×1 | 96×192 | R 深 | ✅ | 是 |
+| `prop_04_F` | 护照 | passport booklet | 横放，微开 | 1×2 | 192×96 | N 深 | ✅ | 是 |
+| `prop_05_A` | 长裙 | long dress | 碎花图案 | 3×3 | 288×288 | R 浅 | ✅ | 是 |
+| `prop_05_B` | 旅行手提袋 | travel handbag | 横长，提手在两侧 | 2×3 | 288×192 | C | ✅ | 是 |
+| `prop_05_C` | 高跟鞋 | pair of high heels | 一双横并 | 2×2 | 192×192 | N | ✅ | 是 |
+| `prop_05_D` | 化妆包 | makeup bag, open with brush | 开盖露笔刷 | 2×3 | 288×192 | R 浅 | ✅ | 是 |
+| `prop_05_E` | 香水 | round perfume bottle | 圆瓶，宽肩 | 2×2 | 192×192 | B 浅 | ✅ | 是 |
+| `prop_05_F` | 发饰 | hair clip set | 横放三枚发夹 | 3×2 | 192×288 | M | ✅ | 是 |
 | `prop_06_A` | 长裙 | long dress | 条纹图案（区别于 prop_05_A） | 3×3 | 288×288 | R 深 | ⬜ | 是 |
 | `prop_06_B` | 手提袋 | handbag, upright | 竖立，单提手 | 3×2 | 192×288 | N | ⬜ | 是 |
 | `prop_06_C` | 高跟鞋 | single stiletto pump | 单只竖放 | 2×3 | 288×192 | N | ⬜ | 是 |
@@ -343,8 +343,8 @@ Spec Block 用 `96x480`，其余段不变。
 | --- | --- | --- | --- |
 | B0 锚点 | `prop_01_A`、`prop_umbrella` | 2 | ✅ 已交付且合格 |
 | B1 | L1 四件 + `prop_02_A/B/C/D` | 8 | ✅ 已交付且合格（10-17 灰底假透明回归已修复，见 5.7 下方记档） |
-| B2 | `prop_scarf`、`prop_jacket`、`prop_pouch`、L4 六件 | 9 | ✅ 8/9（`prop_04_E`、`prop_04_F` 待产） |
-| B3 | L5、L6 全部 | 12 | ⬜ 待产（拆 6+6 跑，重名变体最多） |
+| B2 | `prop_scarf`、`prop_jacket`、`prop_pouch`、L4 六件 | 9 | ✅ 9/9（`prop_04_E/F` 于 10-17 补齐） |
+| B3 | L5、L6 全部 | 12 | ◐ 6/12（L5 六件已交付；L6 待产） |
 | B4 | L7 全部 | 8 | ◐ 1/8（`prop_07_A` 已交付） |
 | B5 | L8、L9 全部 | 16 | ⬜ 待产（拆 8+8 跑） |
 | B6 | L10 全部 | 9 | ⬜ 待产 |
@@ -413,3 +413,34 @@ Flat with slight volume. Transparent background, PNG-24.
 | 批量 | 每批 ≤10 张，一批翻车损失可控 |
 
 > **模型能力边界需人工确认、不臆断：** 是否支持精确画布尺寸、是否支持 alpha 输出、是否支持参考图——以所用模型当前版本文档为准。支持不了的项目改用「出纯色底 + 工具去底 + 人工裁边」。
+
+### 5.11 实测出图流水线（2026-10-17 批次起，B2 收尾 + B3 前六张验证）
+
+> 结论先行：**本机图像模型给不出真透明底**（请求 `background=transparent` 仍返回 colorType 2 的无 alpha RGB，甚至把「透明棋盘格」直接画进像素）。因此流水线固定为「文本生成 → 阈值抠底 → 裁边 → 面积平均缩放 → 居中合版 → check-art」。
+
+| 环节 | 做法 | 为什么（实测依据） |
+| --- | --- | --- |
+| 生成尺寸 | 取与画布比例最接近的模型上限（1:2→1024×1536、3:2→1536×1024、1:1→1024×1024），绝不直接要 96/288 这类小尺寸 | 模型不接受精确小画布；按最近上限出图再缩放，缩放后必须重跑 `check:art` |
+| 背景 | 提示词明确「纯白平坦背景 + 无渐变 / 无暗角 / 无棋盘格 / 无纹理」 | 两批实测背景都是 255→231 的渐变近白；写「白底」反而稳定 |
+| 抠底 | **阈值 + 边缘连通**：近白（min 通道 ≥205）且低饱和（max−min ≤26）的像素中，**只挖与画布边缘连通的那一片** | 渐变背景用全局容差洪水填不动（首次只挖掉 4 万/157 万 px）；物体内部被棕色描边围住的高光/白屏不会被挖 |
+| 光晕 | 邻接被挖区的实色像素按 `p = a·fg + (1−a)·bg` 反解 alpha 并 unflatten | 白底抠图必留 1~2px 灰边，不反解会在缩略图上显脏 |
+| 碎块 | 只保留 ≥ 最大连通域 6% 的成分 | 模型偶尔把水印（「AI生成…」）画在角落，会撑偏包围盒 |
+| 投影 | **提示词侧禁止**（`no ground shadow, no cast shadow`）；后处理不做自动去投影 | C 家族织物就是 `#E5E5E5`（彩度 0、L=0.898），与浅灰投影颜色上不可分——实测自动去投影把 `prop_05_B` 包体误删 45.8 万 px |
+| 缩放 | 面积平均（box filter，预乘 alpha 后归一化） | 1024→96 是 10:1 的缩小，双线性会出锯齿；`预乘分子用 0–255、分母用 0–1` 会让整图变黑（踩过） |
+| 合版 | 等比缩到「画布 − 2×margin」内后**居中**，margin 8~10 | 居中必须基于抠图后的真实包围盒；残留碎块会让物体整体偏到一边 |
+
+**并行出图的坑（必踩）**：同一批并行调用的文件名由「提示词前缀 + 秒级时间戳」拼成，**同秒会互相覆盖**（本次 `prop_05_C` 被 `prop_05_B` 覆盖后丢失）。对策：每张给独立 `output_dir`，出图后立刻改成稳定名。
+
+**提示词批次补充段（每张都带，放在 Style Block 之后）：**
+
+```text
+Batch rules: flat sticker look, warm brown outline about 1.5px at a 96px cell,
+flat pastel fills with at most one soft lighter highlight, no ground shadow,
+no cast shadow. Background: plain flat pale off-white #F7F6F3, absolutely no
+gradient, no vignette, no checkerboard or transparency grid, no texture.
+```
+
+> 该段是对 5.1 Style Block 的**收紧而非改写**（Style Block 逐字保留）。收紧原因见上表：`slight volume shading` 会被模型放大成 3D 厚涂、`short light shadow` 会被画成地面投影，两批实测都出现过。新增负面词：`dark maroon`（首张口红被画成深枣红，L=0.401，掉出 R 家族）、`checkerboard / transparency grid`、`watermark / signature`、`thin vertical slivers`。
+
+**已确认的家族色实测（供后续批次对表）**：R 深实测落在 `#E08890`(L=0.609)~`#F890A8`(L=0.658)，**不是** `#FA91A8` 的暗色版；N 家族 `#C2A28A` 在文档的线性亮度口径下 L≈0.40，天然充当「重色压阵」件——L5 的 `prop_05_C` 即靠它满足规则 3。
+
