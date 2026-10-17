@@ -1,12 +1,16 @@
 # 项目长期记忆 —— 《行李箱装不下啦！》
 
-> 跨会话约定与手法；日常进展写 `YYYY-MM-DD.md`。M2（M2-1~M2-11）已全部收官；M2-11 复审两条 [低] 已修复（`8fc62a7`）。M3-1/M3-2 微信构建已落地（首包 3.24MB 过 G2）；M3-1 真机校准：拖拽 ghost 上浮清零（`56a27a0`）；M3-3 手感 ✅（机型 iPhone 15 Pro 393pt）。**M4-2 定稿**：色彩板/明度阶梯/提示词包 V1.2（实测锚定 5 色相家族 + 63 件逐关分配 + A-02 裁决待回签）。素材 17/63 全合格；UI 7 类 + 音效 + 代码接线未动（M4-3~M4-5）。
+> 跨会话约定与手法；日常进展写 `YYYY-MM-DD.md`。M2（M2-1~M2-11）已全部收官；M2-11 复审两条 [低] 已修复（`8fc62a7`）。M3-1/M3-2 微信构建已落地（首包 3.24MB 过 G2）；M3-1 真机校准：拖拽 ghost 上浮清零（`56a27a0`）；M3-3 手感 ✅（机型 iPhone 15 Pro 393pt）。**M4-2 定稿**：色彩板/明度阶梯/提示词包 V1.2（实测锚定 5 色相家族 + 63 件逐关分配 + A-02 裁决待回签）。素材 25/63（L1~L5 全齐）；**出图链路已定型**：`tools/art-batch-proc.mjs`（纯白底→阈值抠底→面积平均缩放→居中合版→16 色量化）+ `tools/art-contact-sheet.mjs` + `check:art`，规程见 docs/07 §5.11。缺 38 张（L6 未开、L7 差 7、L8~L10 全部）；prop_04_D 探线与 A-02 回签待用户裁决；UI 7 类 + 音效 + 代码接线未动（M4-4/M4-5）。
 
 ## 工程基线
 - Cocos Creator 3.8.8（锁版本 `/Applications/Cocos/Creator/3.8.8/`）；设计 390×844 + Fit Width。
 - 分层：`core/`（零 cc、Vitest）↔ `view/`（唯一可 import 'cc'）；core 只从 `index.ts` 对外（R-A3）。守卫 `npm run check:arch`：R-A1 core 无 cc；R-A6 格算术只许 `BoardView.ts`+`config.ts`；R-A9 assets 只放运行时资源；R-A10 禁 `[...x]` 展开（一律 `Array.from`）。
 - 参数只改 `config.ts`，禁魔法数字。
 - 交付纪律：① `npm run check` ② `npm run preview:game` 零 Console 错误 ③ 双绿才提交、CHANGELOG 倒序一条；提交前 `git status` 避用户在途 `prop_02_*.png`。view 类型检查用 `tsconfig.view.json`（显式 types、ES2020）；`onLoad` 等需 `override`。
+
+- **首包体积靠裁引擎模块**（M4-3）：`settings/v2/packages/engine.json` 的 `includeModules`/模块开关砍零引用模块（physics-2d、spine、spine-3.8、dragon-bones、video、webview、tiled-map、particle-2d、mask、rich-text…），3.236MB → **2,149,729 B = 2.15MB**，63 图齐预测 ≈2.46MB（远低于 3.5MB 线）。坑：`physics-2d-box2d` 已是 false（脚本要容忍匹配）、末项无逗号、删倒数第二项留尾逗号致 JSON 非法 → 改完必须 `node -e "JSON.parse(...)"` 校验。图片压缩（PLTE 优化等）只省 ~15KB，**不是有效手段**。
+- **美术验收必须查 alpha**（M4-3 阻塞-1 根因）：`npm run check:art` 原只验尺寸/命名/朝向，不验透明底 → 11 张 `#E5E5E5` 满幅灰底图蒙混入库（占位色块底色同色，预览里看不出）。现已加「四角 α=0 + 覆盖率上限」。抠图手法（只有 3 张有 SVG 源）：边缘紧容差洪水填充（容差 8）+ 光晕 α 恢复（按灰度反推，不二值化）+ 共线性保护；修后覆盖率 28–54%。
+- **出图流水线（M4-3 批次起，docs/07 §5.11）**：本机 ImageGen **给不出透明底**——`background=transparent` 仍返回 colorType 2 无 alpha RGB，甚至把棋盘格画进像素。规程：纯白平坦底生成 → **阈值抠底**（近白 min≥205 且彩度≤26，**只挖与画布边缘连通的连通域**；渐变底上全局容差洪水填充必失效）→ 光晕反解 unflatten → 碎块剔除（≥最大连通域 6%）→ 面积平均缩放（**预乘 alpha：分子 0–255、分母必须 0–1**，写错整图变黑）→ 居中合版 → **16 色量化 + alpha 16 级**（不量化 36KB/张会顶 3.5MB 线；量化后 11.7KB，肉眼无差）。三条硬教训：① **投影只能在提示词里禁**（`no ground shadow`），自动去投影会把 C 家族 `#E5E5E5` 织物当投影吃掉；② **并行出图同秒撞名互相覆盖**，每张必须独立 `output_dir` 并立刻改稳定名；③ 家族色必须**写死色号**，只写「R 深」会漂成深枣红掉出家族。
 
 ## 引擎关键限制（踩过的坑）
 - **`Graphics.arc(cx,cy,r,start,end,ccw)`：`ccw=false` 画的是 `[start,end]` 补集**（`false`=从 start 顺时针角度递减扫过去，扫出另一半）；**`true` 才是标称区间**。要画弧一律传 `true` 给标称区间。M2-9 两处踩坑（喇叭声波弧、锁徽标锁梁圆心在下边缘）。验弧用像素级角度直方图：**先径向剖面定性**（双峰=两弧，填充体会污染），再角度定量；探针盒心放弧圆正上/正下方。Graphics 局部坐标 **y 向上**，`roundRect` 的 y 是**下**边缘。
