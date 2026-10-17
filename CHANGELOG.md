@@ -23,6 +23,18 @@
 
 ## 提交记录（倒序）
 
+### `abc298f` · art: M4-3 批次产物归档——AI 件的「源」是提示词而非 SVG + 原图 512 缩略留档
+
+| 项 | 内容 |
+| --- | --- |
+| 日期 | 2026-10-17 23:51 |
+| 文件 | `art/art-source/props/ai/README.md`、`art/art-source/props/ai/prop_04_E.prompt.md`、`prop_04_F.prompt.md`、`prop_05_A.prompt.md`、`prop_05_B.prompt.md`、`prop_05_C.prompt.md`、`prop_05_D.prompt.md`、`prop_05_E.prompt.md`、`prop_05_F.prompt.md`、`art/previews/props/*_reference.jpg`（8 张）、`art/ASSET-STATUS.md`（§3）、`docs/07-AI-Prompts.md`（§5.11） |
+| 背景 | 生成原图此前只落在 `/tmp`，随时会被清；丢的是「以后想重抠、想对风格」的唯一依据。用户问「这批图的 SVG 是不是也该进 `art-source/props`」 |
+| 结论（不产 SVG） | AI 件**没有矢量源**：模型只出位图。把 16 色量化的成品再矢量化，得到的是对成品的**二次近似**（边缘失真、半透明光晕丢信息、体积不减），属会误导后人的假源。AI 件的源改定义为**能重新生成它的最小输入** = `ai/<itemType>.prompt.md`（Object Block + 生成参数 + 负向词 + 后处理命令 + 版本踩坑），公共 Style Block 仍只在 `docs/07` §5.1 不复制，避免两处漂移 |
+| 原图归档 | `art/previews/props/<itemType>_reference.jpg`，`sips -s format jpeg -Z 512` 一条命令产出（无新增依赖）。原图 1024×1536 级、单张 1–2MB，本批 8 张 10MB；512 缩略合计 **266KB**（1/38）。全量存原图 63 张会到 ~80MB，git 吃不住，而原图只用于人工比对与 image reference，重出图靠提示词而非放大旧图 |
+| 附带记档 | `prop_05_F` v3 原图右下仍有「AI生成」水印，成品里靠「碎块剔除 ≥保留最大连通域 6%」去掉 → 该步骤对后续批次不可省 |
+| 目录语义 | `art-source/props/` 根目录 = 手绘件 SVG（现有 3 件）；`ai/` = AI 件提示词源；`previews/props/` = 生成原图缩略（早期 2 张 PNG 参考图保持不动） |
+
 ### `docs` · chore: M4-2 定稿——色彩板/明度阶梯/提示词包（V1.2）+ A-02 裁决 + M3-3 机型读数
 
 | 项 | 内容 |
