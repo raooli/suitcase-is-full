@@ -29,19 +29,23 @@
  *   （内缩 / 圆角 / 虚线），与 `ItemView` 同构。
  * - **不持有玩法状态**：`level` 只是用来查物品形状（只读），不读 `placements`。
  *
- * ## 手指遮挡补偿（G1-1）
+ * ## 手指遮挡补偿（G1-1）—— M3-1 真机校准后上浮改为 0
  *
- * ghost 画在手指正下方会被手挡住，玩家看不到"现在悬在哪一格"。所以拖起时把
- * **绘制矩形**整体上浮 `UI_DRAG_LIFT_PX` + 轻微放大 `UI_DRAG_LIFT_SCALE` +
- * 右下浅阴影（UI Spec 6 节「手指不遮挡目标格的视觉偏移策略」）。
+ * 拖起时 ghost 曾整体上浮 `UI_DRAG_LIFT_PX` + 轻微放大 `UI_DRAG_LIFT_SCALE` +
+ * 右下浅阴影（UI Spec 6 节「手指不遮挡目标格的视觉偏移策略」）。**M3-1 真机
+ * 试玩（2026-10-17，G1-D1）把这个值校准为 0**：上浮只改画法不改判定，ghost
+ * 被画在落点格上方 24 设计单位而松手落手指正下方的格——玩家按绿色块对格，
+ * 落点系统性偏下一格（6×6 棋盘上 0.42 格），反馈原话「总感觉没放到正确的
+ * 方格上」。校准后 ghost 与落点格像素级重合，「松手落格 = 预览所示格」
+ * （G1-2）从概念成立变成**视觉成立**。遮挡担忧经内容核对不成立：63 件物品
+ * 最小 1×2，ghost 本体始终伸过指腹；描边 + 半透明填充 + 1.05 放大补住可读性。
+ * 完整依据与逆反方案见 `config.ts` 的 `UI_DRAG_LIFT_PX` 注释。
  *
- * **三条硬约束**：
+ * **三条硬约束（不变）**：
  * 1. **只改画法，不改判定**——落点仍由手指位置经 `snapToGrid` 算出，`preview.anchor`
- *    一个字都不动，否则 G1-2「松手落格 = 预览所示格」立刻破功；
+ *    一个字都不动，上浮为 0 后画出来的格就是 anchor 的格；
  * 2. **不挪本节点**——M1-7 实测过，位移 tween 不归位会留下 8px 持久偏移（见 `stopShake`）；
  * 3. 缩放锚点取**整体包围盒中心**（`core/geometry/lift.ts`），取单格中心会让多格物品散开。
- *
- * 具体偏移值是**可调初值**（UI Spec 9 节把它列为试玩待定项），真机校准只改 `config.ts`。
  *
  * ## 松手回弹（P-05：120–180ms）
  *
@@ -200,9 +204,12 @@ export class PreviewLayer extends Component {
       h: side,
     }));
 
-    // 手指遮挡补偿（G1-1）：上浮 + 轻微放大。**只改这里画的矩形，不改 preview.anchor**
-    // ——落点判定仍由手指位置算，否则 G1-2「松手落格 = 预览所示格」立刻破功。
-    // 也不要挪本节点：M1-7 实测过位移 tween 不归位会留下持久偏移（见 stopShake）。
+    // 视觉补偿（G1-1）：缩放 + 上浮，两个量都在 config.ts。M3-1 真机校准后
+    // 上浮 = 0（见 UI_DRAG_LIFT_PX 注释：非 0 上浮让 ghost 与落点格错位一整格的
+    // 零头，玩家按 ghost 对格会系统偏下一格）——现在画出来的格就是 anchor 的格，
+    // 「松手落格 = 预览所示格」视觉级成立；1.05 放大保留（"看得出抬起"）。
+    // 判定一个字没动（落点仍由手指位置算），节点也不挪（M1-7 实测：位移 tween
+    // 不归位会留下持久偏移，见 stopShake）。
     const lifted = liftAndScale(base, UI_DRAG_LIFT_SCALE, UI_DRAG_LIFT_PX);
     // 阴影落右下（y 向上为正 → 向下是负）。UI Spec 4.1「右下短而淡」
     const shadow = offsetRects(lifted, UI_DRAG_SHADOW_OFFSET_PX, -UI_DRAG_SHADOW_OFFSET_PX);
@@ -264,8 +271,8 @@ export class PreviewLayer extends Component {
       console.log(
         `[PreviewLayer] ghost ${preview.itemId}@(${preview.anchor[0]},${preview.anchor[1]})` +
           ` rot=${preview.rotation} → ${reason}` +
-          // 上浮是画在矩形上的（不改节点、不改 anchor），取证时拿它对表：
-          // ghost 首个矩形的 y 应比未补偿时高 UI_DRAG_LIFT_PX
+          // 上浮量打印出来供取证对表（M3-1 真机校准为 0：ghost 与 anchor 格
+          // 像素级重合，量它等于量落点格）
           ` lift=+${UI_DRAG_LIFT_PX} scale=${UI_DRAG_LIFT_SCALE}` +
           ` nodePos=(${Math.round(p.x * 100) / 100},${Math.round(p.y * 100) / 100})` +
           ` t=${Math.round(performance.now())}`,
