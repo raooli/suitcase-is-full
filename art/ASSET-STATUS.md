@@ -14,7 +14,9 @@
 | 缺失 | **38 张**（`prop_06_A~F`、`prop_07_B~H`、`prop_08~10` 全部；`npm run art:missing` 出全量清单） |
 | 覆盖率 | **39.7%**（合格口径：尺寸 + 朝向 + 透明底 + **剪影 = cells 足迹**，M4-6 起） |
 | 剪影合规 | **25/25**——14 张异形件已于 2026-10-19 **重绘贴合足迹**（逐格置物提示词，见 §5.1）；`check:art` 剪影门禁 + `review-pixels.py` 双通道全过 |
-| UI 组件 / 音效 | 0 / 0（见 `docs/03-UI-Spec.md`；音效已有 M2-9 合成后端 4 个 SfxKey，待真素材） |
+| UI 插画 | **3/3 已交付**（`ui/home-hero` 560×400、`ui/suitcase-open` 780×780、`ui/suitcase-closed` 780×780，均索引色 PNG + tRNS），见 §6.1 |
+| 音效 | **4/4 已交付**（`select` / `place-ok` / `place-fail` / `success` WAV，共 55.4KB），见 §6.1 |
+| UI 接线 | **0/4 未接线**——M4-5b 范围（M4-4 只到「资源齐」） |
 | 代码接线 | **25/25 已接线**（M4-5a，`f3c59ea`：propAssets 加载器 + ItemLayer/TrayView 创建点 + ItemView 子节点贴图；L1~L5 全真图，L6~L10 自动回退占位色块） |
 
 **分批进度**：L1 4/4 ✅ ｜ L2 4/4 ✅ ｜ L3 4/4 ✅（`prop_jacket/pouch/scarf/umbrella`）｜ L4 6/6 ✅ ｜ L5 6/6 ✅ ｜ L6 0/6 ｜ L7 1/8 ｜ L8 0/7 ｜ L9 0/9 ｜ L10 0/9
@@ -76,6 +78,10 @@ SVG 源只有 3 张（不含这 11 张），走像素级抠图（脚本存档于
 | `art/art-source/props/ai/` | **AI 生成件**的「源」= 逐件提示词 + 生成参数 + 后处理命令（`<itemType>.prompt.md`） | ❌ 不进包 |
 | `art/previews/props/` | 生成原图留档（白底未抠，长边 512 JPEG，`<itemType>_reference.jpg`）+ 早期 2 张 PNG 参考图 | ❌ 不进包 |
 | `assets/resources/sprites/props/` | **Cocos 实际使用的透明 PNG**，文件名**严格 = `itemType`** | ✅ 进包 |
+| `art/art-source/ui/ai/` | **UI 插画**的源 = 逐件提示词（`<name>.prompt.md`），规则同 props | ❌ 不进包 |
+| `art/previews/ui/` | UI 插画生成原图留档（长边 512 JPEG，`<name>_reference.jpg`） | ❌ 不进包 |
+| `assets/resources/sprites/ui/` | UI 透明 PNG，名字对齐 UI Spec §7（`home-hero` / `suitcase-open` / `suitcase-closed`）；**尺寸写进 `tools/check-art.ts` 的 `UI_SPECS` 契约表** | ✅ 进包 |
+| `assets/resources/audio/` | 音效 WAV，文件名 = `SfxKey`（`select` / `place-ok` / `place-fail` / `success`） | ✅ 进包 |
 
 > 为什么 sprites 必须在 `assets/resources/` 下：Cocos 只有 `resources/` 目录支持 `resources.load()` 动态加载。物品按 `itemType` 运行时加载，不做 63 项手工映射。
 
@@ -175,15 +181,31 @@ L3 全组（4 张语义命名件）+ L4 前 4 件 + 返修后的 `prop_07_A`：
 
 | 项 | 读数 |
 | --- | --- |
-| 25 张源图合计 | **215,860 字节**（M4-6 重绘后；重绘版细节更多，较遮罩版 159,393 增 56,467，仍远低于预算） |
+| 25 张源图合计 | **156,469 字节 = 152.8KB**（索引色重编码后；重编码前 225.4KB，见 §6.1） |
+| UI 插画 3 张合计 | **213,257 字节 = 208.3KB**（索引色；重编码前 545.7KB） |
+| 音效 4 个合计 | **65,444 字节 = 63.9KB** |
 | 微信包实测（2026-10-18 01:49 构建，含 25 张图，M4-5a 后） | **2,253,262 字节 = 2.25MB** |
 | 相较修剪前 | 3,236,262 → 2,253,262（**−0.98MB**） |
-| 63 张齐装预测 | **≈2.41MB**（按重绘后均值 ~8.6KB/张外推 63×8.6KB≈0.54MB）；远低于 3.5MB 线 |
-| G2 首包线 | **3.5MB 维持不变**，余量 ≈1.1MB——**不需要修订 G2 线** |
+| 63 张齐 + UI + 音效预测 | **≈2.60MB**（引擎/代码基线 2.04MB + 物品 63×6.3KB≈0.40MB + UI 0.21MB + 音效 0.06MB）；远低于 3.5MB 线 |
+| G2 首包线 | **3.5MB 维持不变**，余量 ≈0.95MB——**不需要修订 G2 线** |
 | 裁剪内容 | `settings/v2/packages/engine.json` 关闭 9 个零引用模块：physics-2d/box2d、spine、dragon-bones、video、webview、tiled-map、particle-2d、mask、rich-text（保留 tween/graphics/audio/profiler 等 14 个） |
 | 决策记录 | `docs/09-ADR-v1.0.md` ADR-001 |
 
-> 后续若新增资源类别把包体推过 3.5MB，按序考虑：① ≤256 色图无损转 PLTE（现 10/17 张可转，省 ~15KB 级）；② 资源进微信分包；③ 引擎分离（TDD 记档，需基础库 ≥ 2.9.0，首次启动下载引擎）。**不要**先动 G2 线。
+### 6.1 无损压缩：索引色 PNG（2026-10-19，M4-4 顺带）
+
+原编码器只写真彩 RGBA（每像素 4 字节），而所有图都已量化到 ≤256 色——**每像素白扔 3 字节**。`tools/art-batch-proc.mjs` 新增 `encodeIndexedPNG`（colorType 3 + PLTE + tRNS）与 `optimize` 子命令（对**已交付** PNG 重编码，**不改一个像素**）：
+
+| 对象 | 重编码前 | 后 | 省 |
+| --- | --- | --- | --- |
+| props 25 张 | 225.4KB | **152.8KB** | 32%（22 张转成，3 张超 256 色保持真彩） |
+| `suitcase-open` | 194.5KB | **99.1KB** | 49% |
+| `suitcase-closed` | 227.6KB | **79.3KB** | 65% |
+| `home-hero` | 71.2KB | **29.9KB** | 58% |
+
+**一个必须记住的坑**：索引色 PNG 的每个调色板项只有一个 alpha，所以「所有 α=0 像素共用一个槽位」看起来省事，实测**会把透明区的 RGB 全写成 `(0,0,0)`**。纹理采样是双线性插值，边缘处实色像素会和相邻透明像素按权重混合——透明像素是黑的就会在物体外缘描一圈黑边（straight alpha 的经典坑，sRGB 下肉眼很明显）。
+正确做法：**把透明像素的 RGB 吸附到最近的实色**（等价于做一次颜色外扩 / bleed），混合时带进的是主体色。实测 `prop_05_A` 边缘透明像素近黑占比 **0%**、均值 `rgb(147,73,27)`（正是裙摆描边的棕），比转换前「底色晕」还干净。
+
+> 后续若新增资源类别把包体推过 3.5MB，按序考虑：① 资源进微信分包；② 引擎分离（TDD 记档，需基础库 ≥ 2.9.0，首次启动下载引擎）。**不要**先动 G2 线。（原第①条「≤256 色图无损转 PLTE」已完成，见 §6.1）
 
 ## 7. 出图规格速查（转交美术时直接贴这段）
 

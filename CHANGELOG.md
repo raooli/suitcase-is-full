@@ -23,6 +23,19 @@
 
 ## 提交记录（倒序）
 
+### `0e97260` · feat(art): M4-4 非物品资源齐活——UI 插画 3 张 + 音效 4 个 WAV + 索引色无损压缩
+
+| 项 | 内容 |
+| --- | --- |
+| 日期 | 2026-10-19 16:00 |
+| 文件 | `assets/resources/sprites/ui/`（home-hero / suitcase-open / suitcase-closed + .meta + 目录 .meta）、`assets/resources/audio/`（4 个 WAV + .meta + 目录 .meta）、`assets/resources/sprites/props/*.png`（22 张重编码）、`tools/art-batch-proc.mjs`、`tools/check-art.ts`、`tools/synth-sfx.py` |
+| 背景 | 计划表的 M4-4 是「UI 组件 7 类 + 音效 4～6，与 UI Spec V1.2 一致」，但代码侧 7 类组件全是程序化 `Graphics`，全项目**零插画、零音频文件**（音效靠 WebAudio 合成占位）。需要判断哪些该出图、哪些该保持程序化，并把真正缺的补上 |
+| 要点 | ① **插画 3 张**：`home-hero`（560×400，正视开口箱 + 长裙/化妆包/围巾）、`suitcase-open`（780×780，**俯视开口**、正方形内衬）、`suitcase-closed`（780×780，**俯视合上**，与 open 同轮廓同画布）。② **音效 4 个**：按 `core/audio/sfx.ts` 的脉冲规格离线渲染 WAV（70/110/220/340ms，44100Hz·16bit·mono），归一化 0.70 峰值且**不烘焙** `SFX_MASTER_GAIN`。③ **索引色 PNG 编码**：`encodeIndexedPNG`（colorType 3 + PLTE + tRNS）+ `optimize` 子命令，props 225.4KB→152.8KB、UI 545.7KB→208.3KB。④ **`check:art` 新增 UI 段**：`UI_SPECS` 契约表校验尺寸/透明底 + 孤儿检测，解码器支持 colorType 3 |
+| 决策 | 「俯视」不是审美选择：棋盘是正方形（L10 6×6 = 342×342），正视「盖子竖起」的插图没有能承载正方形网格的平面（v1 内衬 1.68:1 且暖米色底抠不出来，整张废弃）。其余 5 类组件（按钮 / 图标 / 格子 / 关卡卡 / 各种浮层）**定案保持程序化**：判定口径 =「一件东西的画像 → 出图；会变形的容器/状态机 → 程序化」 |
+| 踩坑 | **索引色透明像素不能清零**。每调色板项只有一个 alpha，若让所有 α=0 共用一个 `(0,0,0,0)` 槽位，双线性采样在边缘会把实色与黑色混合 → 物体外缘描一圈黑边。改为把透明像素 RGB **吸附到最近实色**（颜色外扩/bleed），实测边缘透明像素近黑占比 0%、均值 `rgb(147,73,27)` 正是描边色，比转换前的底色晕更干净 |
+| 复验 | `npm run check` 340/340；`check:art` 25/63 + UI 3/3（透明底 0 不合格）；微信包重建 **121 文件 2,497,080 字节 = 2.38MB**（含 28 PNG + 4 WAV）；`preview:game` **零 Console 错误**、4 件物品「真图已载入」正常渲染——顺带证明索引色 PNG 在引擎侧可读 |
+| 影响 | 包体 2.25MB → 2.38MB（新增 UI+音效 0.28MB，被 props 索引色省下的 0.07MB 抵掉一部分）；M4-5b 才能接线（UI/音频目前是**死资源**，不加载不进内存但占包） |
+
 ### `9307dc8` · fix(art): M4-6c 裁剪残缺 + 复制式重复修复（compose 按格分块拼版）
 
 | 项 | 内容 |
