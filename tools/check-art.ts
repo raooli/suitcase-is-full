@@ -13,6 +13,14 @@
  *   - 文件名严格等于 itemType（便于 resources.load 零映射）
  *   - **透明底必须**（17.2 / A-05）
  *
+ * 剪影核查（M4-6 新增，用户真机反馈「L 型占格配矩形图」的根因修复）：
+ *   贴图剪影必须等于 cells 足迹——**非占格区域不得有任何不透明内容**。
+ *     阻塞级：非占格区域内部（四边内缩 2px，给格边界抗锯齿留容差）存在
+ *             alpha>8 像素 → 图像侵入了不属于它的格子
+ *     警告级：占格区域不透明（alpha≥128）覆盖率 <2% → 主体没画进来/被切空
+ *   内缩 2px 是对格交界 AA 的容差；`art-batch-proc.mjs mask/fit` 硬烘焙的图
+ *   非占格内部严格为 0。历史占位型（不在 levels.json）不适用本项。
+ *
  * 像素级透明底核查（M4-3 复审补入，见 CHANGELOG `8fc62a7` 后记）：
  *   B0 锚点批只人工核查过透明底；B1/B2 批次发生「均匀灰底假透明」回归
  *   （四角 alpha=255、覆盖率 100%、合成到页面底色上是灰色矩形块）而无人
@@ -42,6 +50,8 @@ interface ItemInfo {
   name: string;
   rows: number;
   cols: number;
+  /** cells 足迹（归一化相对格坐标）——剪影核查用（M4-6） */
+  cells: number[][];
   rotatable: boolean;
   levels: number[];
 }
@@ -181,6 +191,77 @@ function checkTransparency(img: PngPixels): TransparencyReport {
   return { blockers, warnings, coveragePct };
 }
 
+interface SilhouetteReport {
+  blockers: string[];
+  warnings: string[];
+}
+
+/**
+ * 剪影核查（M4-6）：贴图剪影必须等于 cells 足迹。
+ *
+ * 背景：物品占格是任意多联骨牌（levels.json 的 cells），但旧美术契约只要求
+ * 「主体落在包围盒内」，异形件（L/T/S…）因此拿到填满包围盒的矩形图，盖住
+ * 了不属于它的格子——用户真机反馈「拖拽时是长方形、落盘变另一种形状」。
+ *
+ * - 阻塞级：**非占格**区域内部（四边内缩 2px）存在 alpha>8 像素。
+ *   内缩 2px 只给格交界处的抗锯齿留容差；`art-batch-proc.mjs mask/fit`
+ *   硬烘焙的图，非占格内部严格为 0。
+ * - 警告级：**占格**区域不透明（alpha≥128）覆盖率 <2%——主体没画进来，
+ *   或遮罩把主体切空了。
+ */
+function checkSilhouette(img: PngPixels, cells: number[][]): SilhouetteReport {
+  const { w, h, data } = img;
+  const at = (x: number, y: number) => (y * w + x) * 4;
+  const rs = cells.map((c) => c[0]);
+  const cs = cells.map((c) => c[1]);
+  const rows = Math.max(...rs) - Math.min(...rs) + 1;
+  const cols = Math.max(...cs) - Math.min(...cs) + 1;
+  const occ = new Set(cells.map(([r, c]) => `${r},${c}`));
+  const blockers: string[] = [];
+  const warnings: string[] = [];
+  const INSET = 2;
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const x0 = c * CELL_PX + INSET, x1 = Math.min((c + 1) * CELL_PX - INSET, w);
+      const y0 = r * CELL_PX + INSET, y1 = Math.min((r + 1) * CELL_PX - INSET, h);
+      let visible = 0, solid = 0;
+      for (let y = y0; y < y1; y++) {
+        for (let x = x0; x < x1; x++) {
+          const a = data[at(x, y) + 3];
+          if (a > 8) visible++;
+          if (a >= 128) solid++;
+        }
+      }
+      const area = Math.max(0, (x1 - x0) * (y1 - y0));
+      if (!occ.has(`${r},${c}`) && visible > 0) {
+        blockers.push(
+          `格(${r},${c}) 是非占格区域却有 ${visible} 个可见像素——图像侵入不属于它的格子（剪影必须等于 cells 足迹）`,
+        );
+      }
+      if (occ.has(`${r},${c}`) && area > 0 && solid / area < 0.02) {
+        warnings.push(`格(${r},${c}) 是占格区域但实体覆盖率仅 ${((solid / area) * 100).toFixed(1)}%——主体没画进来或被切空`);
+      }
+    }
+  }
+  return { blockers, warnings };
+}
+
+/** cells → ASCII 布局（X=占格，.=非占格），供缺失清单交给美术照形状画 */
+function cellsAscii(cells: number[][]): string {
+  const rs = cells.map((c) => c[0]);
+  const cs = cells.map((c) => c[1]);
+  const rows = Math.max(...rs) - Math.min(...rs) + 1;
+  const cols = Math.max(...cs) - Math.min(...cs) + 1;
+  const occ = new Set(cells.map(([r, c]) => `${r},${c}`));
+  const lines: string[] = [];
+  for (let r = 0; r < rows; r++) {
+    let s = '';
+    for (let c = 0; c < cols; c++) s += occ.has(`${r},${c}`) ? 'X' : '.';
+    lines.push(s);
+  }
+  return lines.join('/');
+}
+
 const data = JSON.parse(readFileSync(join(ROOT, 'assets/data/levels.json'), 'utf8'));
 const levels = data.levels ?? data;
 const items = new Map<string, ItemInfo>();
@@ -191,7 +272,15 @@ for (const lv of levels) {
     if (exist) {
       if (!exist.levels.includes(lv.levelId)) exist.levels.push(lv.levelId);
     } else {
-      items.set(it.itemType, { itemType: it.itemType, name: it.name, rows, cols, rotatable: it.rotatable, levels: [lv.levelId] });
+      items.set(it.itemType, {
+        itemType: it.itemType,
+        name: it.name,
+        rows,
+        cols,
+        cells: it.cells.map((c: number[]) => [c[0], c[1]]),
+        rotatable: it.rotatable,
+        levels: [lv.levelId],
+      });
     }
   }
 }
@@ -228,12 +317,15 @@ for (const it of items.values()) {
     continue;
   }
   const tr = checkTransparency(img);
-  if (tr.blockers.length > 0) {
-    broken.push({ ...it, file, blockers: tr.blockers, warnings: tr.warnings, coveragePct: tr.coveragePct });
+  const sil = checkSilhouette(img, it.cells);
+  const blockers = [...tr.blockers, ...sil.blockers];
+  const warnings = [...tr.warnings, ...sil.warnings];
+  if (blockers.length > 0) {
+    broken.push({ ...it, file, blockers, warnings, coveragePct: tr.coveragePct });
   } else {
     ok.push(it);
-    if (tr.warnings.length > 0 && !listMissingOnly) {
-      console.log(`  ⚠️ ${it.itemType}：${tr.warnings.join('；')}`);
+    if (warnings.length > 0 && !listMissingOnly) {
+      console.log(`  ⚠️ ${it.itemType}：${warnings.join('；')}`);
     }
   }
 }
@@ -241,9 +333,11 @@ for (const it of items.values()) {
 const orphan = onDisk.filter((f) => !items.has(f.replace(/\.png$/, '')));
 
 if (listMissingOnly) {
-  console.log('itemType | 名称 | 形状(行x列) | 可旋转 | 期望画布(px) | 出现关卡');
+  console.log('itemType | 名称 | 形状(行x列) | cells布局 | 可旋转 | 期望画布(px) | 出现关卡');
   for (const m of [...missing, ...wrongSize]) {
-    console.log(`${m.itemType} | ${m.name} | ${m.rows}x${m.cols} | ${m.rotatable ? '是' : '否'} | ${m.cols * CELL_PX}x${m.rows * CELL_PX} | L${m.levels.join(',L')}`);
+    console.log(
+      `${m.itemType} | ${m.name} | ${m.rows}x${m.cols} | ${cellsAscii(m.cells)} | ${m.rotatable ? '是' : '否'} | ${m.cols * CELL_PX}x${m.rows * CELL_PX} | L${m.levels.join(',L')}`,
+    );
   }
   process.exit(0);
 }
@@ -273,7 +367,7 @@ if (wrongSize.length) {
 }
 
 if (broken.length) {
-  console.log(`\n透明底不合格（${broken.length}，已交付但违反 TDD 17.2 / A-05）：`);
+  console.log(`\n透明底/剪影不合格（${broken.length}，已交付但违反 TDD 17.2 / A-05 / M4-6 剪影契约）：`);
   for (const b of broken) {
     console.log(`  ❌ ${b.itemType}  覆盖率 ${b.coveragePct.toFixed(0)}%`);
     for (const bl of b.blockers) console.log(`       - ${bl}`);
@@ -292,5 +386,5 @@ if (bad > 0) {
   console.log(`\n❌ 有 ${bad} 项需要处理${strict ? '（strict 模式：缺失也计入失败）' : ''}`);
   process.exit(1);
 }
-console.log(strict ? '\n✅ 全部 63 张就位且符合规格（含透明底）' : '\n✅ 已交付部分均符合规格（含透明底；缺失项不计入失败）');
+console.log(strict ? '\n✅ 全部 63 张就位且符合规格（含透明底与剪影）' : '\n✅ 已交付部分均符合规格（含透明底与剪影；缺失项不计入失败）');
 process.exit(0);

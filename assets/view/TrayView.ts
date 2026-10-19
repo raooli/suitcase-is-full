@@ -436,9 +436,11 @@ export class TrayView extends Component {
 
     // 托盘里也要反映当前朝向（`state.trayRotations`）——旋转是 M2-2 的事，
     // 但读取口径现在就对齐，免得到时"托盘看着是横的、放下去变竖的"。
-    const cells = rotateBy(item.cells, trayRotationOf(state, item.id));
+    const rotation = trayRotationOf(state, item.id);
+    const cells = rotateBy(item.cells, rotation);
     const view = node.addComponent(ItemView);
-    view.init(item, cellPx, source.shapeMetrics(cells));
+    // M4-6：rotation 透传——真图子节点要按当前朝向旋转（贴图帧永远是 0 朝向画布）
+    view.init(item, cellPx, source.shapeMetrics(cells), rotation);
     // M4-5a：真图（异步就绪；缓存已热则同步换上）。回调里判 node.isValid——
     // 托盘每次 render 也全量重建（与 ItemLayer 同机制），晚到的帧可能已无主。
     ensureFrame(item.itemType, (frame) => {

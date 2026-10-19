@@ -157,7 +157,8 @@ export class ItemLayer extends Component {
     node.setPosition(board.gridToLocal(placement.row, placement.col));
 
     const view = node.addComponent(ItemView);
-    view.init(item, board.getCellPx(), board.shapeMetrics(cells));
+    // M4-6：rotation 透传——真图子节点要按当前朝向旋转（贴图帧永远是 0 朝向画布）
+    view.init(item, board.getCellPx(), board.shapeMetrics(cells), placement.rotation);
     // M4-5a：真图（异步就绪；缓存已热则同步换上）。回调里判 node.isValid——
     // 晚到的帧可能撞上下一次全量重建（本层 clear() 已销毁旧节点）。
     ensureFrame(item.itemType, (frame) => {

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""M4-3 美术资产像素级复审（stdlib only）。
+"""M4-3 美术资产像素级复审（stdlib only）；M4-6 增剪影核查。
 
 对 assets/resources/sprites/props/*.png 逐张核查 TDD 17.2 / 17.6（A-03/A-05）：
   1. PNG 头：color type 6（RGBA）/ 8bit
@@ -11,6 +11,8 @@
   7. 主色聚类（16 级量化，跳透明）+ 相对亮度 → 对照 5.2 家族色板
   8. 近白不透明像素计数（白底假透明签名）
   9. 半透明 fringe 均值色（白 matting 光晕签名）
+ 10. **剪影 = cells 足迹**（M4-6）：非占格区域不透明像素 ≈ 0；占格区域有主体
+     （用户真机反馈「L 型占格配矩形图」的根因；自动门禁在 tools/check-art.ts）
 """
 import json
 import struct
@@ -20,33 +22,33 @@ from collections import Counter
 
 PROPS = "assets/resources/sprites/props"
 
-# itemType -> (rows, cols, 家族) —— 来源 docs/07-AI-Prompts.md 5.6
+# itemType -> (rows, cols, cells 足迹 ASCII, 家族) —— 来源 docs/07-AI-Prompts.md 5.6（V1.3 布局列）
 ITEMS = {
-    "prop_01_A": (1, 2, ["R"]),
-    "prop_01_B": (2, 1, ["M"]),
-    "prop_01_C": (1, 2, ["B"]),
-    "prop_01_D": (1, 3, ["M", "R"]),
-    "prop_02_A": (2, 2, ["C"]),
-    "prop_02_B": (2, 1, ["C", "B"]),
-    "prop_02_C": (2, 1, ["C", "R"]),
-    "prop_02_D": (2, 2, ["C", "B"]),
-    "prop_04_A": (2, 4, ["C", "M"]),
-    "prop_04_B": (3, 2, ["C", "R", "B"]),
-    "prop_04_C": (2, 2, ["C", "R"]),
-    "prop_04_D": (2, 3, ["C", "M"]),
-    "prop_04_E": (2, 1, ["R"]),
-    "prop_04_F": (1, 2, ["N"]),
-    "prop_05_A": (3, 3, ["R"]),
-    "prop_05_B": (2, 3, ["C"]),
-    "prop_05_C": (2, 2, ["N"]),
-    "prop_05_D": (2, 3, ["R"]),
-    "prop_05_E": (2, 2, ["B"]),
-    "prop_05_F": (3, 2, ["M"]),
-    "prop_07_A": (5, 1, ["M"]),
-    "prop_jacket": (2, 3, ["C", "R"]),
-    "prop_pouch": (2, 3, ["C", "B"]),
-    "prop_scarf": (1, 3, ["C", "M"]),
-    "prop_umbrella": (1, 5, ["M"]),
+    "prop_01_A": (1, 2, "XX", ["R"]),
+    "prop_01_B": (2, 1, "X/X", ["M"]),
+    "prop_01_C": (1, 2, "XX", ["B"]),
+    "prop_01_D": (1, 3, "XXX", ["M", "R"]),
+    "prop_02_A": (2, 2, "XX/X.", ["C"]),
+    "prop_02_B": (2, 1, "X/X", ["C", "B"]),
+    "prop_02_C": (2, 1, "X/X", ["C", "R"]),
+    "prop_02_D": (2, 2, "X./XX", ["C", "B"]),
+    "prop_04_A": (2, 4, "XXXX/...X", ["C", "M"]),
+    "prop_04_B": (3, 2, "XX/.X/.X", ["C", "R", "B"]),
+    "prop_04_C": (2, 2, "XX/X.", ["C", "R"]),
+    "prop_04_D": (2, 3, "X../XXX", ["C", "M"]),
+    "prop_04_E": (2, 1, "X/X", ["R"]),
+    "prop_04_F": (1, 2, "XX", ["N"]),
+    "prop_05_A": (3, 3, "..X/..X/XXX", ["R"]),
+    "prop_05_B": (2, 3, "XXX/XX.", ["C"]),
+    "prop_05_C": (2, 2, "X./XX", ["N"]),
+    "prop_05_D": (2, 3, ".X./XXX", ["R"]),
+    "prop_05_E": (2, 2, "XX/X.", ["B"]),
+    "prop_05_F": (3, 2, "XX/.X/.X", ["M"]),
+    "prop_07_A": (5, 1, "X/X/X/X/X", ["M"]),
+    "prop_jacket": (2, 3, "X../XXX", ["C", "R"]),
+    "prop_pouch": (2, 3, "XX./.XX", ["C", "B"]),
+    "prop_scarf": (1, 3, "XXX", ["C", "M"]),
+    "prop_umbrella": (1, 5, "XXXXX", ["M"]),
 }
 
 # 5.2 家族色板（浅档主填充 + 深档 accent）
@@ -143,7 +145,7 @@ def main():
     print(f"{'itemType':<16}{'canvas':<12}{'期望':<10}{'type':<7}{'角a':<5}"
           f"{'缘不透':<7}{'bbox余量':<18}{'覆盖':<6}{'近白':<6}主色(top3, 占比/L/最近家族@距离)")
     problems = []
-    for it, (rows, cols, fams) in ITEMS.items():
+    for it, (rows, cols, layout, fams) in ITEMS.items():
         path = f"{PROPS}/{it}.png"
         w, h, depth, ctype, px = read_png(path)
         exp = (cols * 96, rows * 96)
@@ -191,6 +193,24 @@ def main():
                     fringe_n += 1
         coverage = opaque / (w * h)
         margins = f"L{xs0} R{w - 1 - xs1} T{ys0} B{h - 1 - ys1}"
+        # ── M4-6 剪影核查：逐格覆盖率 vs cells 足迹 ──
+        silhouette_ok = True
+        cell_report = []
+        if (w, h) == exp:
+            for r in range(rows):
+                for c in range(cols):
+                    cell_op = 0
+                    for y in range(r * 96, (r + 1) * 96):
+                        for x in range(c * 96, (c + 1) * 96):
+                            if px[y][x][3] > 128:
+                                cell_op += 1
+                    ratio = cell_op / (96 * 96)
+                    occupied = layout[r * (cols + 1) + c] == "X"
+                    if not occupied and ratio > 0.02:
+                        silhouette_ok = False
+                        cell_report.append(f"格({r},{c})非占格却有{ratio * 100:.0f}%不透明")
+                    elif occupied and ratio < 0.02:
+                        cell_report.append(f"格({r},{c})占格却几乎空({ratio * 100:.1f}%)")
         top = quant.most_common(3)
         tops = []
         for (r, g, b), n in top:
@@ -203,10 +223,12 @@ def main():
         print(f"{it:<16}{f'{w}x{h}':<12}{f'{exp[0]}x{exp[1]}':<10}"
               f"{'RGBA' if ctype == 6 else f'CT{ctype}':<7}{'OK' if corner_ok else corners!s:<5}"
               f"{edge_opaque:<7}{margins:<18}{coverage * 100:.0f}%{'':<2}{near_white:<6}"
-              f"{' '.join(tops)}  fringe={fringe}")
+              f"{' '.join(tops)}  fringe={fringe}  剪影={'OK' if silhouette_ok else '✗'}")
         # 判定
         if not size_ok:
             problems.append(f"[阻塞] {it} 画布 {w}x{h} != 期望 {exp[0]}x{exp[1]}")
+        if not silhouette_ok:
+            problems.append(f"[阻塞] {it} 剪影 != cells 足迹 {layout}：{'；'.join(cell_report)}")
         if ctype != 6 or depth != 8:
             problems.append(f"[阻塞] {it} 非 PNG-24 RGBA（color type {ctype} / depth {depth}）")
         if not corner_ok:

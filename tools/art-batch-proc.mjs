@@ -1,12 +1,25 @@
 #!/usr/bin/env node
 /**
  * M4-3 批次出图后处理（stdlib only：PNG 解码/编码/抠底/缩放/合版/量化）
+ * M4-6 增 footprint 遮罩：真图剪影必须等于物品的 cells 足迹（用户真机反馈：
+ * L 型占格配矩形图，「拖拽时是长方形、落盘变 another shape」）。
  *
  * 用法：
  *   node tools/art-batch-proc.mjs info    <file.png>                     尺寸/角 alpha/环带色/bbox/覆盖率
  *   node tools/art-batch-proc.mjs palette <file.png> [N]                 主色聚类（16 级量化）+ 相对亮度
- *   node tools/art-batch-proc.mjs fit <file.png> <itemType> <W> <H> [margin] [--deshadow]
- *                                                 抠底→裁边→等比缩放→居中合到 W×H 透明画布→量化
+ *   node tools/art-batch-proc.mjs fit <file.png> <itemType> [W] [H] [margin] [--no-mask] [--deshadow]
+ *                                                 抠底→裁边→等比缩放→居中合到 W×H 透明画布→**足迹遮罩**→量化
+ *                                                 （W/H 省略时从 levels.json 包围盒推导；遮罩自动执行，
+ *                                                   --no-mask 跳过——仅调试用）
+ *   node tools/art-batch-proc.mjs mask <itemType> [--dry-run]            对**已交付** PNG 补烘焙足迹遮罩
+ *                                                 （M4-6 追溯 14 张异形图用；raw 源已不在，只能挖现有图）
+ *
+ * 足迹遮罩规则（M4-6）：
+ *   - 占格 (r,c) → 画布矩形 x∈[c·96,(c+1)·96), y∈[r·96,(r+1)·96)（y 向下，与 PNG 一致）
+ *   - 非占格区域 alpha 置 0（RGB 同步清零利于压缩）；**硬切**——格边界即像素边界，
+ *     切沿是直线，与格子严丝合缝（边界处保留主体自身 AA）
+ *   - 满矩形足迹为 no-op（11 张矩形图零影响）
+ *   - 遮罩在合版后、量化前执行：量化建调色板只收 alpha>8 的像素，被挖像素不进调色板
  *
  * 输出：assets/resources/sprites/props/<itemType>.png（文件名严格 = itemType）
  * 环境变量：QN 调色板颜色数（默认 16）；体积与观感的折中点，16 色肉眼无差、比 64 色省 60%+
@@ -15,10 +28,13 @@
  * `--deshadow` 慎用：C 家族织物 #E5E5E5 与浅灰投影颜色不可分，会误删主体。
  */
 import { inflateSync, deflateSync } from 'zlib';
-import { readFileSync, writeFileSync, mkdirSync, copyFileSync } from 'fs';
+import { readFileSync, writeFileSync, mkdirSync, copyFileSync, existsSync } from 'fs';
 import { join, basename } from 'path';
 
-const OUT_DIR = '/Users/sheep/code-workspace/suitcase-is-full/assets/resources/sprites/props';
+const ROOT = '/Users/sheep/code-workspace/suitcase-is-full';
+const OUT_DIR = join(ROOT, 'assets/resources/sprites/props');
+const LEVELS_PATH = join(ROOT, 'assets/data/levels.json');
+const CELL_PX = 96; // @2x 单格物理像素（与 tools/check-art.ts 同口径）
 
 // ---------- PNG 编解码（colorType 6 / 8bit） ----------
 function decodePNG(path) {
@@ -358,6 +374,108 @@ function quantize(img, nColors = 64) {
   return img;
 }
 
+// ---------- footprint 遮罩（M4-6） ----------
+
+/**
+ * 从 levels.json 按 itemType 反查物品规格（形状唯一真相源）。
+ * itemType→cells 已验证全局唯一；若万一撞形直接抛错（遮罩无法唯一确定）。
+ * 返回 null = 数据里没有这个 itemType（调用方自行决定是否放行）。
+ */
+function findItemSpec(itemType) {
+  const data = JSON.parse(readFileSync(LEVELS_PATH, 'utf8'));
+  const levels = data.levels ?? data;
+  let found = null;
+  for (const lv of levels) {
+    for (const it of lv.items) {
+      if (it.itemType !== itemType) continue;
+      const cells = it.cells.map(([r, c]) => [r, c]);
+      const key = JSON.stringify([...cells].sort((x, y) => x[0] - y[0] || x[1] - y[1]));
+      if (found !== null && found.key !== key) {
+        throw new Error(`${itemType} 在不同关卡有不同 cells（L${found.levels} vs L${lv.levelId}）——足迹遮罩无法唯一确定，需先统一数据`);
+      }
+      if (found === null) found = { itemType, name: it.name, cells, key, levels: [lv.levelId] };
+      else if (!found.levels.includes(lv.levelId)) found.levels.push(lv.levelId);
+    }
+  }
+  if (found === null) return null;
+  // 防御性归一化（数据契约本就 minRow=minCol=0，这里不依赖它）
+  const minR = Math.min(...found.cells.map((c) => c[0]));
+  const minC = Math.min(...found.cells.map((c) => c[1]));
+  found.cells = found.cells.map(([r, c]) => [r - minR, c - minC]);
+  found.rows = Math.max(...found.cells.map((c) => c[0])) + 1;
+  found.cols = Math.max(...found.cells.map((c) => c[1])) + 1;
+  return found;
+}
+
+/** cells → ASCII 布局（X=占格，.=包围盒内非占格），供日志/文档对人眼展示 */
+function footprintAscii(cells, rows, cols) {
+  const occ = new Set(cells.map(([r, c]) => r * 100000 + c));
+  const lines = [];
+  for (let r = 0; r < rows; r++) {
+    let s = '';
+    for (let c = 0; c < cols; c++) s += occ.has(r * 100000 + c) ? 'X' : '.';
+    lines.push(s);
+  }
+  return lines;
+}
+
+/**
+ * 把 img 中**非占格区域**的 alpha 置 0（RGB 同步清零）。
+ * 原地修改。返回挖除统计（每格挖前覆盖率 + 合计挖除像素）。
+ * 前置条件：img 尺寸 == cols×CELL_PX × rows×CELL_PX（调用方校验）。
+ */
+function applyFootprintMask(img, cells) {
+  const { width: w, height: h, data } = img;
+  const occ = new Set(cells.map(([r, c]) => r * 100000 + c));
+  const rows = Math.max(...cells.map((c) => c[0])) + 1;
+  const cols = Math.max(...cells.map((c) => c[1])) + 1;
+
+  // 每格挖前覆盖率（alpha>16 计），操作员可 review 切掉多少
+  const before = [];
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      let n = 0;
+      for (let y = r * CELL_PX; y < (r + 1) * CELL_PX && y < h; y++) {
+        for (let x = c * CELL_PX; x < (c + 1) * CELL_PX && x < w; x++) {
+          if (data[(y * w + x) * 4 + 3] > 16) n++;
+        }
+      }
+      before.push({ r, c, occ: occ.has(r * 100000 + c), px: n });
+    }
+  }
+
+  let removed = 0;
+  for (let y = 0; y < h; y++) {
+    const r = Math.floor(y / CELL_PX);
+    for (let x = 0; x < w; x++) {
+      if (occ.has(r * 100000 + Math.floor(x / CELL_PX))) continue;
+      const i = (y * w + x) * 4;
+      if (data[i + 3] !== 0) {
+        data[i] = 0; data[i + 1] = 0; data[i + 2] = 0; data[i + 3] = 0;
+        removed++;
+      }
+    }
+  }
+  return { removed, rows, cols, before, cellTotal: CELL_PX * CELL_PX };
+}
+
+/** 打印遮罩报告（布局 + 每格覆盖率 + 挖除量） */
+function printMaskReport(spec, stats) {
+  const ascii = footprintAscii(spec.cells, stats.rows, stats.cols).join('/');
+  const full = spec.cells.length === stats.rows * stats.cols;
+  console.log(`  ${spec.itemType}（${spec.name}）${stats.rows}×${stats.cols} 布局 ${ascii}  L${spec.levels.join(',L')}`);
+  if (full) {
+    console.log('    满矩形足迹——无需挖除（no-op）');
+    return;
+  }
+  for (const g of stats.before) {
+    const pct = ((g.px / stats.cellTotal) * 100).toFixed(1);
+    console.log(`    格(${g.r},${g.c}) ${g.occ ? '占' : '空'} 挖前覆盖 ${pct}%${g.occ ? '' : ' ←挖除'}`);
+  }
+  const total = stats.rows * stats.cols * stats.cellTotal;
+  console.log(`    合计挖除 ${stats.removed}px（画布 ${(stats.removed / total * 100).toFixed(1)}%）`);
+}
+
 // ---------- CLI ----------
 function palette(path, topN = 5) {
   const { width: w, height: h, data } = decodePNG(path);
@@ -379,32 +497,86 @@ function palette(path, topN = 5) {
   }
 }
 
-const [cmd, a, b, c, d, e, f] = process.argv.slice(2);
+const [cmd, a, b] = process.argv.slice(2);
 if (cmd === 'palette') {
   palette(a, b ? +b : 5);
 } else if (cmd === 'info') {
   info(a);
+} else if (cmd === 'mask') {
+  // M4-6：对已交付 PNG 补烘焙足迹遮罩（追溯修复 14 张异形图；raw 源已不在仓库）
+  const itemType = a;
+  const dryRun = process.argv.slice(3).includes('--dry-run');
+  const spec = findItemSpec(itemType);
+  if (spec === null) throw new Error(`${itemType} 不在 levels.json 里——无法确定足迹`);
+  const path = join(OUT_DIR, `${itemType}.png`);
+  if (!existsSync(path)) throw new Error(`${path} 不存在（尚未交付？）`);
+  const img = decodePNG(path);
+  const ew = spec.cols * CELL_PX, eh = spec.rows * CELL_PX;
+  if (img.width !== ew || img.height !== eh) {
+    throw new Error(`${itemType}.png 实际 ${img.width}x${img.height}，期望足迹画布 ${ew}x${eh}——尺寸不符，拒绝挖`);
+  }
+  const stats = applyFootprintMask(img, spec.cells);
+  printMaskReport(spec, stats);
+  if (dryRun) {
+    console.log('  --dry-run：不写盘');
+  } else if (stats.removed > 0) {
+    writeFileSync(path, encodePNG(img));
+    console.log(`  → 已烘焙 ${path}（跑一次编辑器构建让 .meta 重新 trim）`);
+  } else {
+    console.log('  无需修改');
+  }
 } else if (cmd === 'fit') {
-  const raw = a, itemType = b, W = +c, H = +d;
-  let margin = 8, srcDir = null;
-  for (const v of process.argv.slice(7)) {
-    if (v === '--src') continue;
-    if (v.startsWith('--src=')) srcDir = v.slice(6);
-    else if (!Number.isNaN(+v)) margin = +v;
-    else if (srcDir === '') srcDir = v;
+  // 位置参数：raw itemType [W] [H] [margin]；flag：--no-mask / --deshadow / --src <dir|dir>
+  const pos = [];
+  let margin = 8, applyMask = true, deshadow = false, srcDir = null;
+  const args = process.argv.slice(3);
+  for (let i = 0; i < args.length; i++) {
+    const v = args[i];
+    if (v === '--no-mask') applyMask = false;
+    else if (v === '--deshadow') deshadow = true;
+    else if (v === '--src') srcDir = args[++i] ?? '';
+    else if (v.startsWith('--src=')) srcDir = v.slice(6);
+    else pos.push(v);
+  }
+  const [raw, itemType, ...nums] = pos;
+  if (!raw || !itemType) throw new Error('fit 用法：fit <raw.png> <itemType> [W] [H] [margin] [--no-mask] [--deshadow] [--src <dir>]');
+  const n = nums.map(Number);
+  if (n.some((x) => !Number.isFinite(x))) throw new Error(`fit 位置参数必须是数字：${nums.join(' ')}`);
+  if (n.length === 1) throw new Error('W/H 必须成对给出（或都省略，从 levels.json 足迹包围盒自动推导）');
+  let W, H;
+  if (n.length >= 2) {
+    W = n[0]; H = n[1];
+    if (n.length >= 3) margin = n[2];
+  } else {
+    const spec = findItemSpec(itemType);
+    if (spec === null) throw new Error(`${itemType} 不在 levels.json，且未显式给 W/H`);
+    W = spec.cols * CELL_PX; H = spec.rows * CELL_PX;
   }
   const img = decodePNG(raw);
-  const infoRes = info(raw);
+  info(raw);
   const A = i => img.data[i * 4 + 3];
   const cornersOpaque = [0, img.width - 1, (img.height - 1) * img.width, img.height * img.width - 1].some(i => A(i) > 16);
-  if (cornersOpaque) { console.log('  检测到不透明底 → 执行抠底'); keyout(img, { deshadow: process.argv.slice(7).includes('--deshadow') }); }
+  if (cornersOpaque) { console.log('  检测到不透明底 → 执行抠底'); keyout(img, { deshadow }); }
   else console.log('  四角已透明 → 跳过抠底');
   const final = fitToCanvas(img, W, H, margin);
+  // M4-6：足迹遮罩（合版后、量化前）。levels.json 没有该型（历史占位型）时放行
+  if (applyMask) {
+    const spec = findItemSpec(itemType);
+    if (spec === null) {
+      console.log(`  ${itemType} 不在 levels.json——跳过足迹遮罩`);
+    } else {
+      if (final.width !== spec.cols * CELL_PX || final.height !== spec.rows * CELL_PX) {
+        throw new Error(`画布 ${final.width}x${final.height} 与足迹包围盒 ${spec.cols * CELL_PX}x${spec.rows * CELL_PX} 不符——W/H 给错了？`);
+      }
+      const stats = applyFootprintMask(final, spec.cells);
+      printMaskReport(spec, stats);
+    }
+  }
   quantize(final, +(process.env.QN || 16));
   if (srcDir) { mkdirSync(srcDir, { recursive: true }); copyFileSync(raw, join(srcDir, `${itemType}@v1_src.png`)); }
   const outPath = join(OUT_DIR, `${itemType}.png`);
   writeFileSync(outPath, encodePNG(final));
   console.log(`  → 写出 ${outPath}`);
 } else {
-  console.log('用法：info <png>  |  fit <png> <itemType> <W> <H> [margin] [--src <dir>]');
+  console.log('用法：info <png>  |  palette <png> [N]  |  fit <png> <itemType> [W] [H] [margin] [--no-mask] [--deshadow] [--src <dir>]  |  mask <itemType> [--dry-run]');
 }

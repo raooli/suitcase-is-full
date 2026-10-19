@@ -1,43 +1,80 @@
-# prop_05_F · 发饰（三枚）
+# prop_05_F · 发饰
 
 | 项 | 值 |
 | --- | --- |
 | 关卡 | L5 |
 | 家族 | M |
 | 占格 / 画布 | 3×2 / 192×288 |
+| 足迹布局 | `XX/.X/.X`（X=占格，.=非占格，**必须完全透明**） |
 | 生成参数 | size=`1024x1536`, quality=high, background=opaque |
-| 版本 | v3（前版废弃，见备注） |
+| 版本 | v4（M4-6 重绘：**逐格置物式**，按足迹布局重新设计物件排布） |
 
 > 完整提示词 = [docs/07 §5.1 Style Block] + [§5.11 批次补充段] + [本文 Object Block] + [Spec]；负向词见文末。
 > Style Block 与批次补充段不在此重复，避免两处漂移。
+> v1→v4 教训：抽象描述「主体占左列、右下留空」模型不遵守（实测把袋子居中画成对称梯形）；**逐格点名**（哪个格子放什么、哪个格子全空）才可靠。
 
 ## Object Block（逐件差异段，照抄即可）
 
 ```text
-Three hair clips laid HORIZONTALLY (each clip is a wide short rounded rectangle, about four times wider than tall), stacked one above the other in three even rows with equal gaps, all the same width, together filling the full frame width. Clips fill soft pastel mint #BCEAD5; each clip has one thin vertical slot line and a small circular hinge in deeper mint #87CBB8. Flat, symmetric, simple blocky silhouette.
+A still-life arrangement on a 3x2 cell grid (each cell 96x96, canvas 192x288, row-major from top-left). Top row (both cells): two wide hair clips side by side. Right column (middle-right and bottom-right cells): single hair clips, one per cell, stepping down like a staircase. Middle-left and bottom-left cells: EMPTY background only — nothing at all. Clips in soft pastel mint #BCEAD5 with deeper mint #87CBB8 slot lines and small hinge dots, warm brown #7A5C4F outline.
 ```
 
 ## Spec / Output
 
 ```text
-Canvas exactly 192x288 pixels, single cell = 96px, @2x. The three clips together fill the canvas edge to edge with no margin. Subject stays fully inside the shape bounding box; decorative overhang max 10%.
+Canvas exactly 192x288 pixels, single cell = 96px, @2x. Footprint layout (3 rows x 2 cols, row-major from top-left): XX/.X/.X — X = occupied cell, . = cell that MUST stay completely transparent. The subject must fill every X cell; nothing may enter the . cells (no body part, no shadow, no decoration). The footprint is a polyomino: a rectangle filling the whole bounding box is wrong. Transparent background.
 ```
 
 ## 负向词
 
 ```text
-text, logo, watermark, brand name, QR code, black thick outline, saturated colors, neon, long drop shadow, outer glow, specular highlight, 3D render, photorealistic, dark maroon, heavy shading, gradient mesh, vignette, gradient background, checkerboard pattern, transparency grid, textured canvas background, grid lines, border, frame, blurry, cropped subject, multiple views, 4 rotations, thin vertical slivers, tall narrow strips
+text, logo, watermark, brand name, QR code, black thick outline, saturated
+colors, neon, long drop shadow, outer glow, specular highlight, 3D render,
+photorealistic, dark maroon, heavy shading, gradient mesh, vignette, gradient
+background, checkerboard pattern, transparency grid, textured canvas
+background, grid lines, border, frame, blurry, cropped subject, multiple
+views, 4 rotations
 ```
 
 ## 后处理
 
 ```bash
 node tools/art-batch-proc.mjs fit <raw> prop_05_F 192 288 10
-# 然后：npm run check:art
+# 然后：npm run check:art（剪影门禁：非占格区域内部必须透明；占格覆盖率 ≥2%）
+# 再目检：占用格是否都有主体、形状是否自然（非残缺）
 ```
 
 ## 备注
 
-重出 3 版才合格。v1「三枚发夹」被画成三根细竖条，填不满 3×2 格；v2 整片薄荷绿背景与主体同色，抠底无解，且右下带平台水印；v3 改纯白底（background=opaque）+ 明确「横放、宽约为高的四倍」后通过。
+v3 三枚发夹竖排满矩形，硬裁成残片（用户明确否决）。v4 逐格置物：两枚并排顶行，之后沿右列中/下两格各一枚成阶梯，左列中/下两格全空。
 
-**v3 原图右下仍有「AI生成」水印**（见 `art/previews/props/prop_05_F_reference.jpg`），成品里是靠「碎块剔除：只保留 ≥ 最大连通域 6%」去掉的。该步骤因此不可省——后续批次出图后若发现角落有残留文字块，先看这一步是否被跳过。
+---
+<!-- 以下是完整拼接提示词（Style Block + 批次补充段 + Object Block + Spec + 负向词），供复现与审计 -->
+
+## Full Prompt（assembled）
+
+```text
+Cream travel journal illustration style: soft hand-drawn feel, rounded simplified
+shapes, low-saturation pastel palette, slight volume shading. Game asset icon,
+centered, clean silhouette, minimal detail — the item must read as a clear
+blocky shape at thumbnail size. Warm brown outline (#7A5C4F), never pure black,
+outline max 2px at 2x scale. Soft light from upper-left with a short light
+shadow at lower-right; no long drop shadow, no glow, no specular highlight,
+no thick impasto. Transparent background, PNG-24.
+
+Batch rules: flat sticker look, warm brown outline about 1.5px at a 96px cell,
+flat pastel fills with at most one soft lighter highlight, no ground shadow,
+no cast shadow. Background: plain flat pale off-white #F7F6F3, absolutely no
+gradient, no vignette, no checkerboard or transparency grid, no texture.
+
+A still-life arrangement on a 3x2 cell grid (each cell 96x96, canvas 192x288, row-major from top-left). Top row (both cells): two wide hair clips side by side. Right column (middle-right and bottom-right cells): single hair clips, one per cell, stepping down like a staircase. Middle-left and bottom-left cells: EMPTY background only — nothing at all. Clips in soft pastel mint #BCEAD5 with deeper mint #87CBB8 slot lines and small hinge dots, warm brown #7A5C4F outline.
+
+Canvas exactly 192x288 pixels, single cell = 96px, @2x. Footprint layout (3 rows x 2 cols, row-major from top-left): XX/.X/.X — X = occupied cell, . = cell that MUST stay completely transparent. The subject must fill every X cell; nothing may enter the . cells (no body part, no shadow, no decoration). The footprint is a polyomino: a rectangle filling the whole bounding box is wrong. Transparent background.
+
+text, logo, watermark, brand name, QR code, black thick outline, saturated
+colors, neon, long drop shadow, outer glow, specular highlight, 3D render,
+photorealistic, dark maroon, heavy shading, gradient mesh, vignette, gradient
+background, checkerboard pattern, transparency grid, textured canvas
+background, grid lines, border, frame, blurry, cropped subject, multiple
+views, 4 rotations
+```

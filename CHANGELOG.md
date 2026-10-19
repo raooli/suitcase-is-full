@@ -23,6 +23,18 @@
 
 ## 提交记录（倒序）
 
+### `f090ee5` · feat(art): M4-6 异形件重绘贴合 cells 足迹 + 旋转感知贴图
+
+| 项 | 内容 |
+| --- | --- |
+| 日期 | 2026-10-19 14:10 |
+| 文件 | 14 张 props PNG+meta（`prop_02_A/D`、`prop_jacket`、`prop_pouch`、`prop_04_A~D`、`prop_05_A~F`）、`assets/view/ItemView.ts`、`ItemLayer.ts`、`TrayView.ts`、`assets/core/geometry/artOffset.ts`（新）+ meta、`assets/core/index.ts`、`test/artOffset.spec.ts`（新）、`tools/art-batch-proc.mjs`、`tools/check-art.ts`、`docs/03-UI-Spec.md`、`docs/04-TDD-v1.0.md`、`docs/07-AI-Prompts.md`、`art/ASSET-STATUS.md`、`art/review-pixels.py`、`art/art-source/props/ai/*.prompt.md`（14） |
+| 背景 | 真机反馈：L 型占格配矩形贴图——拖拽 ghost 是 L 形、落盘真图却是填满包围盒的矩形，形状割裂。首轮硬裁遮罩被用户看图否决（主体被切残），改走**重绘贴合形状** |
+| 要点 | ① 按 `levels.json` 的 `cells` 生成逐格置物提示词（明确哪格放什么、哪格必须空），14 件 AI 重绘即呈多联骨牌形；`fit` 后的足迹遮罩仅作**兜底**（越界清零，不靠它切主体）。② `ItemView.createArtNode` 旋转感知：子节点锚点 (0.5,0.5)、等比因子按奇/偶圈取 `original` 宽/高、内容偏移用图集稳定的 `frame.offset` 按圈数 CW 旋转、`setRotationFromEuler(-90°×rot)`；修可旋转件 90° 被拉扁。③ core 纯函数 `rotatedCenterOffset` + 10 项单测（与 `rotateBy` 七形×四向交叉验证）。④ check-art 剪影门禁：非占格内部（内缩 2px）有不透明像素=阻塞，占格覆盖率<2%=警告 |
+| 踩坑 | 单物体跨多格（笔记本/相机带/外套/长裙）会被模型逐格平铺成多个 → 提示词须写「ONE single… 禁止分段/平铺」；长裙 L 形足迹（`..X/..X/XXX`）改用「折叠平放成 L 形」语义；近白填充（白布）会被抠底吃掉 → 改明确彩色 + 描边 |
+| 复验 | `npm run check` 340/340；`check:art` 25/25 剪影合规、0 透明底不合格；L2 托盘帆布袋呈「包身 + 右上肩带」L 形、笔记本+笔；L5 选件旋转 `朝向 1`、`artEuler=(0,0,-90)`、artSize 不变（不拉伸）；各关零 Console 错误 |
+| 影响 | 25/63 张真图剪影 = cells 足迹；25 张合计 **215,860 B**，63 张齐预测 ≈2.41MB < 3.5MB；分支保护三件套（`package.json`/`.github/`/`tools/protect-branch.mjs`）按约定未提交 |
+
 ### `f3c59ea` · feat(view): M4-5a 真图接线——25 张已交付物品图接入游戏（propAssets 加载器 + ItemView 子节点贴图）
 
 | 项 | 内容 |

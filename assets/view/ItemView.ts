@@ -25,8 +25,9 @@ import {
   UI_ITEM_RADIUS_RATIO,
   UI_PALETTE,
   itemFillHex,
+  rotatedCenterOffset,
 } from '../core';
-import type { ItemSpec, RC } from '../core';
+import type { ItemSpec, RC, Rotation } from '../core';
 
 const { ccclass } = _decorator;
 
@@ -58,6 +59,8 @@ export class ItemView extends Component {
   private unit = 0;
   private metrics: ShapeMetrics | null = null;
   private fillHex = '#FFFFFF';
+  /** 当前朝向（0..3 = 顺时针 90° 圈数）。M4-6：真图子节点要跟着它转 */
+  private rotation: Rotation = 0;
   private graphics: Graphics | null = null;
   /** 已登记的真图帧（M4-5a：`propAssets` 就绪回调送进来；无图关卡恒 null） */
   private spriteFrame: SpriteFrame | null = null;
@@ -67,20 +70,25 @@ export class ItemView extends Component {
    * 为什么不能挂主节点：引擎**一节点只准一个 renderable**——`Graphics` 在
    * `__preload` 就占了节点的 `uiComp` 位，`onDisable` 不让位，只有 `onDestroy`
    * （帧末）才清。同帧「禁 Graphics + 加 Sprite」会吃 warnID 12002 且 Sprite
-   * **不被注册**（实测：四个物品全隐形）。子节点尺寸/位置按画布→包围盒
-   * 等比映射算，见 `createArtNode`。
+   * **不被注册**（实测：四个物品全隐形）。子节点按「画布→包围盒等比映射 +
+   * 旋转对齐」算尺寸/位置/朝向，见 `createArtNode`。
    */
   private artNode: Node | null = null;
 
   /**
-   * @param item   物品规格（只读；着色取 `trayOrder` 与 `cells.length`）
-   * @param unit   单格边长像素，来自 `BoardView.getCellPx()`
-   * @param metrics 包围盒尺寸与逐格中心偏移，来自 `BoardView`
+   * @param item      物品规格（只读；着色取 `trayOrder` 与 `cells.length`）
+   * @param unit      单格边长像素，来自 `BoardView.getCellPx()`
+   * @param metrics   包围盒尺寸与逐格中心偏移，来自 `BoardView`（**当前朝向**）
+   * @param rotation  当前朝向（0..3 = 顺时针 90° 圈数，与 core `rotateBy` 同口径）。
+   *                   M4-5a 时不需要它（画布与包围盒同比例，怎么映射都不变形）；
+   *                   M4-6 起真图子节点要按它旋转，否则旋转后两轴缩放不同被拉扁
+   *                   （实测 2×4 薄外套 0.59 vs 2.38）。
    */
-  init(item: ItemSpec, unit: number, metrics: ShapeMetrics): void {
+  init(item: ItemSpec, unit: number, metrics: ShapeMetrics, rotation: Rotation = 0): void {
     this.itemId = item.id;
     this.unit = unit;
     this.metrics = metrics;
+    this.rotation = rotation;
     this.fillHex = itemFillHex(item.trayOrder, item.cells.length);
 
     const transform = this.node.getComponent(UITransform) ?? this.node.addComponent(UITransform);
@@ -104,10 +112,10 @@ export class ItemView extends Component {
    * - 主节点尺寸由 `init()` 按包围盒定死，这里不碰主节点 UITransform；
    * - Sprite 走**子节点**（主节点的 renderable 位被 Graphics 占着，引擎禁止
    *   一位两 renderable，见 `artNode` 注释）；
-   * - 子节点尺寸/位置按「画布→包围盒等比映射」算（见 `createArtNode`），
-   *   `SizeMode.CUSTOM` 下贴图 1:1 适配子节点——trim 边距保留、不变形；
-   * - 画布纵横比 = 占格纵横比（每格 96px 的 cols×rows 画布对 cols×rows 格
-   *   节点），映射即等比。
+   * - 子节点尺寸/位置按「画布→包围盒等比映射 + 旋转对齐」算（见
+   *   `createArtNode`），`SizeMode.CUSTOM` 下贴图 1:1 适配子节点——trim
+   *   边距保留、不变形；画布纵横比 = 占格纵横比（每格 96px 的 cols×rows
+   *   画布对 cols×rows 格节点），映射即等比。
    */
   setSpriteFrame(frame: SpriteFrame | null): void {
     this.spriteFrame = frame;
@@ -129,7 +137,9 @@ export class ItemView extends Component {
       console.log(
         `[ItemView] ${this.itemId} setSpriteFrame: rect=${frame.rect.width}x${frame.rect.height}@(${frame.rect.x},${frame.rect.y})` +
           ` offset=(${frame.offset.x},${frame.offset.y}) original=${frame.originalSize.width}x${frame.originalSize.height}` +
-          ` artSize=${t?.contentSize.width}x${t?.contentSize.height} artPos=(${art.position.x},${art.position.y},${art.position.z})` +
+          ` rot=${this.rotation} artSize=${t?.contentSize.width}x${t?.contentSize.height}` +
+          ` artPos=(${art.position.x},${art.position.y},${art.position.z})` +
+          ` artEuler=(${art.eulerAngles.x},${art.eulerAngles.y},${art.eulerAngles.z})` +
           ` nodePos=(${this.node.position.x},${this.node.position.y},${this.node.position.z})` +
           ` spriteEnabled=${sprite.enabled} spriteType=${sprite.type} sizeMode=${sprite.sizeMode}`,
       );
@@ -137,18 +147,13 @@ export class ItemView extends Component {
   }
 
   /**
-   * 建真图子节点：**画布 → 包围盒等比映射**。
+   * 建真图子节点：**画布 → 包围盒等比映射 + 旋转对齐**（M4-6 重写）。
    *
    * 引擎的 sizeMode 都会把 trimmed 内容拉伸去填节点（CUSTOM 填满、TRIMMED
    * 改节点尺寸），trim 边距大的件会被拉变形（实测：长裙 trimmed 172×268
-   * 填进 288×288 → 横向多拉 56%）。所以自己算：
-   * - 显示尺寸 = trimmed 尺寸 × (包围盒 / 画布)——两个维度同一个缩放因子
-   *   （画布与包围盒同为 cols×rows 比例），等比不变形；
-   * - 位置 = trimmed 左上角在画布里的偏移 × 同一因子（画布 y 向下，父局部
-   *   y 向上，取负）；
-   * - 锚点 (0,1) 与主节点一致，局部坐标系方向相同。
-   *
-   * 之后 CUSTOM 让贴图 1:1 填满子节点，trim 边距原样保留。
+   * 填进 288×288 → 横向多拉 56%）。所以自己算：显示尺寸 = trimmed 尺寸 ×
+   * 等比因子（画布与包围盒同为 cols×rows 比例），CUSTOM 下 1:1 填满子节点，
+   * trim 边距原样保留。
    *
    * ## trim 偏移为什么必须用 `frame.offset` 反解（M4-5a 实测教训）
    *
@@ -160,10 +165,21 @@ export class ItemView extends Component {
    * 反而正常——**同一个 bug 两种表现，全凭创建时机**。
    *
    * `offset` 是「trimmed 内容中心相对原图画布中心」的量（y 向上），图集
-   * 前后不变（否则引擎自己的 TRIMMED 贴图也会跳）。由它反解画布坐标：
-   * - `left = 画布宽/2 + offset.x − trim宽/2`
-   * - `top  = 画布高/2 − offset.y − trim高/2`（画布 y 向下）
+   * 前后不变（否则引擎自己的 TRIMMED 贴图也会跳）。本方法不反解左上角，
+   * 直接用这个中心偏移（换算到画布 y 向下口径就是 `(offset.x, −offset.y)`），
    * 已用四件 L1 图的 meta（trimX/trimY/offsetX/offsetY）逐一代数验证。
+   *
+   * ## 旋转对齐（M4-6）
+   *
+   * 可旋转物品旋转后，`ItemLayer`/`TrayView` 按旋转后的包围盒**重建本节点**
+   * （`render()` 全量重建），而贴图帧永远是 rotation=0 朝向的画布。所以：
+   * - 子节点锚点 **(0.5, 0.5)**，绕自身中心旋转，不按左上角摆；
+   * - 内容中心偏移按物品圈数 CW 旋转（core `rotatedCenterOffset`，与
+   *   `rotateBy` 同向——七形×四向单测钉死）；
+   * - 子节点 `rotation.z = −90° × rotation`：Cocos 局部 y 向上，+z 在屏幕上
+   *   是逆时针；图画要顺时针才与 cells 的 `rotateCW`（右臂→下一行）一致；
+   * - **旋转保心**：包围盒中心旋转前后是同一点，所以子节点中心 = 包围盒
+   *   中心 + 旋转后的内容偏移，与朝向无关。
    */
   private createArtNode(frame: SpriteFrame): Node {
     const child = new Node('Art');
@@ -174,15 +190,24 @@ export class ItemView extends Component {
     const transform = child.addComponent(UITransform);
     const rect = frame.rect;
     const original = frame.originalSize;
-    const offset = frame.offset;
-    const scaleX = original.width > 0 && parent !== null ? parent.contentSize.width / original.width : 1;
-    const scaleY = original.height > 0 && parent !== null ? parent.contentSize.height / original.height : 1;
-    // trim 左上角在画布里的位置（y 向下）——见上面「为什么必须用 offset」
-    const left = original.width / 2 + offset.x - rect.width / 2;
-    const top = original.height / 2 - offset.y - rect.height / 2;
-    transform.setContentSize(rect.width * scaleX, rect.height * scaleY);
-    transform.setAnchorPoint(0, 1);
-    child.setPosition(left * scaleX, -top * scaleY);
+    // 等比因子：画布与基础包围盒同为 cols×rows 比例。偶数圈父节点就是基础
+    // 包围盒（宽/原宽）；奇数圈父节点宽 = 画布高（宽/原高）——两种口算出来
+    // 是同一个值（同比），只是别拿错维度（M4-6 修复前正是两轴各除各的）。
+    const odd = this.rotation % 2 === 1;
+    const scale =
+      original.width > 0 && parent !== null
+        ? parent.contentSize.width / (odd ? original.height : original.width)
+        : 1;
+    transform.setContentSize(rect.width * scale, rect.height * scale);
+    transform.setAnchorPoint(0.5, 0.5);
+    // 内容中心相对画布中心的偏移（画布 y 向下）→ 随物品 CW 旋转
+    const off = rotatedCenterOffset(frame.offset.x, -frame.offset.y, this.rotation);
+    // 子节点中心（父局部，y 向上）：包围盒中心 + 旋转后偏移（y 向下→向上取负）
+    const parentW = parent !== null ? parent.contentSize.width : original.width;
+    const parentH = parent !== null ? parent.contentSize.height : original.height;
+    child.setPosition(parentW / 2 + off.x * scale, -(parentH / 2 + off.y * scale));
+    // setRotationFromEuler 单位是度（引擎内部 Quat.fromEuler 乘 halfToRad）
+    child.setRotationFromEuler(0, 0, -90 * this.rotation);
     this.artNode = child;
     return child;
   }
