@@ -88,6 +88,8 @@ function decodePng(file: string): PngPixels | null {
     if (buf.length < 24 || buf.readUInt32BE(0) !== 0x89504e47) return null;
     let off = 8;
     let w = 0, h = 0, colorType = 6;
+    let plte: Buffer | null = null;
+    let trns: Buffer | null = null;
     const idat: Buffer[] = [];
     while (off + 8 <= buf.length) {
       const len = buf.readUInt32BE(off);
@@ -98,14 +100,21 @@ function decodePng(file: string): PngPixels | null {
         w = data.readUInt32BE(0);
         h = data.readUInt32BE(4);
         colorType = data[9];
+      } else if (type === 'PLTE') {
+        plte = Buffer.from(data);
+      } else if (type === 'tRNS') {
+        trns = Buffer.from(data);
       } else if (type === 'IDAT') {
         idat.push(data);
       } else if (type === 'IEND') {
         break;
       }
     }
-    if (colorType !== 6 && colorType !== 2) return null;
-    const ch = colorType === 6 ? 4 : 3;
+    // colorType 3 = 索引色（tools/art-batch-proc.mjs 的 encodeIndexedPNG 产出）。
+    // 体积比真彩小 3~4 倍，**同样是合法透明 PNG**（tRNS 提供 alpha），不能当不合格。
+    if (colorType !== 6 && colorType !== 2 && colorType !== 3) return null;
+    if (colorType === 3 && !plte) return null;
+    const ch = colorType === 6 ? 4 : colorType === 3 ? 1 : 3;
     const stride = w * ch;
     const raw = inflateSync(Buffer.concat(idat));
     const out = Buffer.alloc(w * h * 4);
@@ -134,10 +143,18 @@ function decodePng(file: string): PngPixels | null {
       for (let x = 0; x < w; x++) {
         const o = x * ch;
         const d = (y * w + x) * 4;
-        out[d] = line[o];
-        out[d + 1] = line[o + 1];
-        out[d + 2] = line[o + 2];
-        out[d + 3] = ch === 4 ? line[o + 3] : 255;
+        if (colorType === 3) {
+          const pi = line[x];
+          out[d] = plte![pi * 3];
+          out[d + 1] = plte![pi * 3 + 1];
+          out[d + 2] = plte![pi * 3 + 2];
+          out[d + 3] = trns && pi < trns.length ? trns[pi] : 255;
+        } else {
+          out[d] = line[o];
+          out[d + 1] = line[o + 1];
+          out[d + 2] = line[o + 2];
+          out[d + 3] = ch === 4 ? line[o + 3] : 255;
+        }
       }
       prev = line;
     }
@@ -159,8 +176,8 @@ function checkTransparency(img: PngPixels): TransparencyReport {
   const at = (x: number, y: number) => (y * w + x) * 4;
   const blockers: string[] = [];
   const warnings: string[] = [];
-  if (img.colorType !== 6) {
-    blockers.push(`非 RGBA（colorType ${img.colorType}）——TDD 17.2 要求透明底 PNG-24`);
+  if (img.colorType !== 6 && img.colorType !== 3) {
+    blockers.push(`无 alpha 通道（colorType ${img.colorType}）——TDD 17.2 要求透明底 PNG`);
   }
   const corners = [data[at(0, 0) + 3], data[at(w - 1, 0) + 3], data[at(0, h - 1) + 3], data[at(w - 1, h - 1) + 3]];
   if (!corners.every((a) => a === 0)) {
@@ -380,8 +397,74 @@ if (orphan.length) {
   for (const o of orphan) console.log(`  ❓ ${o}`);
 }
 
+// ─────────────────────── UI 插画（M4-4） ───────────────────────
+//
+// 为什么 UI 资源也要进校验：M4-3 的「灰底假透明」正是因为没有 alpha 检查，
+// 11 张满幅 #E5E5E5 图靠「与占位色块同色」蒙混了很久。UI 插画是**整屏**素材，
+// 一旦带底色就会盖住整个棋盘，比物品图更致命——所以这里同样强制透明底。
+//
+// 尺寸是**契约**而非随手值：M4-5 接线时按这些像素直接摆位，改尺寸必须同步改
+// 这里的表和 docs/03 §7 的说明，避免「图换了、位置全偏」。
+
+const UI_DIR = join(ROOT, 'assets/resources/sprites/ui');
+
+interface UiSpec {
+  readonly name: string;
+  readonly w: number;
+  readonly h: number;
+  readonly use: string;
+}
+
+const UI_SPECS: readonly UiSpec[] = [
+  { name: 'home-hero', w: 560, h: 400, use: '首页英雄图' },
+  { name: 'suitcase-open', w: 780, h: 780, use: '棋盘箱体（俯视开口，内衬留给棋盘）' },
+  { name: 'suitcase-closed', w: 780, h: 780, use: '通关合盖（俯视合上，与 open 同轮廓）' },
+];
+
+const uiProblems: string[] = [];
+const uiOks: string[] = [];
+const uiOnDisk = existsSync(UI_DIR) ? readdirSync(UI_DIR).filter((f) => f.endsWith('.png')) : [];
+const uiKnown = new Set(UI_SPECS.map((s) => `${s.name}.png`));
+
+for (const spec of UI_SPECS) {
+  const file = join(UI_DIR, `${spec.name}.png`);
+  if (!existsSync(file)) {
+    uiProblems.push(`⬜ ${spec.name}  缺失（期望 ${spec.w}x${spec.h}，${spec.use}）`);
+    continue;
+  }
+  const size = pngSize(file);
+  if (!size) {
+    uiProblems.push(`❌ ${spec.name}  不是可解析的 PNG`);
+    continue;
+  }
+  if (size.w !== spec.w || size.h !== spec.h) {
+    uiProblems.push(`❌ ${spec.name}  尺寸 ${size.w}x${size.h} ≠ 契约 ${spec.w}x${spec.h}`);
+    continue;
+  }
+  const img = decodePng(file);
+  if (!img) {
+    uiProblems.push(`❌ ${spec.name}  像素解码失败`);
+    continue;
+  }
+  const tr = checkTransparency(img);
+  if (tr.blockers.length) {
+    uiProblems.push(`❌ ${spec.name}  覆盖率 ${tr.coveragePct.toFixed(0)}%：${tr.blockers.join('；')}`);
+  } else {
+    uiOks.push(`${spec.name}（${size.w}x${size.h}，覆盖率 ${tr.coveragePct.toFixed(0)}%）`);
+    for (const wn of tr.warnings) console.log(`  ⚠️ ui/${spec.name}：${wn}`);
+  }
+}
+
+const uiOrphan = uiOnDisk.filter((f) => !uiKnown.has(f));
+for (const o of uiOrphan) uiProblems.push(`❓ ui/${o}  不在 UI_SPECS 契约表里`);
+
+console.log(`\nUI 插画（${uiOks.length}/${UI_SPECS.length} 合格，规格见 UI_SPECS）`);
+for (const s of uiOks) console.log(`  ✅ ${s}`);
+for (const p of uiProblems) console.log(`  ${p}`);
+
 // 已交付但不合格（透明底/尺寸）永远失败；缺失只在 strict 模式失败
-const bad = wrongSize.length + orphan.length + broken.length + (strict ? missing.length : 0);
+const bad = wrongSize.length + orphan.length + broken.length + uiProblems.length + (strict ? missing.length : 0);
+
 if (bad > 0) {
   console.log(`\n❌ 有 ${bad} 项需要处理${strict ? '（strict 模式：缺失也计入失败）' : ''}`);
   process.exit(1);

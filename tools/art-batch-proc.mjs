@@ -28,7 +28,7 @@
  * `--deshadow` 慎用：C 家族织物 #E5E5E5 与浅灰投影颜色不可分，会误删主体。
  */
 import { inflateSync, deflateSync } from 'zlib';
-import { readFileSync, writeFileSync, mkdirSync, copyFileSync, existsSync } from 'fs';
+import { readFileSync, writeFileSync, mkdirSync, copyFileSync, existsSync, readdirSync, statSync } from 'fs';
 import { join, basename, dirname } from 'path';
 
 const ROOT = '/Users/sheep/code-workspace/suitcase-is-full';
@@ -41,15 +41,20 @@ function decodePNG(path) {
   const buf = readFileSync(path);
   let off = 8, width = 0, height = 0, colorType = 6;
   const idat = [];
+  let plte = null, trns = null;
   while (off + 8 <= buf.length) {
     const len = buf.readUInt32BE(off); off += 4;
     const type = buf.toString('ascii', off, off + 4); off += 4;
     const data = buf.subarray(off, off + len); off += len + 4;
     if (type === 'IHDR') { width = data.readUInt32BE(0); height = data.readUInt32BE(4); colorType = data[9]; }
+    else if (type === 'PLTE') plte = Buffer.from(data);
+    else if (type === 'tRNS') trns = Buffer.from(data);
     else if (type === 'IDAT') idat.push(data);
   }
-  if (colorType !== 6 && colorType !== 2) throw new Error(`${path}: 非 RGB/RGBA（colorType ${colorType}）`);
-  const inBpp = colorType === 6 ? 4 : 3;
+  // colorType 3 = 索引色（本脚本 encodeIndexedPNG 的产出），同样要能读回来做复核
+  if (colorType !== 6 && colorType !== 2 && colorType !== 3) throw new Error(`${path}: 不支持的 colorType ${colorType}`);
+  if (colorType === 3 && !plte) throw new Error(`${path}: 索引色 PNG 缺 PLTE`);
+  const inBpp = colorType === 6 ? 4 : colorType === 3 ? 1 : 3;
   const bpp = 4, stride = width * bpp;
   const raw = inflateSync(Buffer.concat(idat));
   const out = Buffer.alloc(height * stride, 0);
@@ -74,12 +79,20 @@ function decodePNG(path) {
     prevIn = cur;
   }
   for (let i = 0; i < width * height; i++) {
+    if (colorType === 3) {
+      const pi = flat[i];
+      out[i * 4] = plte[pi * 3];
+      out[i * 4 + 1] = plte[pi * 3 + 1];
+      out[i * 4 + 2] = plte[pi * 3 + 2];
+      out[i * 4 + 3] = trns && pi < trns.length ? trns[pi] : 255;
+      continue;
+    }
     out[i * 4] = flat[i * inBpp];
     out[i * 4 + 1] = flat[i * inBpp + 1];
     out[i * 4 + 2] = flat[i * inBpp + 2];
     out[i * 4 + 3] = inBpp === 4 ? flat[i * inBpp + 3] : 255; // RGB → 不透明 RGBA
   }
-  return { width, height, data: out };
+  return { width, height, data: out, colorType };
 }
 
 function encodePNG(img) {
@@ -125,6 +138,131 @@ function encodePNG(img) {
   ihdr.writeUInt32BE(width, 0); ihdr.writeUInt32BE(height, 4);
   ihdr[8] = 8; ihdr[9] = 6;
   return Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), chunk('IHDR', ihdr), chunk('IDAT', idat), chunk('IEND', Buffer.alloc(0))]);
+}
+
+/**
+ * 索引色 PNG（colorType 3）：调色板 + 每像素 1 字节索引。
+ *
+ * 为什么需要：量化后颜色数已经压到 ≤256，但 `encodePNG` 只写真彩 RGBA，
+ * 每像素仍占 4 字节——同样内容索引色能小 3~4 倍。UI 插画（780×780）实测
+ * 194KB → 30KB 级别，这是首包体积上最划算的一刀。
+ *
+ * 约束与退路：
+ * - 调色板最多 256 项；**按 RGBA 精确值统计**（不是 RGB），半透明边缘也各占一项，
+ *   所以调用前必须已量化 alpha。超出 256 直接返回 null，由调用方回落真彩。
+ * - 完全透明像素统一映射到「第一个 α=0 的调色板项」，其 RGB 无意义（不参与显示）。
+ * - tRNS 只写到最后一个非 255 的 alpha 为止（PNG 规范允许省略尾部不透明项）。
+ * - 滤波 bpp = 1（索引色每像素 1 字节）。
+ */
+function encodeIndexedPNG(img) {
+  const { width, height, data } = img;
+  const n = width * height;
+
+  // ① 先收集**实色**（a>0）的 RGB 集合。量化后通常 ≤20 个；超过 256 直接判死。
+  const rgbList = [];
+  const rgbIndex = new Map();
+  for (let i = 0; i < n; i++) {
+    if (data[i * 4 + 3] === 0) continue;
+    const key = (data[i * 4] << 16) | (data[i * 4 + 1] << 8) | data[i * 4 + 2];
+    if (!rgbIndex.has(key)) {
+      if (rgbList.length >= 256) return null;
+      rgbIndex.set(key, rgbList.length);
+      rgbList.push([data[i * 4], data[i * 4 + 1], data[i * 4 + 2]]);
+    }
+  }
+  if (!rgbList.length) return null;
+
+  /**
+   * ② 透明像素的 RGB **不能统一清零**。
+   *
+   * 纹理采样是双线性插值：边缘处「实色像素」会和相邻「透明像素」按权重混合。
+   * 若把透明像素写成黑色，混合结果就是一圈黑边（straight alpha 的老坑）。
+   * 这里把透明像素的 RGB **吸附到最近的实色**——等价于做了一次颜色外扩（bleed），
+   * 混合时带入的是主体色而不是背景色或黑色。
+   */
+  const nearest = (r, g, b) => {
+    let best = 0, bd = Infinity;
+    for (let j = 0; j < rgbList.length; j++) {
+      const p = rgbList[j];
+      const d = (r - p[0]) ** 2 + (g - p[1]) ** 2 + (b - p[2]) ** 2;
+      if (d < bd) { bd = d; best = j; }
+    }
+    return best;
+  };
+
+  // ③ 组合 (RGB, alpha) 建调色板项，逐像素取索引
+  const slotOf = new Map();
+  const palette = [];
+  const idx = new Uint8Array(n);
+  for (let i = 0; i < n; i++) {
+    const a = data[i * 4 + 3];
+    let r = data[i * 4], g = data[i * 4 + 1], b = data[i * 4 + 2];
+    if (a === 0) {
+      const c = rgbList[nearest(r, g, b)];
+      r = c[0]; g = c[1]; b = c[2];
+    }
+    const key = ((r << 24) | (g << 16) | (b << 8) | a) >>> 0;
+    let slot = slotOf.get(key);
+    if (slot === undefined) {
+      if (palette.length >= 256) return null; // 交给真彩编码器
+      slot = palette.length;
+      palette.push([r, g, b, a]);
+      slotOf.set(key, slot);
+    }
+    idx[i] = slot;
+  }
+
+  const stride = width;
+  const raw = Buffer.alloc((stride + 1) * height);
+  for (let y = 0; y < height; y++) {
+    const cands = [];
+    for (let f = 0; f < 5; f++) {
+      const row = Buffer.alloc(stride);
+      for (let x = 0; x < stride; x++) {
+        const cur = idx[y * stride + x];
+        const a = x >= 1 ? idx[y * stride + x - 1] : 0;
+        const b = y > 0 ? idx[(y - 1) * stride + x] : 0;
+        const c = x >= 1 && y > 0 ? idx[(y - 1) * stride + x - 1] : 0;
+        let v;
+        if (f === 0) v = cur; else if (f === 1) v = cur - a; else if (f === 2) v = cur - b;
+        else if (f === 3) v = cur - ((a + b) >> 1);
+        else { const p = a + b - c; const pa = Math.abs(p - a), pb = Math.abs(p - b), pc = Math.abs(p - c);
+          v = cur - (pa <= pb && pa <= pc ? a : pb <= pc ? b : c); }
+        row[x] = v & 0xff;
+      }
+      let sad = 0;
+      for (const byte of row) sad += byte < 128 ? byte : 256 - byte;
+      cands.push({ f, row, sad });
+    }
+    cands.sort((x, y2) => x.sad - y2.sad);
+    const best = cands[0];
+    raw[y * (stride + 1)] = best.f;
+    best.row.copy(raw, y * (stride + 1) + 1);
+  }
+
+  const idat = deflateSync(raw, { level: 9 });
+  const crcTable = [];
+  for (let k = 0; k < 256; k++) { let c = k; for (let j = 0; j < 8; j++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1; crcTable[k] = c; }
+  const crc32 = (buf) => { let c = 0xffffffff; for (const b of buf) c = crcTable[(c ^ b) & 0xff] ^ (c >>> 8); return (c ^ 0xffffffff) >>> 0; };
+  const chunk = (type, chunkData) => {
+    const len = Buffer.alloc(4); len.writeUInt32BE(chunkData.length);
+    const td = Buffer.concat([Buffer.from(type, 'ascii'), chunkData]);
+    const crc = Buffer.alloc(4); crc.writeUInt32BE(crc32(td));
+    return Buffer.concat([len, td, crc]);
+  };
+
+  const ihdr = Buffer.alloc(13);
+  ihdr.writeUInt32BE(width, 0); ihdr.writeUInt32BE(height, 4);
+  ihdr[8] = 8;  // bit depth
+  ihdr[9] = 3;  // colorType 3 = indexed
+  const plte = Buffer.alloc(palette.length * 3);
+  palette.forEach((p, i) => { plte[i * 3] = p[0]; plte[i * 3 + 1] = p[1]; plte[i * 3 + 2] = p[2]; });
+  let trnsLen = palette.length;
+  while (trnsLen > 0 && palette[trnsLen - 1][3] === 255) trnsLen--;
+  const chunks = [Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), chunk('IHDR', ihdr), chunk('PLTE', plte)];
+  if (trnsLen > 0) chunks.push(chunk('tRNS', Buffer.from(palette.slice(0, trnsLen).map((p) => p[3]))));
+  chunks.push(chunk('IDAT', idat), chunk('IEND', Buffer.alloc(0)));
+  return Buffer.concat(chunks);
 }
 
 // ---------- 诊断 ----------
@@ -535,7 +673,31 @@ function palette(path, topN = 5) {
 }
 
 const [cmd, a, b] = process.argv.slice(2);
-if (cmd === 'palette') {
+if (cmd === 'optimize') {
+  // 对**已交付**的 PNG 做无损重编码（不改一个像素）：真彩 RGBA → 索引色。
+  // 只在该图 distinct RGBA ≤ 256 时生效（已有 props 都量化过 16 色 + 16 级 alpha，
+  // 正好落在 256 以内）；超出的原样跳过并说明原因，绝不静默降质。
+  const targets = [];
+  if (a && statSync(a).isDirectory()) {
+    for (const f of readdirSync(a)) if (f.endsWith('.png')) targets.push(join(a, f));
+  } else if (a) {
+    targets.push(a);
+  } else {
+    throw new Error('optimize 用法：optimize <file.png | 目录>');
+  }
+  let before = 0, after = 0, changed = 0, skipped = 0;
+  for (const p of targets) {
+    const img = decodePNG(p);
+    const prev = statSync(p).size;
+    const buf = encodeIndexedPNG(img);
+    before += prev;
+    if (!buf) { after += prev; skipped++; console.log(`  · ${basename(p)} 超过 256 色，保持真彩`); continue; }
+    if (buf.length < prev) { writeFileSync(p, buf); after += buf.length; changed++; }
+    else { after += prev; }
+  }
+  console.log(`  ${targets.length} 个文件：${changed} 个转索引色，${skipped} 个跳过`);
+  console.log(`  ${(before / 1024).toFixed(1)}KB → ${(after / 1024).toFixed(1)}KB（省 ${((1 - after / before) * 100).toFixed(0)}%）`);
+} else if (cmd === 'palette') {
   palette(a, b ? +b : 5);
 } else if (cmd === 'info') {
   info(a);
@@ -565,14 +727,17 @@ if (cmd === 'palette') {
 } else if (cmd === 'fit') {
   // 位置参数：raw itemType [W] [H] [margin]；flag：--no-mask / --deshadow / --src <dir|dir>
   const pos = [];
-  let margin = 8, applyMask = true, deshadow = false, srcDir = null;
+  let margin = 8, applyMask = true, deshadow = false, srcDir = null, outDir = OUT_DIR, forceRGBA = false;
   const args = process.argv.slice(3);
   for (let i = 0; i < args.length; i++) {
     const v = args[i];
     if (v === '--no-mask') applyMask = false;
+    else if (v === '--rgba') forceRGBA = true;
     else if (v === '--deshadow') deshadow = true;
     else if (v === '--src') srcDir = args[++i] ?? '';
     else if (v.startsWith('--src=')) srcDir = v.slice(6);
+    else if (v === '--out') outDir = args[++i] ?? OUT_DIR;
+    else if (v.startsWith('--out=')) outDir = v.slice(6);
     else pos.push(v);
   }
   const [raw, itemType, ...nums] = pos;
@@ -611,9 +776,14 @@ if (cmd === 'palette') {
   }
   quantize(final, +(process.env.QN || 16));
   if (srcDir) { mkdirSync(srcDir, { recursive: true }); copyFileSync(raw, join(srcDir, `${itemType}@v1_src.png`)); }
-  const outPath = join(OUT_DIR, `${itemType}.png`);
-  writeFileSync(outPath, encodePNG(final));
-  console.log(`  → 写出 ${outPath}`);
+  const outPath = join(outDir, `${itemType}.png`);
+  mkdirSync(dirname(outPath), { recursive: true });
+  // 索引色优先：量化后颜色数 ≤256 时体积只有真彩的 1/3~1/4（UI 大画布收益显著）。
+  // 超过 256 色（没量化干净）自动回落真彩，不会静默丢色。
+  const indexed = forceRGBA ? null : encodeIndexedPNG(final);
+  const buf = indexed ?? encodePNG(final);
+  writeFileSync(outPath, buf);
+  console.log(`  → 写出 ${outPath}（${(buf.length / 1024).toFixed(1)}KB，${indexed ? '索引色' : '真彩 RGBA'}）`);
 } else if (cmd === 'guide') {
   // M4-6b：渲染「足迹形状引导图」——供 image-to-image 把物品画进精确形状。
   // 纯文本提示对多联骨牌的几何约束太弱（帽兜/裙摆总画大），改用视觉引导。
