@@ -432,12 +432,24 @@ node tools/art-batch-proc.mjs fit <raw.png> <itemType> <W> <H> 10
 npm run check:art
 # 4) 观感比对（奶油底接触表，2~3x）
 node tools/art-contact-sheet.mjs <out.png> 3 <新图.png> <参考锚点.png> ...
+
+# 按格分块拼版（M4-6c 裁剪残缺修复）：每块单独出图后精确摆进占格区，**从根上不存在切割**
+# 块规格 r,c,h,w = 占格左上角行/列 + 块高/宽（格数）；每块一张 part 图（cream 底，compose 内自动抠底）
+node tools/art-batch-proc.mjs compose <itemType> 'r,c,h,w=part.png' [...] [--bleed 6] [--tol 30] [--out <path>]
+# 渲染灰色足迹引导图（可选，给 image-to-image 用）
+node tools/art-batch-proc.mjs guide <itemType> <outPath> [--scale 2] [--bg r,g,b] [--fill r,g,b]
 ```
 
 > **M4-6 追溯修复（已交付图补挖遮罩）**：对已写盘的 PNG 补烘焙足迹遮罩（不动其余像素），
 > `node tools/art-batch-proc.mjs mask <itemType>`（`--dry-run` 只看挖除量不写盘）。
 > 14 张异形件（prop_02_A/D、prop_jacket、prop_pouch、prop_04_A~F、prop_05_A~F）已于
 > 2026-10-19 烘焙，挖除量 5.2%~23.5%，`check:art` 剪影门禁全过。
+
+> **M4-6c 拼版修复（裁剪残缺 / 复制式重复）**：用户真机看图后挑出两类问题——① 7 张异形件（prop_jacket、prop_04_A/B/D、prop_05_A/B/D）被 `fit` 的足迹遮罩**硬切残**（AI 把物品画得比 cells 大，遮罩按格边界切掉主体，出现直线缺口）；② 2 张（prop_pouch、prop_05_F）是**复制粘贴式重复**（图中同一物品被重复，不像独立物件）。
+> 根因：单物体重绘路线下，AI 无法稳定把单一物体比例对齐多联骨牌，硬遮罩必然切残；提示词又容易把「一套物品」画成同一件的复制。
+> 对策：`tools/art-batch-proc.mjs` 新增 `guide`（渲染灰色足迹引导图）与 `compose`（**按格分块拼版**）两个子命令。`compose` 把每个占格区拆成 1~2 个矩形块，每块单独出图（语义自然：帽兜+衣身、相机+腕带、裙身+衣摆…），按内容包围盒**非等比**缩放进目标矩形并 alpha 混合拼版，最后 `applyFootprintMask` 只清 bleed 溢出——**从根上不存在切割**。逐边出血：邻边整列/整行是占格 → 多出血（默认 6px）让两块无缝衔接；邻接空格 → 只留 1px 防切主体。
+> 结果：7 张残缺件按块重出后 compose，挖除均 ≤0.3%（剪影严格 = 足迹，物品完整）；2 张重复件改为差异化——prop_pouch = 灰白织物拉链袋（上块 `0,0,1,2`）+ 蓝拉链袋（下块 `1,1,1,2`）两款不同收纳袋；prop_05_F = 4 枚不同发夹（浅 mint 抓夹 / 中 teal 发条 / 深 teal 弹簧夹 / 浅 mint 蝴蝶夹）各占一格。
+> 注意：每块 part 仍需**串行** ImageGen（并行会撞名覆盖，见下方「并行出图的坑」）；每块一张独立 `output_dir`。
 
 | 环节 | 做法 | 为什么（实测依据） |
 | --- | --- | --- |

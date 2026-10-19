@@ -29,7 +29,7 @@
  */
 import { inflateSync, deflateSync } from 'zlib';
 import { readFileSync, writeFileSync, mkdirSync, copyFileSync, existsSync } from 'fs';
-import { join, basename } from 'path';
+import { join, basename, dirname } from 'path';
 
 const ROOT = '/Users/sheep/code-workspace/suitcase-is-full';
 const OUT_DIR = join(ROOT, 'assets/resources/sprites/props');
@@ -157,14 +157,20 @@ function keyout(img, opt = {}) {
   const { width: w, height: h, data } = img;
   const minCh = opt.minCh ?? 205;   // 近白门槛：最小通道
   const maxSat = opt.maxSat ?? 26;  // 低饱和门槛：max-min
+  const ref = opt.ref ?? null;      // 采样底色（M4-6b：带纸纹的米色底，固定阈值吃不住）
+  const tol = opt.tol ?? 30;        // 色距容差
   const N = w * h;
   const RGB = i => [data[i * 4], data[i * 4 + 1], data[i * 4 + 2]];
 
-  // 1) 阈值：近白且低饱和 → 候选背景（渐变无所谓，不吃容差）
+  // 1) 阈值：ref 优先（按采样底色 + 色距，抗纹理）；否则近白且低饱和
   const cand = new Uint8Array(N);
   let nCand = 0;
   for (let i = 0; i < N; i++) {
     const [r, g, b] = RGB(i);
+    if (ref) {
+      if (dist(r, g, b, ref[0], ref[1], ref[2]) <= tol) { cand[i] = 1; nCand++; }
+      continue;
+    }
     const mn = Math.min(r, g, b), mx = Math.max(r, g, b);
     if (mn >= minCh && mx - mn <= maxSat) { cand[i] = 1; nCand++; }
   }
@@ -325,6 +331,37 @@ function fitToCanvas(img, W, H, margin) {
   }
   console.log(`  缩放：bbox ${bw}x${bh} → ${tw}x${th}（比例 ${s.toFixed(3)}）  合版 ${W}x${H} @偏移(${ox},${oy})  余量 L${ox} R${W - ox - tw} T${oy} B${H - oy - th}`);
   return { width: W, height: H, data: out };
+}
+
+/**
+ * M4-6b：把子件的**内容包围盒**（非等比）缩放到 tw×th。
+ * 与 fitToCanvas 的区别：不做等比约束、不居中——目标矩形就是块的形状，
+ * 子件被生成成近似块比例时畸变很小。
+ */
+function scalePartInto(img, tw, th) {
+  const { width: w, height: h, data } = img;
+  let x0 = w, y0 = h, x1 = -1, y1 = -1;
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    if (data[(y * w + x) * 4 + 3] > 16) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+  }
+  if (x1 < 0) throw new Error('子件整图透明——抠底失败或底色取错');
+  const bw = x1 - x0 + 1, bh = y1 - y0 + 1;
+  const out = Buffer.alloc(tw * th * 4);
+  const sx = bw / tw, sy = bh / th;
+  for (let ty = 0; ty < th; ty++) {
+    const ya = y0 + Math.floor(ty * sy), yb = Math.min(y0 + bh, Math.max(ya + 1, y0 + Math.floor((ty + 1) * sy)));
+    for (let tx = 0; tx < tw; tx++) {
+      const xa = x0 + Math.floor(tx * sx), xb = Math.min(x0 + bw, Math.max(xa + 1, x0 + Math.floor((tx + 1) * sx)));
+      let r = 0, g = 0, b = 0, a = 0, n = 0;
+      for (let y = ya; y < yb; y++) for (let x = xa; x < xb; x++) {
+        const i = (y * w + x) * 4, al = data[i + 3] / 255;
+        r += data[i] * al; g += data[i + 1] * al; b += data[i + 2] * al; a += al; n++;
+      }
+      const o = (ty * tw + tx) * 4;
+      if (a > 1e-6) { out[o] = Math.round(r / a); out[o + 1] = Math.round(g / a); out[o + 2] = Math.round(b / a); out[o + 3] = Math.round((a / n) * 255); }
+    }
+  }
+  return out;
 }
 
 // ---------- 调色板量化（median cut） ----------
@@ -577,6 +614,111 @@ if (cmd === 'palette') {
   const outPath = join(OUT_DIR, `${itemType}.png`);
   writeFileSync(outPath, encodePNG(final));
   console.log(`  → 写出 ${outPath}`);
+} else if (cmd === 'guide') {
+  // M4-6b：渲染「足迹形状引导图」——供 image-to-image 把物品画进精确形状。
+  // 纯文本提示对多联骨牌的几何约束太弱（帽兜/裙摆总画大），改用视觉引导。
+  // 用法：guide <itemType> <outPath> [--scale 2] [--bg 247,246,243] [--fill 200,200,200]
+  const itemType = a, outPath = b;
+  if (!itemType || !outPath) throw new Error('guide 用法：guide <itemType> <outPath> [--scale 2] [--bg r,g,b] [--fill r,g,b]');
+  const spec = findItemSpec(itemType);
+  if (spec === null) throw new Error(`${itemType} 不在 levels.json 里——无法渲染足迹`);
+  const gargs = process.argv.slice(5);
+  let scale = 2, bg = [247, 246, 243], fill = [200, 200, 200];
+  for (let i = 0; i < gargs.length; i++) {
+    const v = gargs[i];
+    if (v === '--scale') scale = +gargs[++i];
+    else if (v.startsWith('--scale=')) scale = +v.slice(8);
+    else if (v === '--bg') bg = gargs[++i].split(',').map(Number);
+    else if (v === '--fill') fill = gargs[++i].split(',').map(Number);
+  }
+  const cell = CELL_PX * scale;
+  const W = spec.cols * cell, H = spec.rows * cell;
+  const gdata = Buffer.alloc(W * H * 4);
+  for (let i = 0; i < W * H; i++) { gdata[i * 4] = bg[0]; gdata[i * 4 + 1] = bg[1]; gdata[i * 4 + 2] = bg[2]; gdata[i * 4 + 3] = 255; }
+  for (const [r, c] of spec.cells) {
+    for (let y = r * cell; y < (r + 1) * cell; y++) {
+      for (let x = c * cell; x < (c + 1) * cell; x++) {
+        const i = (y * W + x) * 4;
+        gdata[i] = fill[0]; gdata[i + 1] = fill[1]; gdata[i + 2] = fill[2];
+      }
+    }
+  }
+  mkdirSync(dirname(outPath), { recursive: true });
+  writeFileSync(outPath, encodePNG({ width: W, height: H, data: gdata }));
+  const hex = fill.map((v) => v.toString(16).padStart(2, '0')).join('');
+  console.log(`  引导图 ${itemType} 足迹 ${spec.cols}x${spec.rows} → ${outPath}（${W}x${H}，占格灰 #${hex}）`);
+} else if (cmd === 'compose') {
+  // M4-6b：按格分块拼版——把子件精确摆进各自矩形块。
+  // 动机：AI 无法稳定把单一物体的比例对齐多联骨牌（帽兜/裙摆总画大），
+  // 硬遮罩就会「切残」。改为每块单独出图 + 几何拼版，从根上不存在切割。
+  // 用法：compose <itemType> 'r,c,h,w=part.png' ['r,c,h,w=part.png' ...] [--bleed 1] [--out path]
+  const itemType = a;
+  if (!itemType) throw new Error('compose 用法：compose <itemType> \'r,c,h,w=part.png\' [...]');
+  const spec = findItemSpec(itemType);
+  if (spec === null) throw new Error(`${itemType} 不在 levels.json 里——无法确定足迹`);
+  const cargs = process.argv.slice(4);
+  let bleed = 6, outPath = join(OUT_DIR, `${itemType}.png`), keyTol = 30;
+  const blocks = [];
+  for (let i = 0; i < cargs.length; i++) {
+    const v = cargs[i];
+    if (v === '--bleed') bleed = +cargs[++i];
+    else if (v === '--tol') keyTol = +cargs[++i];
+    else if (v === '--out') outPath = cargs[++i];
+    else {
+      const m = /^(\d+),(\d+),(\d+),(\d+)=(.+)$/.exec(v);
+      if (!m) throw new Error(`块规格须为 r,c,h,w=path：${v}`);
+      blocks.push({ r: +m[1], c: +m[2], h: +m[3], w: +m[4], path: m[5] });
+    }
+  }
+  if (!blocks.length) throw new Error('至少要给一个块');
+  const W = spec.cols * CELL_PX, H = spec.rows * CELL_PX;
+  const canvas = Buffer.alloc(W * H * 4); // 全 0 = 透明
+  // 每边出血：邻边整列/整行都是占格 → 多出血让两块无缝衔接；否则 1px 防切主体
+  const occSet = new Set(spec.cells.map(([r, c]) => r * 100000 + c));
+  const isOcc = (r, c) => occSet.has(r * 100000 + c);
+  const edgeBleed = (ok) => (ok ? bleed : 1);
+  for (const blk of blocks) {
+    const part = decodePNG(blk.path);
+    const cornersOpaque = [0, part.width - 1, (part.height - 1) * part.width, part.height * part.width - 1]
+      .some((i) => part.data[i * 4 + 3] > 16);
+    if (cornersOpaque) {
+      const cs = [[0, 0], [part.width - 1, 0], [0, part.height - 1], [part.width - 1, part.height - 1]];
+      const avg = [0, 0, 0];
+      for (const [x, y] of cs) { const i = (y * part.width + x) * 4; avg[0] += part.data[i] / 4; avg[1] += part.data[i + 1] / 4; avg[2] += part.data[i + 2] / 4; }
+      keyout(part, { ref: avg.map(Math.round), tol: keyTol });
+    }
+    const rowsIn = Array.from({ length: blk.h }, (_, i) => blk.r + i);
+    const colsIn = Array.from({ length: blk.w }, (_, i) => blk.c + i);
+    const bL = edgeBleed(blk.c > 0 && rowsIn.every((r) => isOcc(r, blk.c - 1)));
+    const bR = edgeBleed(blk.c + blk.w < spec.cols && rowsIn.every((r) => isOcc(r, blk.c + blk.w)));
+    const bT = edgeBleed(blk.r > 0 && colsIn.every((c) => isOcc(blk.r - 1, c)));
+    const bB = edgeBleed(blk.r + blk.h < spec.rows && colsIn.every((c) => isOcc(blk.r + blk.h, c)));
+    const tw = blk.w * CELL_PX + bL + bR, th = blk.h * CELL_PX + bT + bB;
+    const scaled = scalePartInto(part, tw, th);
+    const ox = blk.c * CELL_PX - bL, oy = blk.r * CELL_PX - bT;
+    for (let y = 0; y < th; y++) {
+      const dy = y + oy; if (dy < 0 || dy >= H) continue;
+      for (let x = 0; x < tw; x++) {
+        const dx = x + ox; if (dx < 0 || dx >= W) continue;
+        const si = (y * tw + x) * 4, di = (dy * W + dx) * 4;
+        const sa = scaled[si + 3] / 255;
+        if (sa <= 0) continue;
+        const da = canvas[di + 3] / 255;
+        const oa = sa + da * (1 - sa);
+        if (oa <= 0) continue;
+        for (let k = 0; k < 3; k++) canvas[di + k] = Math.round((scaled[si + k] * sa + canvas[di + k] * da * (1 - sa)) / oa);
+        canvas[di + 3] = Math.round(oa * 255);
+      }
+    }
+    console.log(`  块 (${blk.r},${blk.c}) ${blk.w}x${blk.h} 出血 L${bL} R${bR} T${bT} B${bB} ← ${basename(blk.path)}`);
+  }
+  const out = { width: W, height: H, data: canvas };
+  const cstats = applyFootprintMask(out, spec.cells); // 只清 bleed 溢出，正常应 <1%
+  printMaskReport(spec, cstats);
+  quantize(out, +(process.env.QN || 16));
+  mkdirSync(dirname(outPath), { recursive: true });
+  writeFileSync(outPath, encodePNG(out));
+  console.log(`  → 写出 ${outPath}`);
 } else {
-  console.log('用法：info <png>  |  palette <png> [N]  |  fit <png> <itemType> [W] [H] [margin] [--no-mask] [--deshadow] [--src <dir>]  |  mask <itemType> [--dry-run]');
+  console.log('用法：info <png>  |  palette <png> [N]  |  fit <png> <itemType> [W] [H] [margin] [--no-mask] [--deshadow] [--src <dir>]  |  mask <itemType> [--dry-run]  |  guide <itemType> <outPath> [--scale 2]  |  compose <itemType> \'r,c,h,w=part.png\' [...]');
 }
