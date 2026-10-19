@@ -37,7 +37,7 @@
  * 的「代码建 UI」范式一致），场景 JSON 只挂这个脚本组件 + `levelJson` 资产。
  */
 
-import { _decorator, Color, Component, director, EventTouch, Graphics, JsonAsset, Label, Node, UIOpacity, UITransform, Vec3 } from 'cc';
+import { _decorator, Color, Component, director, EventTouch, Graphics, JsonAsset, Label, Node, Sprite, UIOpacity, UITransform, Vec3 } from 'cc';
 import { DEBUG } from 'cc/env';
 
 import {
@@ -56,6 +56,7 @@ import { audio } from './AudioAdapter';
 import { loadProgress, saveProgress } from './storage';
 import { setPendingLevel } from './route';
 import { shakeX } from './shake';
+import { applyUiSprite, preloadUiSprites } from './uiAssets';
 
 const { ccclass, property } = _decorator;
 
@@ -75,6 +76,14 @@ const CARD_GAP_X = 21; // (内容宽 342 − 3×100) / 2
 const CARD_GAP_Y = 16;
 const GRID_TOP_Y = 150; // 第一行中心 y；向下递减 (CARD_HEIGHT + CARD_GAP_Y)
 const CARD_LOCKED_OPACITY = 0.55;
+
+// M4-5b 顶部插画：源图 560×400，等比放大到内容宽（安全边距内），顶边贴齐设计
+// 上沿附近。图上半是张开的箱盖（浅色），标题/副标题正好压在浅色区上（深棕字
+// 清晰、不压住箱子本体）；更往下被 CTA（不透明粉按钮）与关卡卡遮住。
+const HERO_SOURCE_WIDTH = 560;
+const HERO_SOURCE_HEIGHT = 400;
+const HERO_WIDTH = UI_DESIGN_WIDTH - UI_SAFE_MARGIN * 2; // 342，与内容同宽
+const HERO_TOP_Y = UI_DESIGN_HEIGHT / 2 - 4; // 422 − 4
 
 // 音效开关（M2-9）：网格下方一枚 pill。网格末行中心 = 150 − 3×116 = −198、
 // 卡底 ≈ −248，故 −300 既不相连也不贴底（设计高半幅 −422）。
@@ -113,6 +122,9 @@ export class HomeController extends Component {
     // 灌一次（单例两份调用方，同一真相同一字段，幂等）。
     this.muted = progress.muted;
     audio.setMuted(this.muted);
+    // M4-5b：提前载入首页插画与全部音效（不发声，只入缓存），消除首次延迟
+    preloadUiSprites(['home-hero']);
+    audio.preload();
 
     if (DEBUG) {
       console.log(
@@ -124,6 +136,7 @@ export class HomeController extends Component {
     }
 
     this.buildBackground();
+    this.buildHero();
     this.buildHeader();
     this.buildCTA(currentLevel);
     this.buildGrid(levelIds, progress, currentLevel);
@@ -142,6 +155,31 @@ export class HomeController extends Component {
     const g = node.addComponent(Graphics);
     g.fillColor = Color.fromHEX(new Color(), UI_PALETTE.bg);
     g.fillRect(-UI_DESIGN_WIDTH / 2, -UI_DESIGN_HEIGHT / 2, UI_DESIGN_WIDTH, UI_DESIGN_HEIGHT);
+  }
+
+  /**
+   * 顶部插画（M4-5b）：把 `ui/home-hero`（开着的行李箱 + 衣物）铺在背景之上、
+   * 标题之下。等比缩放到内容宽（342），**不拉伸**；顶边贴齐设计上沿。
+   *
+   * 层序：`onLoad` 里先建背景 → 再建插画 → 后建标题/CTA/关卡卡，故插画在
+   * 背景之上、又在所有文字与不透明卡片之下——浅色的张盖区承托标题、箱体被
+   * CTA 与卡片自然遮住。
+   */
+  private buildHero(): void {
+    const height = (HERO_WIDTH * HERO_SOURCE_HEIGHT) / HERO_SOURCE_WIDTH;
+    const node = new Node('HomeHero');
+    node.layer = this.node.layer;
+    this.node.addChild(node);
+    node.setPosition(0, HERO_TOP_Y - height / 2, 0);
+    const transform = node.addComponent(UITransform);
+    transform.setContentSize(HERO_WIDTH, height);
+    transform.setAnchorPoint(0.5, 0.5);
+    // 先定 type/sizeMode 再贴帧（CUSTOM 才不被帧尺寸改写，见 MEMORY 引擎限制）
+    const sprite = node.addComponent(Sprite);
+    sprite.type = Sprite.Type.SIMPLE;
+    sprite.sizeMode = Sprite.SizeMode.CUSTOM;
+    sprite.trim = false;
+    applyUiSprite(sprite, 'home-hero');
   }
 
   private buildHeader(): void {

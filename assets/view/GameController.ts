@@ -69,6 +69,7 @@ import type { GuideRequest } from './GuideOverlay';
 import { ItemLayer } from './ItemLayer';
 import { PreviewLayer } from './PreviewLayer';
 import { preloadFrames } from './propAssets';
+import { preloadUiSprites } from './uiAssets';
 import { SuitcaseLid } from './SuitcaseLid';
 import { SuccessOverlay } from './SuccessOverlay';
 import { ToolbarView } from './ToolbarView';
@@ -194,6 +195,9 @@ export class GameController extends Component {
     // M2-9：静音态从存档灌入音效适配器（AC18 重启保持；Home 的开关写的同一字段）。
     // 与 guide restore 并列：两者都是「存档 → 本场景运行态」的恢复，早于 startLevel。
     audio.setMuted(loadProgress().muted);
+    // M4-5b：提前载入棋盘底板 / 合盖两张 UI 图与全部音效（只入缓存，不发声/不显示）
+    preloadUiSprites(['suitcase-open', 'suitcase-closed']);
+    audio.preload();
 
     // 装配与"换一关"是同一条路径（M2-1）：首启就是载入第 `levelId` 关
     this.startLevel(this.levelId);

@@ -15,7 +15,7 @@
  * - 格 `(row, col)` 的 **row 0 在最上**、col 0 在最左 → 与 GDD / core 的网格坐标一致
  */
 
-import { Component, Node, UITransform, Vec3, _decorator } from 'cc';
+import { Component, Node, Sprite, UITransform, Vec3, _decorator } from 'cc';
 import { DEBUG } from 'cc/env';
 
 import {
@@ -27,6 +27,7 @@ import {
   UI_HEADER_HEIGHT,
   UI_LAYOUT_BANDS,
   UI_SAFE_MARGIN,
+  UI_SUITCASE_FRAME_RATIO,
   UI_TOOLBAR_HEIGHT,
   UI_TRAY_HEIGHT,
   bboxOf,
@@ -37,6 +38,7 @@ import {
 } from '../core';
 import type { BoardSpec, RC } from '../core';
 import { GridCellView } from './GridCellView';
+import { applyUiSprite } from './uiAssets';
 import type { CellVisual } from './GridCellView';
 import type { ShapeMetrics } from './ItemView';
 
@@ -54,6 +56,8 @@ export class BoardView extends Component {
   /** 当前格边长（设计单位）。**只有本文件与 core/config.ts 能碰这个量** */
   private cellPx = 0;
   private cellNodes: Node[] = [];
+  /** 行李箱底板精灵（M4-5b）。棋盘节点的第一个子节点，恒在格子/物品之下 */
+  private backdrop: Sprite | null = null;
   /** 提示高亮中、且记录其高亮前视觉态的格（index → prev visual） */
   private hinted = new Map<number, CellVisual>();
 
@@ -70,6 +74,9 @@ export class BoardView extends Component {
     transform.setContentSize(board.cols * this.cellPx, board.rows * this.cellPx);
     // 棋盘带（顶部信息 / 底部托盘 + 工具栏之间）居中
     this.node.setPosition(0, BoardView.boardBandCenterY(), 0);
+
+    // M4-5b：先把行李箱底板铺上（格子在它之上，箱体在四周露出）
+    this.syncBackdrop();
 
     this.clearCells();
     const blocked = new Set(board.blockedCells.map(([r, c]) => rcKey(r, c)));
@@ -272,6 +279,65 @@ export class BoardView extends Component {
    */
   boardSizePx(): { width: number; height: number } {
     return { width: this.boardWidth(), height: this.boardHeight() };
+  }
+
+  /**
+   * 行李箱美术（`suitcase-open` 底板 / `suitcase-closed` 合盖）的包围尺寸（设计单位）。
+   *
+   * 两张图是同一方形轮廓（780×780）、图内腔约占 76%，故「整图 = 棋盘 / 0.76」时
+   * 格子正好落进内腔、四周露出箱体。开盖底板与合盖共用这一出口——**同一尺寸**，
+   * 合盖才能严丝合缝盖住开盖箱体（M4-5b）。
+   *
+   * 与 `boardSizePx()` 同一 R-A6 口径：只把已换算好的棋盘像素除以比例，不自己乘
+   * `cols×cellPx`。棋盘未渲染时返回 0×0。
+   */
+  frameSizePx(): { width: number; height: number } {
+    const size = this.boardSizePx();
+    return {
+      width: size.width / UI_SUITCASE_FRAME_RATIO,
+      height: size.height / UI_SUITCASE_FRAME_RATIO,
+    };
+  }
+
+  // ───────────────────── 行李箱底板（M4-5b） ─────────────────────
+
+  /**
+   * 同步底板尺寸到当前棋盘（每次 `renderBoard` 都调——各关棋盘不同）。
+   *
+   * 底板恒为棋盘节点的第一个子节点：格子在 `renderBoard` 的循环里后建 → 天然
+   * 盖在底板上；物品层也是后建 → 同样在底板之上。开盖箱体只在格子缝隙与棋盘
+   * 四周露出（格子不透明，见 `GridCellView`）。
+   */
+  private syncBackdrop(): void {
+    const frame = this.frameSizePx();
+    if (frame.width <= 0 || frame.height <= 0) return;
+    const sprite = this.ensureBackdrop();
+    if (sprite === null) return;
+    const tf = sprite.node.getComponent(UITransform) ?? sprite.node.addComponent(UITransform);
+    tf.setContentSize(frame.width, frame.height);
+    sprite.node.setPosition(0, 0, 0);
+    sprite.node.setSiblingIndex(0);
+  }
+
+  /** 懒建底板精灵（只建一次；换关只改尺寸，不重建节点） */
+  private ensureBackdrop(): Sprite | null {
+    if (this.backdrop !== null && this.backdrop.isValid) return this.backdrop;
+    const node = new Node('BoardBackdrop');
+    node.layer = this.node.layer;
+    this.node.addChild(node);
+    node.setSiblingIndex(0);
+    const tf = node.addComponent(UITransform);
+    tf.setAnchorPoint(0.5, 0.5);
+    tf.setContentSize(0, 0);
+    // 先定 type/sizeMode 再贴帧：`spriteFrame` setter 会按 sizeMode 跑
+    // `_applySpriteSize`，CUSTOM 才不会被帧尺寸改写（见 MEMORY 引擎限制）
+    const sprite = node.addComponent(Sprite);
+    sprite.type = Sprite.Type.SIMPLE;
+    sprite.sizeMode = Sprite.SizeMode.CUSTOM;
+    sprite.trim = false;
+    applyUiSprite(sprite, 'suitcase-open');
+    this.backdrop = sprite;
+    return sprite;
   }
 
   // ───────────────────────── 尺寸推算 ─────────────────────────

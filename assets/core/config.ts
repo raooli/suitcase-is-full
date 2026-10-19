@@ -435,6 +435,17 @@ export const UI_WIN_LID_RADIUS = 14;
 export const UI_WIN_LID_HANDLE_WIDTH = 48;
 export const UI_WIN_LID_HANDLE_HEIGHT = 12;
 
+/**
+ * 行李箱美术（M4-5b 接入的 `ui/suitcase-open`、`ui/suitcase-closed`）相对棋盘的
+ * **包围比例**：图中内腔占整图约 76%，故「整图边长 = 棋盘边长 / 0.76」时格子正好
+ * 落进内腔、四周露出箱体。
+ *
+ * 开盖底板（棋盘背景）与合盖（庆祝第二段）共用这一个尺寸——两张图是同一轮廓，
+ * 同尺寸才能让合盖严丝合缝盖住开盖箱体。宽高各自除以该比例（矩形棋盘仅非等比
+ * 轻微拉伸，见 docs/07 §5.9 出图说明）。
+ */
+export const UI_SUITCASE_FRAME_RATIO = 0.76;
+
 /** ③ 浮层面板淡入时长（ms）。遮罩**不**淡入（立即盖上，避免半透明期闪出底板） */
 export const UI_WIN_PANEL_FADE_MS = 200;
 

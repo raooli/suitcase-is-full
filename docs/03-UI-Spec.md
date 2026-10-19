@@ -182,10 +182,18 @@
 
 | 资源 | 文件 | 尺寸 | 格式 | 用途 | 接线 |
 |---|---|---|---|---|---|
-| `ui/home-hero` | `assets/resources/sprites/ui/home-hero.png` | 560×400 | 索引色 PNG + tRNS | 首页英雄图（开口行李箱 + 三件物品） | ⬜ M4-5 |
-| `ui/suitcase-open` | `assets/resources/sprites/ui/suitcase-open.png` | 780×780 | 索引色 PNG + tRNS | 棋盘箱体，**俯视开口**，内衬留正方形给棋盘 | ⬜ M4-5 |
-| `ui/suitcase-closed` | `assets/resources/sprites/ui/suitcase-closed.png` | 780×780 | 索引色 PNG + tRNS | 通关合盖终态，与 open **同轮廓同画布** | ⬜ M4-5 |
-| 音效 `select` / `place-ok` / `place-fail` / `success` | `assets/resources/audio/*.wav` | 70 / 110 / 220 / 340ms | 44100Hz · 16bit · mono | 替换 M2-9 的 WebAudio 合成占位 | ⬜ M4-5 |
+| `ui/home-hero` | `assets/resources/sprites/ui/home-hero.png` | 560×400 | 索引色 PNG + tRNS | 首页英雄图（开口行李箱 + 三件物品） | ✅ M4-5b |
+| `ui/suitcase-open` | `assets/resources/sprites/ui/suitcase-open.png` | 780×780 | 索引色 PNG + tRNS | 棋盘箱体，**俯视开口**，内衬留正方形给棋盘 | ✅ M4-5b |
+| `ui/suitcase-closed` | `assets/resources/sprites/ui/suitcase-closed.png` | 780×780 | 索引色 PNG + tRNS | 通关合盖终态，与 open **同轮廓同画布** | ✅ M4-5b |
+| 音效 `select` / `place-ok` / `place-fail` / `success` | `assets/resources/audio/*.wav` | 70 / 110 / 220 / 340ms | 44100Hz · 16bit · mono | 替换 M2-9 的 WebAudio 合成占位 | ✅ M4-5b |
+
+**接线实现（M4-5b）**：
+
+- **加载**：新增 `view/uiAssets.ts`，与 `propAssets.ts` 同范式（模块级缓存 + 在飞去重 + 负结果缓存 + 晚到帧判 `sprite.isValid`）。三张图与四个音效在 Home / Game 的 `onLoad` 里 `preloadUiSprites` / `audio.preload()` 预载。
+- **`ui/home-hero`**：`HomeController.buildHero()` 铺在背景之上、标题之下，等比缩放到内容宽 342（不拉伸），顶边贴齐设计上沿；浅色张盖区承托标题，箱体被 CTA 与关卡卡遮住。
+- **`ui/suitcase-open`**：`BoardView` 的棋盘节点第一个子节点（`syncBackdrop`，< 格子/物品）。尺寸 = 棋盘 / `UI_SUITCASE_FRAME_RATIO`（0.76，定义在 `core/config.ts`），让格子正好落进图内腔、四周露出箱体；矩形棋盘只做轻微非等比拉伸。格子不透明，箱体只在格缝与棋盘外缘露出。
+- **`ui/suitcase-closed`**：`SuitcaseLid` 由 `Graphics` 圆角方块改为该精灵，**与 `suitcase-open` 共用 `BoardView.frameSizePx()`**（同尺寸），合盖严丝合缝盖住开盖箱体；滑盖两段式动画与层级不变。
+- **音效**：`AudioAdapter` 由 WebAudio 振荡器合成改为 `AudioSource.playOneShot` 播 WAV；`SfxKey` 命名空间与 `play`/`setMuted`/`stopAll` API 零改动。`volume = SFX_MASTER_GAIN(0.22)`（见下方电平口径）。音源节点 `addPersistRootNode` 跨场景常驻，换关/回首页不被硬切。
 
 **关于 `suitcase-open` 为什么是俯视**：游戏是 2D 俯视装箱，棋盘是正方形（最大 6×6 = 342×342 设计像素）。正视「盖子竖起」的插图没有可承载正方形网格的平面，只能用俯视。两张图同为 780×780、同轮廓，合盖动画才能用同一矩形做交叉淡出而不跳位。
 
