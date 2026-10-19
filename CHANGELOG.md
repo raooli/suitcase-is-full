@@ -23,6 +23,18 @@
 
 ## 提交记录（倒序）
 
+### `9307dc8` · fix(art): M4-6c 裁剪残缺 + 复制式重复修复（compose 按格分块拼版）
+
+| 项 | 内容 |
+| --- | --- |
+| 日期 | 2026-10-19 15:11 |
+| 文件 | 9 张 props PNG+meta（prop_jacket、prop_04_A/B/D、prop_05_A/B/D/F、prop_pouch）、`tools/art-batch-proc.mjs`、`docs/07-AI-Prompts.md`、`.workbuddy/memory/MEMORY.md`、`.workbuddy/memory/2026-10-19.md` |
+| 背景 | 用户真机复查 M4-6 重绘件，挑出两类问题：① 7 张异形件被 `fit` 足迹遮罩**硬切残**（AI 画得比 cells 大，遮罩按格边界切主体出直线缺口）；② 2 张（prop_pouch、prop_05_F）是**复制粘贴式重复**（图中同一物品被重复） |
+| 要点 | ① 弃硬裁，改走 `tools/art-batch-proc.mjs` 新增的 `compose` **按格分块拼版**：把每个占格区拆成 1~2 个矩形块，每块单独出图（语义自然：帽兜+衣身、相机+腕带、裙身+衣摆…），按内容包围盒**非等比**缩放进目标矩形 + alpha 混合拼版，末道 `applyFootprintMask` 只清 bleed 溢出。逐边出血：邻占格多出血（默认 6px）衔接、邻空格只留 1px 防切主体。② 7 张裁剪件按块重出后 compose，挖除均 ≤0.3%，剪影严格 = 足迹，无切割。③ 2 张复制件差异化：prop_pouch = 灰白织物拉链袋（上块 `0,0,1,2`）+ 蓝拉链袋（下块 `1,1,1,2`）两款不同收纳袋；prop_05_F = 4 枚不同发夹（浅 mint 抓夹 / 中 teal 发条 / 深 teal 弹簧夹 / 浅 mint 蝴蝶夹）各占一格 |
+| 踩坑 | `compose` 路线仍须**串行**出每块 part：并行 6 张 ImageGen（即便各自传 `output_dir`）仍全部落到同一目录且同秒时间戳互相覆盖——prop_05_F 的 clip c 被 pouch_upper 覆盖丢失，已补生成（串行单张） |
+| 复验 | `npm run check` 340/340；`check:art` 9 张尺寸/透明底/剪影全过（挖除 prop_pouch 0.5% / prop_05_F 0.1% 等 ≤0.3%）；`preview:game` 构建重导入零 Console 错误 |
+| 影响 | 25/63 真图剪影 = cells 足迹（无新增素材，仅重做 9 张）；`tools/art-batch-proc.mjs` 增 `guide`/`compose` 两子命令；分支保护三件套（`.github/`/`package.json`/`tools/protect-branch.mjs`）按约定未提交 |
+
 ### `f090ee5` · feat(art): M4-6 异形件重绘贴合 cells 足迹 + 旋转感知贴图
 
 | 项 | 内容 |
