@@ -23,6 +23,17 @@
 
 ## 提交记录（倒序）
 
+### `6b5176a` · feat(view): M4-5b 把 M4-4 资源真接入游戏（UI 插画 + 音效）
+
+| 项 | 内容 |
+| --- | --- |
+| 日期 | 2026-10-19 17:19 |
+| 文件 | `assets/view/uiAssets.ts`（新）、`assets/view/uiAssets.ts.meta`（新，Cocos 资源 uuid）、`assets/view/AudioAdapter.ts`、`assets/view/BoardView.ts`、`assets/view/SuitcaseLid.ts`、`assets/view/HomeController.ts`、`assets/view/GameController.ts`、`assets/core/config.ts`、`docs/03-UI-Spec.md` |
+| 背景 | M4-4 交付了 3 张 UI 插画与 4 个音效 WAV，但当时是死资源（AudioAdapter 仍走 WebAudio 合成、UI 图未被引用）；本次把两者真正接入渲染与播放，玩家看得到、听得到。不动 core 玩法逻辑 |
+| 要点 | ① 新增 uiAssets.ts：模块级缓存 + 在飞去重 + 负结果缓存 + 晚到帧判 isValid 的 UI 图加载器（仿 propAssets 写法）；② AudioAdapter 由振荡器合成改为 AudioSource 播 WAV，音量取 SFX_MASTER_GAIN(0.22)、有效峰值≈0.154 与合成版一致，常驻音源节点跨场景不被硬切；③ BoardView 接 suitcase-open 底板（先 SIMPLE/CUSTOM/trim=false 再贴帧、setSiblingIndex(0) 压最底），尺寸按 UI_SUITCASE_FRAME_RATIO=0.76 包住棋盘；④ SuitcaseLid 由 Graphics 圆角方块改为 suitcase-closed 精灵合盖，盖板/底板同尺寸严丝合缝；⑤ HomeController 顶部接 home-hero（等比缩放到宽 342）；⑥ Home/Game 在 setMuted 后 preload 对应 UI 图与音频；⑦ config.ts 新增 UI_SUITCASE_FRAME_RATIO=0.76；⑧ docs/03 §7.1 接线状态 ⬜→✅ +「接线实现（M4-5b）」段 |
+| 复验 | `npm run check` 全绿（typecheck + typecheck:view + check:arch + verify:levels + test 340 passed）；无头预览 Home/Game 无 Console 错误，Console 确认 home-hero / suitcase-open / suitcase-closed 三图与四 WAV 均「已载入」；截图取证 hero-band 暖粉 rgb(230,187,175) 区别于背景 rgb(253,246,236)，Game 中部带装饰边框的大区域即行李箱壳、网格在其上、层序正确 |
+| 影响 | 推翻 `8c88e3b` 的「影响」结论：M4-4 资源从「死资源、等 M4-5b」变为「已接线」，UI 插画与音效现在真实生效；M4-4 状态从「资源齐、未接线」改「已接线」 |
+
 ### `8c88e3b` · docs: M4-4 记档——资源表/程序化判定/索引色坑 + 提示词与原图归档
 
 | 项 | 内容 |
