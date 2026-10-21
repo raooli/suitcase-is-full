@@ -23,6 +23,17 @@
 
 ## 提交记录（倒序）
 
+### `ad3eb48` · fix(assets): 替换 L9/L10 四张残缺图为完整版并同步重导入 meta
+
+| 项 | 内容 |
+| --- | --- |
+| 日期 | 2026-10-21 16:14 |
+| 文件 | `assets/resources/sprites/props/prop_09_D.png`（重写）、`prop_09_D.png.meta`、`prop_09_I.png`（重写）、`prop_09_I.png.meta`、`prop_10_C.png`（重写）、`prop_10_C.png.meta`、`prop_10_G.png`（重写）、`prop_10_G.png.meta` |
+| 背景 | 此前 `c254e9e` 的 re-cut 把四张异形件的内容裁短（trim 高度从 168/171/160/122 缩到 143/136/117/149），玩家看到的是残缺图；用户已重新生成完整且按 footprint 绘制的真透明图，要求换成完整版并重新生成 meta |
+| 要点 | ① 四张源图（1536×1024 真透明、按 3×2 足迹绘制）整画布等比缩放（预乘 alpha 双线性，避免暗边）到 288×192，不裁 bbox、不居中位移；② 按 levels.json 的 cells 对非占格区做 alpha 清零（足迹遮罩），保证剪影 = cells 足迹；③ 真彩 RGBA（colorType 6）编码，规避索引色透明槽位黑边问题；④ 触发 Cocos 重导入，meta 的 trim/width/height/offset/vertices/uv 由引擎按新图 alpha 包围盒重新计算（09_D 因 L 形占满包围盒 → 全画布无 trim） |
+| 复验 | `npm run check:art` 63/63 全过（透明底 + 剪影契约，四张无非占格侵入）；`preview:game` 无头构建重导入成功、引擎启动且零 Console 错误 |
+| 影响 | 推翻 `c254e9e` 的「四张已修复」结论：那版是把内容裁短而非还原完整，本次才是完整版；美术资产仍 63/63，包体稳定 |
+
 ### `6b5176a` · feat(view): M4-5b 把 M4-4 资源真接入游戏（UI 插画 + 音效）
 
 | 项 | 内容 |
