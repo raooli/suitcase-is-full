@@ -24,7 +24,8 @@
     "check": "npm run typecheck && npm run typecheck:view && npm run check:arch && npm run verify:levels && npm run test",
     "preview": "node tools/preview-check.mjs",
     "preview:game": "node tools/preview-check.mjs --scene Game",
-    "scene:build": "node tools/scene-build.mjs"
+    "scene:build": "node tools/scene-build.mjs",
+    "protect:branch": "node tools/protect-branch.mjs"
   },
   "devDependencies": {
     "@types/node": "^22.7.0",

@@ -1,0 +1,100 @@
+{
+  "$schema": "./branch-protection.schema.json",
+  "_comment": [
+    "GitHub 分支保护规则的【声明式配置】。",
+    "",
+    "为什么用文件：branch protection 存在 GitHub 服务端，不在 git 仓库里，",
+    "git push 推不上去。但把「期望的规则」写成文件进版本库，好处是：",
+    "  1. 规则变更走 code review，diff 里能看清改了哪条守卫；",
+    "  2. 新机器 / 新协作者跑一次 npm run protect:branch 就能对齐；",
+    "  3. 规则本身成为项目文档的一部分（谁都不能悄悄改）。",
+    "",
+    "怎么生效：本文件只是【期望】，真正生效靠 tools/protect-branch.mjs",
+    "调 GitHub REST API 写入服务端。默认 --dry-run 只打印不写。",
+    "",
+    "改完记得重新应用，并且【提交本文件】——两者要一致，否则下一个人",
+    "看到的规则和实际生效的规则会不一致。",
+    "",
+    "API 文档：https://docs.github.com/rest/branches/branch-protection",
+    "所需权限：fine-grained PAT 勾 Administration:Repository = Write",
+    "classic PAT 勾 repo scope。私有仓库的管理员操作需要 admin 权限。"
+  ],
+
+  "repository": "raooli/suitcase-is-full",
+  "defaultPreset": "safe",
+
+  "presets": {
+    "safe": {
+      "_why": [
+        "单人项目的默认档：只锁死「会毁掉历史」的操作，",
+        "不要求 PR、不要求 CI —— 否则会把自己挡在门外。",
+        "GitHub 的四种「谁可以强推/删除」选项里，这档选的是最严的",
+        "「Everyone」（含管理员、含 CI 机器人）。"
+      ],
+      "enforceAdmins": true,
+      "allowForcePushes": false,
+      "allowDeletions": false,
+      "requiredPullRequestReviews": null,
+      "requiredStatusChecks": null,
+      "requiredConversationResolution": false,
+      "requiredLinearHistory": false,
+      "enforcePushRestrictions": false,
+      "lockBranch": false
+    },
+
+    "strict": {
+      "_why": [
+        "协作档：所有改动必须走 PR + 至少 1 个 approve，且必须线性历史。",
+        "",
+        "⚠️ 单人仓库慎用：你会无法直接 push main，只能开 PR 自审自合。",
+        "   真要用，配 GitHub App 或 PAT 让机器人账号可 bypass（限制在 main）。",
+        "",
+        "⚠️ 本项目目前【没有 GitHub Actions】，所以不能开 requiredStatusChecks ——",
+        "   否则任何 PR 都会因为「没有 required check」而永远无法合并。",
+        "   要开状态检查，先把 npm run check 做成 .github/workflows/ci.yml。"
+      ],
+      "enforceAdmins": false,
+      "allowForcePushes": false,
+      "allowDeletions": false,
+      "requiredPullRequestReviews": {
+        "dismissStaleReviews": true,
+        "requireCodeOwnerReviews": false,
+        "requiredApprovingReviewCount": 1,
+        "requireLastPushApproval": true
+      },
+      "requiredStatusChecks": null,
+      "requiredConversationResolution": true,
+      "requiredLinearHistory": true,
+      "enforcePushRestrictions": false,
+      "lockBranch": false
+    },
+
+    "ci": {
+      "_why": [
+        "在 safe 基础上加「必须通过 CI 才能合并」。",
+        "启用前必须先有 .github/workflows/ci.yml，且 required_status_checks",
+        "里的 context 名字要与 workflow 里实际跑的 job 名【完全一致】，",
+        "否则 PR 会永久卡住（GitHub 找不到那个 check）。",
+        "本项目当前没有 Actions，此档仅作为后续落地的预留定义。"
+      ],
+      "enforceAdmins": true,
+      "allowForcePushes": false,
+      "allowDeletions": false,
+      "requiredPullRequestReviews": null,
+      "requiredStatusChecks": {
+        "strict": true,
+        "contexts": ["check"]
+      },
+      "requiredConversationResolution": false,
+      "requiredLinearHistory": false,
+      "enforcePushRestrictions": false,
+      "lockBranch": false
+    }
+  },
+
+  "branches": {
+    "main": "safe",
+    "release/*": "strict",
+    "hotfix/*": "safe"
+  }
+}
