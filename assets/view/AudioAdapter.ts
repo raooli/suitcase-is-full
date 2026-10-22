@@ -7,20 +7,22 @@
  *   `assets/resources/audio/<key>` 对应的音频文件（M4-4 离线渲染的 WAV）。
  * - **`SfxKey` 命名空间与 `play` / `setMuted` / `stopAll` API 零改动**：
  *   M2-9 用 WebAudio 振荡器合成，M4-5b 换成 `AudioSource.playOneShot` 播文件，
- *   五个调用点（首页开关、Game 的四类事件）一行都不用改。
+ *   五个调用点（首页开关、Game 的四类事件）一行都不用改。M3（微信小游戏）再把
+ *   发声后端按 R-A4 抽进 `view/platform/`：`WebSoundBackend`（AudioSource）与
+ *   `WechatSoundBackend`（`wx.createInnerAudioContext`，TDD 11.3）由 `cc/env`
+ *   的 `WECHAT` 编译期常量二选一，本类只做调度，不碰平台 API。
  * - **不读存档**：静音态由调用方从存档灌入，存取只经 `view/storage.ts`。
  *
  * ## 电平口径
  *
- * WAV 已归一化到 0.70 峰值、**未烘焙** `SFX_MASTER_GAIN(0.22)`。所以播放时把
- * `AudioSource.volume` 设成 0.22 → 有效峰值 ≈ 0.154，与合成版听感一致；
- * 若 volume=1 直放会响约 6 倍。
+ * WAV 已归一化到 0.70 峰值、**未烘焙** `SFX_MASTER_GAIN(0.22)`。播放时由后端把
+ * `volume` 套成 0.22 → 有效峰值 ≈ 0.154，与合成版听感一致；若直放会响约 6 倍。
  *
- * ## 音源节点（跨场景常驻）
+ * ## 发声后端（平台隔离，R-A4）
  *
- * 模块级单例 `audio` 不挂节点（与 `route.ts` 同范式）。真正发声的 `AudioSource`
- * 懒创建在一个 `SfxPlayer` 节点上，并 `addPersistRootNode` 常驻——换关 / 回首页
- * 时这个节点不被销毁，正在响的尾音不会被硬切，下一场景继续用同一个音源。
+ * 模块级单例 `audio` 不挂节点（与 `route.ts` 同范式）。真正发声交给
+ * `createSoundBackend()` 选出的后端；Web 后端把 `AudioSource` 挂在 `SfxPlayer`
+ * 常驻节点上（换关不被硬切），微信后端直接吃 `AudioClip.nativeUrl`。
  *
  * ## 加载
  *
@@ -30,22 +32,24 @@
  * 不该影响玩法（架构文档 §5「表现层降级而非崩溃」）。
  */
 
-import { AudioClip, AudioSource, Node, director, resources } from 'cc';
+import { AudioClip, resources } from 'cc';
 import { DEBUG } from 'cc/env';
 
-import { SFX_KEYS, SFX_MASTER_GAIN } from '../core';
+import { SFX_KEYS } from '../core';
 import type { SfxKey } from '../core';
+import { createSoundBackend } from './platform';
+import type { SoundBackend } from './platform';
 
 /** 音频文件在 resources 包里的相对目录；文件名严格 = SfxKey */
 const AUDIO_DIR = 'audio';
 
 export class AudioAdapter {
-  /** 常驻发声节点上的 AudioSource（懒创建） */
-  private source: AudioSource | null = null;
+  /** 当前平台的发声后端（懒创建） */
+  private backend: SoundBackend | null = null;
 
   private muted = false;
 
-  /** 环境无法建音源（无场景 / 无音频系统）→ 永久静默，不再重试 */
+  /** 后端无法创建（环境不支持）→ 永久静默，不再重试 */
   private unavailable = false;
 
   /** key → AudioClip；`null` = 已确认无文件（负结果缓存） */
@@ -82,8 +86,8 @@ export class AudioAdapter {
       if (DEBUG) console.log(`[AudioAdapter] 已静音，跳过 ${key}`);
       return;
     }
-    const source = this.ensureSource();
-    if (source === null) return;
+    const backend = this.ensureBackend();
+    if (backend === null) return;
 
     const cached = this.clips.get(key);
     if (cached !== undefined) {
@@ -91,7 +95,7 @@ export class AudioAdapter {
         if (DEBUG) console.log(`[AudioAdapter] ${key} 无音频文件，静默`);
         return;
       }
-      this.fire(source, key, cached);
+      backend.play(cached);
       return;
     }
     // 还没载入：记下「载完播一次」，并（若尚未发起）发起加载
@@ -101,14 +105,7 @@ export class AudioAdapter {
 
   /** 停掉当前播放（换场景 / 组件销毁时收尾）。一次性音效以短促为主，尽力而为 */
   stopAll(): void {
-    const source = this.source;
-    if (source !== null && source.isValid) {
-      try {
-        source.stop();
-      } catch {
-        // 未在播放时 stop 可能抛 —— 忽略
-      }
-    }
+    this.backend?.stopAll();
   }
 
   // ───────────────────────── 内部 ─────────────────────────
@@ -129,60 +126,30 @@ export class AudioAdapter {
       }
       // 加载期间有 play 请求 → 载完补播一次
       if (got !== null && this.pendingPlay.delete(key)) {
-        const source = this.ensureSource();
-        if (source !== null) this.fire(source, key, got);
+        const backend = this.ensureBackend();
+        if (backend !== null) backend.play(got);
       }
     });
   }
 
-  /** 懒创建常驻音源节点；环境不支持则记 `unavailable` 并返回 null */
-  private ensureSource(): AudioSource | null {
+  /** 懒创建适合当前平台的发声后端；环境不支持则记 `unavailable` 并返回 null */
+  private ensureBackend(): SoundBackend | null {
     if (this.unavailable) return null;
-    if (this.source !== null && this.source.isValid && this.source.node.isValid) {
-      return this.source;
-    }
+    if (this.backend !== null) return this.backend;
     try {
-      const scene = director.getScene();
-      if (scene === null) throw new Error('当前无场景');
-      const node = new Node('SfxPlayer');
-      scene.addChild(node);
-      // 跨场景常驻：换关 / 回首页时音源节点不被销毁。某些平台若不允许常驻，
-      // 退化为「当前场景内有效」，下一次 play 时按 isValid 重建——不致命。
-      try {
-        director.addPersistRootNode(node);
-      } catch {
-        /* 忽略：退化为场景内有效 */
-      }
-      const source = node.addComponent(AudioSource);
-      source.playOnAwake = false;
-      source.loop = false;
-      source.volume = SFX_MASTER_GAIN;
-      this.source = source;
-      if (DEBUG) {
-        console.log(`[AudioAdapter] 音源就绪（AudioSource / volume ${(SFX_MASTER_GAIN * 100).toFixed(0)}%）`);
-      }
-      return source;
+      this.backend = createSoundBackend();
+      if (DEBUG) console.log('[AudioAdapter] 发声后端已创建');
+      return this.backend;
     } catch (e) {
       this.unavailable = true;
-      console.warn('[AudioAdapter] 无法创建音频源，音效降级为静默：', e);
+      console.warn('[AudioAdapter] 无法创建音频后端，音效降级为静默：', e);
       return null;
-    }
-  }
-
-  /** 真正发声。音量由 `source.volume`(=SFX_MASTER_GAIN) 决定，playOneShot 叠加 */
-  private fire(source: AudioSource, key: SfxKey, clip: AudioClip): void {
-    if (!source.isValid) return;
-    source.playOneShot(clip, 1);
-    if (DEBUG) {
-      console.log(
-        `[AudioAdapter] 播放音效 ${key}（volume ${(SFX_MASTER_GAIN * 100).toFixed(0)}%）`,
-      );
     }
   }
 }
 
 /**
- * 模块级单例：Home / Game 共用（音源节点以 persistRoot 跨场景常驻，
+ * 模块级单例：Home / Game 共用（Web 后端的音源节点以 persistRoot 跨场景常驻，
  * 静音态与正在响的尾音都不会因换场景而断）。与 `route.ts` 的单例同范式。
  */
 export const audio = new AudioAdapter();
