@@ -23,6 +23,16 @@
 
 ## 提交记录（倒序）
 
+### `27af802` · feat(view): M3 微信音频后端——发声抽成平台隔离（R-A4/TDD 11.3）
+
+| 项 | 内容 |
+| --- | --- |
+| 日期 | 2026-10-22 10:31 |
+| 文件 | `assets/view/AudioAdapter.ts`（重构，−64 行）、`assets/view/platform.meta`、`assets/view/platform/SoundBackend.ts`（接口）、`assets/view/platform/index.ts`（选择器）、`assets/view/platform/web/SoundBackend.ts`、`assets/view/platform/wechat/SoundBackend.ts` 及各自 `.meta` |
+| 背景 | M4-5b 后 `AudioAdapter` 直接调 Cocos `AudioSource`（Web 端 WebAudio 后端），微信端无 `wx` 分支 → 静默；M2-9 即定「M3 按 TDD 11.3 换 wx API、R-A4 收进 platform 目录」 |
+| 要点 | ① 新增 `assets/view/platform/`：发声后端按 R-A4 平台隔离——`web/SoundBackend`（保留 AudioSource 行为、常驻 `SfxPlayer` 节点，复用 M4-5b 已验证逻辑）；`wechat/SoundBackend` 用 TDD 11.3 指定的 `wx.createInnerAudioContext`，吃 `AudioClip.nativeUrl`，每次播放新建实例、`onEnded`/`onError` 即 `destroy`；② `index.ts` 按 `cc/env` 的 `WECHAT` **编译期常量**路由，未命中分支死代码消除（Web 包不含 `wx` 引用）；③ `AudioAdapter` 只留调度/静音闸/缓存/跨场景，把发声动作委托给后端；`play`/`setMuted`/`stopAll`/`preload`/`isMuted` 与 5 个调用点**零改动**（M2-9 约定的 SfxKey 命名空间不变） |
+| 复验 | `npm run check:arch` 无架构违规；`npm run typecheck:view` 0 错；`npm run test` 340/340；`preview:game` Web 包零 Console 错误（音频 `已载入` 日志正常）；无头 wechatgame 增量重建后 `build/wechatgame` 资源无回归（68 PNG+4 WAV、2.94MB），`createInnerAudioContext` 与 `nativeUrl` 已进微信包 JS（WECHAT=true 路由生效） |
+
 ### `ad3eb48` · fix(assets): 替换 L9/L10 四张残缺图为完整版并同步重导入 meta
 
 | 项 | 内容 |
