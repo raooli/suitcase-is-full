@@ -23,6 +23,10 @@
 
 ## 提交记录（倒序）
 
+### `c76de11` · docs: 刷新 README 状态到 M4 收官 + 提审前
+- 文件：`README.md`（10 增 7 删）。
+- 要点：把多处过时状态对齐到当前实际——测试 281→354（20 文件）；当前阶段 M2 进行中→M4 收官、进入提审前准备；美术覆盖率 12.7%→100%（63/63，M4 真图真音已接入）；`AudioAdapter` 描述改为平台隔离发声后端；目录结构补 `platform/` 与 `layout.ts`；已知风险里 M3-5 短屏适配标记已解决、G1-4 改写为手指遮挡真机首验、新增提审前待做（真机帧率/微信音频冒烟/换 appid/包体 2.94MB<G2 线 3.5MB）。
+
 ### `fc4c204` · chore(ci): 补交分支保护声明式配置 + 应用脚本，并注册 npm 脚本
 - 文件：`.github/branch-protection.json`（新增，三档预设 safe/strict/ci，分支 main=safe、release/*=strict、hotfix/*=safe）、`.github/BRANCH-PROTECTION.md`（新增，前提说明+用法）、`tools/protect-branch.mjs`（新增，dry-run 默认、--apply 才写、token 仅读环境变量）、`package.json`（新增 `protect:branch` 脚本）。
 - 要点：上一会话已造分支保护工具但漏注册 npm 脚本且未提交；本轮补齐并整体提交。规则进版本库可 code review、可复现。**仅声明入仓，不生效**——真正生效需 `GITHUB_TOKEN`（private 仓库需 admin）跑 `npm run protect:branch -- --apply`。
