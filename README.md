@@ -5,8 +5,8 @@
 - **引擎**：Cocos Creator **3.8.8**（锁定，MVP 周期内不升级）
 - **语言**：TypeScript（`core` 纯 TS 零引擎依赖 / `view` 唯一允许 `import 'cc'`）
 - **设计分辨率**：390×844 竖屏 + Fit Width
-- **测试**：Vitest **281 条**（15 个文件）
-- **当前阶段**：**M2 进行中**（M0 ✅ / M1 ✅ / M2-1～M2-6 ✅ / M2-7～M2-10 待做 / M3 待做 / M4 美术 12.7%）
+- **测试**：Vitest **354 条**（20 个文件）
+- **当前阶段**：**M4 美术与全链路已收官，进入提审前准备**（M0–M2 ✅ / M3 ✅ 微信构建 + 手感 + 短屏适配 + 音频后端 / M4 ✅ 美术 63/63 + 真图真音接入 / 真机验证与微信提审待做）
 
 ---
 
@@ -45,7 +45,7 @@ npm run preview:game     # ★ 无头预览：CLI 构建 Game 场景 + 真实跑
 | 命令 | 作用 |
 | --- | --- |
 | `npm run check` | **提交门禁**：typecheck + typecheck:view + check:arch + verify:levels + test |
-| `npm run test` / `test:watch` | Vitest 单测（281 条） |
+| `npm run test` / `test:watch` | Vitest 单测（354 条） |
 | `npm run typecheck` | core / tools / test 的类型检查（[tsconfig.node.json](./tsconfig.node.json)） |
 | `npm run typecheck:view` | **view 层**类型检查（[tsconfig.view.json](./tsconfig.view.json)） |
 | `npm run check:arch` | 架构守卫 R-A1/3/4/6/9/10（[tools/check-arch.ts](./tools/check-arch.ts)） |
@@ -114,7 +114,9 @@ assets/view/              ★ 唯一允许 import 'cc' 的层
   GameController.ts       接线中枢：intent → dispatch → 刷新（事件 → 音效/动画）
   storage.ts              存档读写（sys.localStorage，整份序列化 + 坏数据容错退化）
   route.ts                场景间传参单例（待进关卡号，换场景存活）
-  AudioAdapter.ts         音效合成（WebAudio 振荡器占位，单例；静音闸；M4-4 换真素材）
+  AudioAdapter.ts         音效调度中枢（单例；静音闸；M4-4 换真素材 WAV；发声抽成平台隔离后端）
+  platform/               发声平台隔离后端（接口 + web/AudioSource + wechat/wx.createInnerAudioContext + 工厂，R-A4）
+  layout.ts               运行时布局单例（短屏压缩阶梯选型，M3-5）
   DragController.ts       触摸生命周期 → Intent（挂在整屏 SafeAreaRoot）
   PreviewLayer.ts         合法/非法/取出三态 ghost
   BoardView.ts            ★ 全项目唯一 RC↔像素转换点（R-A6）
@@ -178,7 +180,7 @@ npm run verify:levels     # 输出 assets/data/levels.json
 | [`art/previews/props/`](./art/previews/props) | PNG 评审图 | ❌ |
 | [`assets/resources/sprites/props/`](./assets/resources/sprites/props) | **Cocos 实际使用的透明 PNG，文件名严格 = `itemType`** | ✅ |
 
-**当前覆盖率 12.7%**（8/63 合格，1 张返修，54 张缺失）。M1～M3 全部用**程序化色块占位**，不阻塞；M4 接入真图时 `ItemView.setSpriteFrame()` 是桩，替换时结构不动。
+**当前覆盖率 100%**（63/63 合格，PNG/`.meta` 各 63 完全配对）。M1～M3 曾用程序化色块占位；M4 已接入真图（`ItemView.setSpriteFrame()` 真接入 + `view/uiAssets.ts` 加载器），4 个音效 WAV 由 `tools/synth-sfx.py` 离线渲染；另有 `ui/home-hero`、`ui/suitcase-open/closed` 3 张 UI 插画与 logo/slogan。
 
 硬约束：**四朝向不出图**（由 `Node.angle` 旋转实现）→ 63 张而非 252 张；尺寸、格式、透明底、命名、图集分组五项规格缺一项不算交付（TDD 第 17 节）；AI 生成图必须人工精修与合规确认。
 
@@ -186,9 +188,10 @@ npm run verify:levels     # 输出 assets/data/levels.json
 
 ## 已知风险与待决策项
 
-- **G1-4 真机首验顺延 M3-1**：320px 折算 `cellPx` 93.5px ≥ 44 下限已过，但拖起上浮 24 / 放大 1.05 / 阴影 3 三个手感常量是按设计单位推的初值，**没过真实指腹与 DPR**。真机校准只改数值不改代码。
+- **G1-4 真机首验（手指遮挡手感）**：拖起上浮 24 / 放大 1.05 / 阴影 3 三个手感常量是按设计单位推的初值，**没过真实指腹与 DPR**；M3-5 短屏压缩后格边长会变（L1 起），真机需复测手指不遮挡关键格。真机校准只改数值不改代码。
 - **托盘横向滚动已落地（M2-11）**：L7–L10 有 7–9 件、槽位夹到 44px 后一行放不下 6–7 个，溢出件此前不可达；现已全部照建挂 `TrayContent` 容器，左右滑动露出（`DragController` 按主轴方向仲裁「滑托盘 vs 抓物品」，L1–L6 不可滚、横向拖动行为零变化）。
-- **短屏纵向溢出**（M3-5）：320×568 在 Fit Width 下可用设计高 ≈692 < 844，三横带放不下；压缩阶梯见 [`docs/05-实施计划-v1.0.md`](./docs/05-实施计划-v1.0.md) M3-5 备注，最后才允许降 `CELL_PX_MIN`（需 ADR）。
+- **短屏纵向溢出（M3-5）✅ 已解决**：320×568 在 Fit Width 下可用设计高 ≈692 < 844，`view/layout.ts` 运行时按可见设计高选压缩阶梯档（L0→L4），短屏自动让出棋盘空间、格边长不再跌破 44px 下限（L4=40 仍须真机复测 + ADR）。390×844 走 L0 零回归、320×568 走 L1（托盘 160→128），两档均无头预览零 Console 错误。选型纯函数见 `assets/core/config.ts` 的 `UI_LAYOUT_BANDS` / `selectLayoutBand` / `resolveLayout`。
+- **提审前待做**：① 真机帧率实测（中低端 ≥50fps）；② 微信音频真机冒烟（`wx.createInnerAudioContext` 直吃 `nativeUrl` 是 TDD 11.3 标准做法，但本环境无 `wx` 运行时、出声未验证）；③ 提审前换真实小游戏 appid（现为 Cocos 游客号 `wx6ac3f5090a6b99c5`）。微信包终版实测 **2.94MB < G2 线 3.5MB**（余量 548KB，68 PNG + 4 WAV）。
 - **待决策项**见 [`docs/04-TDD-v1.0.md`](./docs/04-TDD-v1.0.md) 第 14 节。D-01/02/03 已在 V1.1 关闭；剩余 D-04（非法 anchor 是否自动吸附）、D-05（重置是否可撤回）为交互细节，不阻塞。
 
 ---
