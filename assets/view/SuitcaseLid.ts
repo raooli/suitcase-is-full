@@ -15,7 +15,7 @@
  * 换成 `ui/suitcase-closed` 精灵——它与开盖底板 `ui/suitcase-open` 是同一
  * 轮廓，故**尺寸直接问 `BoardView.frameSizePx()`**（= 棋盘 / 0.76），开盖与
  * 合盖同尺寸，合上时严丝合缝盖住开盖箱体。位置锚在棋盘带中心
- * （`UI_BOARD_BAND_CENTER_Y`，与 BoardView 同一常量）。每次 `close()` 都按
+ * （`getLayout().boardBandCenterY`，与 BoardView 同一活动布局）。每次 `close()` 都按
  * 当前棋盘重设尺寸——各关棋盘不同，建一次就会在换关后盖错大小。
  *
  * ## 层级：由 GameController 运行时注入
@@ -37,7 +37,8 @@
 import { Component, Node, Sprite, Tween, UITransform, Vec3, tween, _decorator } from 'cc';
 import { DEBUG } from 'cc/env';
 
-import { UI_BOARD_BAND_CENTER_Y, UI_WIN_LID_DIP_PX, UI_WIN_LID_START_GAP_PX } from '../core';
+import { UI_WIN_LID_DIP_PX, UI_WIN_LID_START_GAP_PX } from '../core';
+import { getLayout } from './layout';
 import { BoardView } from './BoardView';
 import { applyUiSprite } from './uiAssets';
 
@@ -90,7 +91,7 @@ export class SuitcaseLid extends Component {
     const selfTf = this.node.getComponent(UITransform) ?? this.node.addComponent(UITransform);
     selfTf.setContentSize(frame.width, frame.height);
 
-    const closedY = UI_BOARD_BAND_CENTER_Y;
+    const closedY = getLayout().boardBandCenterY;
     const startY = closedY + frame.height + UI_WIN_LID_START_GAP_PX;
     this.node.setPosition(0, startY, 0);
     this.node.active = true;

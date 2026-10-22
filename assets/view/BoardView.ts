@@ -21,7 +21,6 @@ import { DEBUG } from 'cc/env';
 import {
   CELL_PX_MIN,
   GRID_EPSILON,
-  UI_BOARD_BAND_CENTER_Y,
   UI_DESIGN_HEIGHT,
   UI_DESIGN_WIDTH,
   UI_HEADER_HEIGHT,
@@ -36,6 +35,7 @@ import {
   toIndex,
   toRC,
 } from '../core';
+import { getLayout } from './layout';
 import type { BoardSpec, RC } from '../core';
 import { GridCellView } from './GridCellView';
 import { applyUiSprite } from './uiAssets';
@@ -343,20 +343,16 @@ export class BoardView extends Component {
   // ───────────────────────── 尺寸推算 ─────────────────────────
 
   /**
-   * 棋盘可用区域：父节点（SafeAreaRoot）的实际尺寸，取不到时退回设计画布。
-   *
-   * 三条横带目前**固定取 L0 基准档**；短屏（320×568 类）会因此把格边长压到
-   * P-04 下限之下——`warnCompressionLadder()` 会在那种情况下把各档推算值打出来，
-   * 真正的按档自适应留给 M3-5（见 `core/config.ts` 的 `UI_LAYOUT_BANDS`）。
+   * 棋盘可用区域：由活动布局（`getLayout()`）的横带尺寸 + 可见设计高推导，
+   * 不再读父节点尺寸。短屏下活动布局已按 `UI_LAYOUT_BANDS` 压缩阶梯选型，
+   * 棋盘格边长据此自然满足 P-04 下限（见 `core/config.ts` 的 `resolveLayout`）。
    */
   private availableArea(): BoardArea {
-    const parentSize = this.node.parent?.getComponent(UITransform)?.contentSize;
-    const width = parentSize?.width ?? UI_DESIGN_WIDTH;
-    const height = parentSize?.height ?? UI_DESIGN_HEIGHT;
-    return {
-      width: width - UI_SAFE_MARGIN * 2,
-      height: height - UI_HEADER_HEIGHT - UI_TRAY_HEIGHT - UI_TOOLBAR_HEIGHT,
-    };
+    const layout = getLayout();
+    const width = UI_DESIGN_WIDTH - layout.band.margin * 2;
+    const height =
+      layout.effectiveHeight - layout.band.header - layout.band.tray - layout.band.toolbar;
+    return { width, height };
   }
 
   /** 设计画布下的棋盘可用区域（P-04 体检表用，与运行时同口径） */
@@ -388,7 +384,7 @@ export class BoardView extends Component {
    * 常量在 `core/config.ts`：托盘出现后两条带必须同源，否则会各飘一边。
    */
   private static boardBandCenterY(): number {
-    return UI_BOARD_BAND_CENTER_Y;
+    return getLayout().boardBandCenterY;
   }
 
   /**
@@ -412,6 +408,12 @@ export class BoardView extends Component {
       `[BoardView] P-04 体检（设计 ${UI_DESIGN_WIDTH}×${UI_DESIGN_HEIGHT}，可用 ${area.width}×${area.height}，` +
         `Fit Width 折算到 320px 屏，下限 ${CELL_PX_MIN}px）：${entries.join('  ')}`,
     );
+    const layout = getLayout();
+    console.log(
+      `[BoardView] 活动布局：${layout.name}（可见设计高 ${layout.effectiveHeight}` +
+        `，横带 header=${layout.band.header} tray=${layout.band.tray} toolbar=${layout.band.toolbar}` +
+        ` margin=${layout.band.margin}；实际运行格边长会随本档重算）`,
+    );
   }
 
   /**
@@ -428,7 +430,9 @@ export class BoardView extends Component {
     if (board === null) return;
 
     // 从当前可用高反推屏幕可见高（设计单位）：可用高 = 可见高 − 三条横带
-    const visibleHeight = area.height + UI_HEADER_HEIGHT + UI_TRAY_HEIGHT + UI_TOOLBAR_HEIGHT;
+    const layout = getLayout();
+    const visibleHeight =
+      area.height + layout.band.header + layout.band.tray + layout.band.toolbar;
     const at320 = BoardView.physicalCellPx(this.cellPx, 320);
     const steps = UI_LAYOUT_BANDS.map(({ name, band }) => {
       const stepPx = BoardView.cellPxFor(board, {

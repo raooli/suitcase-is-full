@@ -42,15 +42,13 @@
 import { Component, Node, UITransform, Vec3, _decorator } from 'cc';
 import { DEBUG } from 'cc/env';
 
+import { getLayout } from './layout';
 import {
   UI_DESIGN_WIDTH,
-  UI_SAFE_MARGIN,
   UI_TRAY_GAP,
   UI_TRAY_PADDING,
   UI_TRAY_SLOT,
   UI_TRAY_SLOT_MIN,
-  UI_TRAY_HEIGHT,
-  UI_TRAY_BAND_CENTER_Y,
   bboxOf,
   findItem,
   rotateBy,
@@ -96,9 +94,10 @@ export class TrayView extends Component {
   private itemCount = 0;
 
   override onLoad(): void {
+    const layout = getLayout();
     const transform = this.node.getComponent(UITransform) ?? this.node.addComponent(UITransform);
-    transform.setContentSize(TrayView.contentWidth(), UI_TRAY_HEIGHT - UI_TRAY_PADDING * 2);
-    this.node.setPosition(0, UI_TRAY_BAND_CENTER_Y, 0);
+    transform.setContentSize(TrayView.contentWidth(), layout.band.tray - UI_TRAY_PADDING * 2);
+    this.node.setPosition(0, layout.trayBandCenterY, 0);
     // 滚动容器先建好：它固定为"可见窗口"，槽位全挂它下面，靠 x 平移露出不同区段。
     // 本节点自身不动 → `containsPoint` / `hitTest` 的窗口口径与滚动前完全一致
     this.ensureContentNode();
@@ -300,7 +299,7 @@ export class TrayView extends Component {
   }
 
   private static contentWidth(): number {
-    return UI_DESIGN_WIDTH - UI_SAFE_MARGIN * 2;
+    return UI_DESIGN_WIDTH - getLayout().band.margin * 2;
   }
 
   // ───────────────────────── 横向滚动（M2-11） ─────────────────────────

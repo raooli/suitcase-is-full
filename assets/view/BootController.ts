@@ -12,12 +12,15 @@ import { _decorator, Component, director } from 'cc';
 import { DEBUG } from 'cc/env';
 
 import { loadProgress } from './storage';
+import { initLayout } from './layout';
 
 const { ccclass } = _decorator;
 
 @ccclass('BootController')
 export class BootController extends Component {
   override onLoad(): void {
+    // M3-5：设备启动即按可见设计高定型（早于任意视图 onLoad，保证短屏下横带选型正确）
+    initLayout();
     const progress = loadProgress();
     if (DEBUG) {
       console.log(

@@ -35,17 +35,15 @@ import {
   UI_DESIGN_HEIGHT,
   UI_DESIGN_WIDTH,
   UI_HINT_AUTO_CLEAR_MS,
-  UI_HEADER_HEIGHT,
   UI_PALETTE,
-  UI_SAFE_MARGIN,
-  UI_TOOLBAR_BAND_CENTER_Y,
   UI_TOOLBAR_BUTTON_HEIGHT,
   UI_TOOLBAR_BUTTON_WIDTH,
-  UI_TOOLBAR_HEIGHT,
   UI_WIN_BOUNCE_MS,
   UI_WIN_LID_MS,
   UI_WIN_SETTLE_MS,
 } from '../core';
+import { getLayout, initLayout } from './layout';
+import { maxBoardOf } from '../core';
 import type {
   BoardSpec,
   GameEvent,
@@ -162,6 +160,9 @@ export class GameController extends Component {
   }
 
   override onLoad(): void {
+    // M3-5：先按可见设计高 + 最大棋盘定档，后续所有横带尺寸/中心都读它
+    // （必须早于 logSizingTable 与任意视图 onLoad，保证短屏下 TrayView 等也拿到正确档）
+    initLayout(maxBoardOf(this.bundleLevels()));
     if (DEBUG) {
       // 尺寸体检表：逐关打印 cellSize 折算（G1-D3 要盯它在 320px 屏是否过 44 下限）
       BoardView.logSizingTable(this.bundleLevels());
@@ -738,9 +739,10 @@ export class GameController extends Component {
     node.setSiblingIndex(0); // 最底层：不遮挡棋盘/托盘/成功浮层
 
     const transform = node.getComponent(UITransform) ?? node.addComponent(UITransform);
-    transform.setContentSize(UI_DESIGN_WIDTH, UI_TOOLBAR_HEIGHT);
+    const layout = getLayout();
+    transform.setContentSize(UI_DESIGN_WIDTH, layout.band.toolbar);
     transform.setAnchorPoint(0.5, 0.5);
-    node.setPosition(0, UI_TOOLBAR_BAND_CENTER_Y, 0);
+    node.setPosition(0, layout.toolbarBandCenterY, 0);
 
     const toolbar = node.addComponent(ToolbarView);
     toolbar.onUndo = () => this.handleIntent({ type: 'undo' });
@@ -811,9 +813,10 @@ export class GameController extends Component {
     const node = new Node('BackButton');
     node.layer = root.layer;
     root.addChild(node);
+    const layout = getLayout();
     node.setPosition(
-      -UI_DESIGN_WIDTH / 2 + UI_SAFE_MARGIN + 22,
-      UI_DESIGN_HEIGHT / 2 - UI_HEADER_HEIGHT / 2,
+      -UI_DESIGN_WIDTH / 2 + layout.band.margin + 22,
+      layout.topBandCenterY,
       0,
     );
 

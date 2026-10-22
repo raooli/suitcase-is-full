@@ -70,20 +70,11 @@ export const UI_TRAY_HEIGHT = 160;
 export const UI_TOOLBAR_HEIGHT = 96;
 
 /**
- * 三条横带**中心**的 y（画布中心为原点，`+y` 向上）。
- *
- * 从上面的带高推导，不写死数字：横带高度一旦按 M3-5 的压缩阶梯调整，
- * 两条带的中心必须跟着走，否则棋盘和托盘会各飘一边。
+ * 三条横带中心 y **不再写死常量**：旧 `UI_*_BAND_CENTER_Y` 已移除。
+ * 压缩阶梯（M3-5）会改带高，中心必须同步推导，否则棋盘与托盘各飘一边。
+ * 运行期由 `view/layout.ts` 的 `resolveLayout` 按所选档 + 可见设计高算出
+ * （`boardBandCenterY` / `trayBandCenterY` / `toolbarBandCenterY` / `topBandCenterY`）。
  */
-export const UI_BOARD_BAND_CENTER_Y = (UI_TRAY_HEIGHT + UI_TOOLBAR_HEIGHT - UI_HEADER_HEIGHT) / 2;
-export const UI_TRAY_BAND_CENTER_Y =
-  -(UI_DESIGN_HEIGHT / 2 - UI_TOOLBAR_HEIGHT - UI_TRAY_HEIGHT / 2);
-/**
- * 工具栏带中心 y（画布中心为原点，+y 向上）。
- * 工具栏在最底部，紧贴屏幕下边缘：从 `-(designH/2)` 到 `-(designH/2 - toolbar)`，
- * 故中心 = `-(designH/2) + toolbar/2`。
- */
-export const UI_TOOLBAR_BAND_CENTER_Y = -(UI_DESIGN_HEIGHT / 2 - UI_TOOLBAR_HEIGHT / 2);
 
 // ───────────────────────── 工具栏（M2-2：撤回 / 旋转 / 重置 / 提示） ─────────────────────────
 
@@ -106,6 +97,9 @@ export const UI_HINT_AUTO_CLEAR_MS = 3500;
  * 低于此值时优先压缩托盘/标题/留白，**不得**继续缩棋盘。
  */
 export const CELL_PX_MIN = 44;
+
+/** P-04 验收口径的参考屏宽（Fit Width 下设计宽恒等于屏宽）：折算物理格边长用 */
+export const PHYSICAL_REF_WIDTH = 320;
 
 /** 美术逻辑基准格边长（TDD 17.2：48px，在 44px 下限之上留 4px 余量） */
 export const CELL_PX_BASE = 48;
@@ -166,6 +160,93 @@ export const UI_LAYOUT_BANDS: readonly { readonly name: string; readonly band: L
     band: { header: 96, tray: 128, toolbar: 72, margin: 16, cellMin: 40 },
   },
 ];
+
+/**
+ * 选型后的「已解析布局」：横带尺寸 + 三横带中心 y（相对 ±effectiveHeight/2）。
+ *
+ * 中心不再写死常量（旧 `UI_*_BAND_CENTER_Y` 已移除）：压缩阶梯改了带高，
+ * 中心必须同步推导，否则棋盘与托盘各飘一边（M3-5）。
+ */
+export interface ResolvedLayout {
+  readonly name: string;
+  readonly band: LayoutBand;
+  /** 实际用于布局的可见设计高（短屏 < 844，长屏封顶 844） */
+  readonly effectiveHeight: number;
+  readonly boardBandCenterY: number;
+  readonly trayBandCenterY: number;
+  readonly toolbarBandCenterY: number;
+  /** 顶栏（返回按钮 / 关卡信息）中心 y */
+  readonly topBandCenterY: number;
+}
+
+/**
+ * 已知最大棋盘（横向 / 纵向分别取各关最大值）。
+ * 全局横带选型用它而非「当前关」——避免换关时横带跳动（M3-5）。
+ * 当前 10 关最大为 6×6；如日后出现更大棋盘，改这里或与 `maxBoardOf` 联动。
+ */
+export const UI_MAX_BOARD: Readonly<{ rows: number; cols: number }> = { rows: 6, cols: 6 };
+
+/** 求全部关卡里最大的棋盘（rows / cols 分别取最大） */
+export function maxBoardOf(
+  levels: readonly { board: { rows: number; cols: number } }[],
+): { rows: number; cols: number } {
+  let rows = 0;
+  let cols = 0;
+  for (const level of levels) {
+    rows = Math.max(rows, level.board.rows);
+    cols = Math.max(cols, level.board.cols);
+  }
+  return { rows, cols };
+}
+
+/**
+ * M3-5 选型：给定可见设计高与最大棋盘，返回首个「格边长（设计 + 320px 折算）都满足
+ * 该档 `cellMin`」的横带。前档够用就不动下一档（UI Spec「优先压缩托盘/留白」顺序）；
+ * 全不满足则回退末档 L4（cellMin=40，属「牺牲可点击性换能看见」，须真机复测 + ADR）。
+ *
+ * 纯函数（无 `cc`），便于单测；运行时的屏幕高度探测与单例在 `view/layout.ts`。
+ */
+export function selectLayoutBand(
+  visibleHeight: number,
+  board: { rows: number; cols: number },
+): { name: string; band: LayoutBand } {
+  for (const entry of UI_LAYOUT_BANDS) {
+    const b = entry.band;
+    const areaHeight = visibleHeight - b.header - b.tray - b.toolbar;
+    const cellPx = Math.floor(
+      Math.min((UI_DESIGN_WIDTH - b.margin * 2) / board.cols, areaHeight / board.rows),
+    );
+    const physical = (cellPx * PHYSICAL_REF_WIDTH) / UI_DESIGN_WIDTH;
+    if (cellPx >= b.cellMin && physical >= b.cellMin) return entry;
+  }
+  return UI_LAYOUT_BANDS[UI_LAYOUT_BANDS.length - 1];
+}
+
+/**
+ * 把选型结果解析成完整布局（含三横带中心 y）。中心相对「可见设计高」的半幅
+ * `±effectiveHeight/2` 推导：长屏封顶 844（多余高度靠信箱黑边吸收），短屏用实际可见高。
+ */
+export function resolveLayout(
+  visibleHeight: number,
+  board: { rows: number; cols: number },
+): ResolvedLayout {
+  const effectiveHeight = Math.min(visibleHeight, UI_DESIGN_HEIGHT);
+  const { name, band } = selectLayoutBand(effectiveHeight, board);
+  const half = effectiveHeight / 2;
+  const boardBandCenterY = (band.tray + band.toolbar - band.header) / 2;
+  const toolbarBandCenterY = -(half - band.toolbar / 2);
+  const trayBandCenterY = -(half - band.toolbar - band.tray / 2);
+  const topBandCenterY = half - band.header / 2;
+  return {
+    name,
+    band,
+    effectiveHeight,
+    boardBandCenterY,
+    trayBandCenterY,
+    toolbarBandCenterY,
+    topBandCenterY,
+  };
+}
 
 /**
  * 格子命中测试的浮点容差：`gridToLocal` 得到的是格角点，原样喂回 `localToGrid`
@@ -303,7 +384,7 @@ export const UI_TOAST_RADIUS = 22;
 
 /**
  * Toast 中心 y（画布中心为原点，+y 向上）。置于顶部信息带内、棋盘之上方——
- * 棋盘带中心 `UI_BOARD_BAND_CENTER_Y = +68`、最高棋盘半高 ≈ +171（L3/L4 5×4 时约 +210），
+ * 棋盘带中心（L0）`+68`、最高棋盘半高 ≈ +171（L3/L4 5×4 时约 +210），
  * 棋盘顶最高 ≈ +278；`+330` 始终在棋盘上方，不遮挡棋盘（UI Spec 13）。
  */
 export const UI_TOAST_Y = 330;

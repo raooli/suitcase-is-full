@@ -381,7 +381,7 @@ const trayRootNode = () => ({
   ],
 });
 
-/** 棋盘带中心 y（设计坐标，与 core/config 的 UI_BOARD_BAND_CENTER_Y 同口径） */
+/** 棋盘带中心 y（设计坐标，运行期由 core/config 的 resolveLayout 按横带尺寸推导，这里仅作场景初始占位） */
 const BOARD_BAND_CENTER_Y = (LAYOUT.tray + LAYOUT.toolbar - LAYOUT.header) / 2;
 
 /**

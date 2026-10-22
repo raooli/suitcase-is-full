@@ -33,12 +33,11 @@ import {
   UI_DESIGN_WIDTH,
   UI_PALETTE,
   UI_SAFE_MARGIN,
-  UI_TOOLBAR_BAND_CENTER_Y,
   UI_TOOLBAR_BUTTON_GAP,
   UI_TOOLBAR_BUTTON_HEIGHT,
   UI_TOOLBAR_BUTTON_WIDTH,
-  UI_TOOLBAR_HEIGHT,
 } from '../core';
+import { getLayout } from './layout';
 
 const { ccclass } = _decorator;
 
@@ -71,11 +70,12 @@ export class ToolbarView extends Component {
   private buttons = new Map<string, ToolbarButton>();
 
   override onLoad(): void {
+    const layout = getLayout();
     const transform = this.node.getComponent(UITransform) ?? this.node.addComponent(UITransform);
     transform.setAnchorPoint(0.5, 0.5);
-    transform.setContentSize(UI_DESIGN_WIDTH, UI_TOOLBAR_HEIGHT);
-    // 工具栏带在最底部（屏幕下边缘），中心 y 由 config 推导
-    this.node.setPosition(0, UI_TOOLBAR_BAND_CENTER_Y, 0);
+    transform.setContentSize(UI_DESIGN_WIDTH, layout.band.toolbar);
+    // 工具栏带在最底部（屏幕下边缘），中心 y 由活动布局推导（M3-5 压缩阶梯联动）
+    this.node.setPosition(0, layout.toolbarBandCenterY, 0);
   }
 
   /**
@@ -128,12 +128,13 @@ export class ToolbarView extends Component {
     const bg = this.node.getComponent(Graphics) ?? this.node.addComponent(Graphics);
     bg.clear();
     bg.fillColor = Color.fromHEX(new Color(), UI_PALETTE.bg);
-    bg.fillRect(-UI_DESIGN_WIDTH / 2, -UI_TOOLBAR_HEIGHT / 2, UI_DESIGN_WIDTH, UI_TOOLBAR_HEIGHT);
+    const toolbarH = getLayout().band.toolbar;
+    bg.fillRect(-UI_DESIGN_WIDTH / 2, -toolbarH / 2, UI_DESIGN_WIDTH, toolbarH);
     // 顶部一条分隔线
     bg.strokeColor = Color.fromHEX(new Color(), UI_PALETTE.border);
     bg.lineWidth = 2;
-    bg.moveTo(-UI_DESIGN_WIDTH / 2, -UI_TOOLBAR_HEIGHT / 2);
-    bg.lineTo(UI_DESIGN_WIDTH / 2, -UI_TOOLBAR_HEIGHT / 2);
+    bg.moveTo(-UI_DESIGN_WIDTH / 2, -toolbarH / 2);
+    bg.lineTo(UI_DESIGN_WIDTH / 2, -toolbarH / 2);
     bg.stroke();
     this.node.on(Node.EventType.TOUCH_START, (e: EventTouch) => e.propagationStopped = true, this);
     this.node.on(Node.EventType.TOUCH_END, (e: EventTouch) => e.propagationStopped = true, this);
