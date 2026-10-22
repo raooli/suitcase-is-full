@@ -23,6 +23,10 @@
 
 ## 提交记录（倒序）
 
+### `fc4c204` · chore(ci): 补交分支保护声明式配置 + 应用脚本，并注册 npm 脚本
+- 文件：`.github/branch-protection.json`（新增，三档预设 safe/strict/ci，分支 main=safe、release/*=strict、hotfix/*=safe）、`.github/BRANCH-PROTECTION.md`（新增，前提说明+用法）、`tools/protect-branch.mjs`（新增，dry-run 默认、--apply 才写、token 仅读环境变量）、`package.json`（新增 `protect:branch` 脚本）。
+- 要点：上一会话已造分支保护工具但漏注册 npm 脚本且未提交；本轮补齐并整体提交。规则进版本库可 code review、可复现。**仅声明入仓，不生效**——真正生效需 `GITHUB_TOKEN`（private 仓库需 admin）跑 `npm run protect:branch -- --apply`。
+
 ### `e4ae76d` · feat(view): M3-5 短屏适配——纵向压缩阶梯接入运行时布局
 
 | 项 | 内容 |
