@@ -23,6 +23,16 @@
 
 ## 提交记录（倒序）
 
+### `e4ae76d` · feat(view): M3-5 短屏适配——纵向压缩阶梯接入运行时布局
+
+| 项 | 内容 |
+| --- | --- |
+| 日期 | 2026-10-22 14:08 |
+| 文件 | `assets/core/config.ts`（+109/−55 区间）、`assets/view/layout.ts`（新增 81 行）、`assets/view/layout.ts.meta`（新增）、`assets/view/BoardView.ts`、`assets/view/BootController.ts`、`assets/view/GameController.ts`、`assets/view/SuitcaseLid.ts`、`assets/view/ToolbarView.ts`、`assets/view/TrayView.ts`、`test/layout.spec.ts`（新增 138 行 14 例）、`tools/scene-build.mjs`（仅注释） |
+| 背景 | `core/config.ts` 早有 `UI_LAYOUT_BANDS` 压缩阶梯（L0–L4），但 `BoardView.availableArea()` 仍固定读 L0 带高、三横带中心是编译期常量 → 短屏（320×568 可见设计高≈692<844）会把格边长压到 P-04 的 44px 下限之下（G1-D3 / M3-5 风险）。本次把阶梯真正接入运行时。 |
+| 要点 | ① **纯函数层**：新增 `maxBoardOf` / `selectLayoutBand` / `resolveLayout` 与 `ResolvedLayout` 类型；`selectLayoutBand` 逐档检查「设计格边长 + 320px 屏折算值」是否都 ≥ 该档 `cellMin`，前档够用不动后档，全不满足回退末档 L4；`resolveLayout` 用 `effectiveHeight = min(可见高, 844)` 推导三横带中心（`boardBandCenterY=(tray+toolbar−header)/2`、`toolbarBandCenterY=−(half−toolbar/2)`、`trayBandCenterY=−(half−toolbar−tray/2)`、`topBandCenterY=half−header/2`）；**删除**写死的 `UI_BOARD_BAND_CENTER_Y` / `UI_TRAY_BAND_CENTER_Y` / `UI_TOOLBAR_BAND_CENTER_Y`；新增 `UI_MAX_BOARD`（全 10 关最大 6×6）。② **运行时单例** `view/layout.ts`：`detectVisibleDesignHeight()` 优先 `view.getVisibleSizeInDesignResolution()`、退路用画布尺寸比值 `屏高×390/屏宽`、再兜底 844；模块加载即 `resolveLayout(844, UI_MAX_BOARD)` 预选型（L0 兜底），`initLayout(maxBoard)` 幂等重选型。③ **消费方接入 `getLayout()`**：`BoardView`（`availableArea` / `boardBandCenterY` / 压缩阶梯告警反推可见高 + 体检表打印活动档）、`TrayView`（尺寸+位置+`contentWidth` 用 `band.margin`）、`ToolbarView`（尺寸+位置+背景填充随带高）、`GameController`（工具栏节点、返回按钮用 `topBandCenterY` + `band.margin`、`onLoad` 早期 `initLayout(maxBoardOf(bundleLevels()))`）、`SuitcaseLid`（合盖落点用 `boardBandCenterY`）；`BootController.onLoad` 启动即 `initLayout()`，保证早于任意视图 `onLoad`。④ `tools/scene-build.mjs` 仅改占位注释（`BOARD_BAND_CENTER_Y` 降级为场景初始占位，运行期由 `resolveLayout` 覆盖）。 |
+| 复验 | `npm run typecheck:view` 0 错；`npm run check:arch` 无架构违规；`npm run test` **354/354**（含新增 14 例布局单测）；`npm run preview:game`（390×844）零 Console 错误、活动布局 **L0 基准**、L1 棋盘仍 114px（无回归）；短屏 `--viewport 320x568@2` 预览零 Console 错误、活动布局 **L1 托盘 160→128**（可见设计高 692.25），截图三带（棋盘/托盘/工具栏）完整无溢出。 |
+
 ### `27af802` · feat(view): M3 微信音频后端——发声抽成平台隔离（R-A4/TDD 11.3）
 
 | 项 | 内容 |
