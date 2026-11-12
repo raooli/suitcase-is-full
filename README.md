@@ -26,6 +26,8 @@
 | [`docs/06-架构设计-v1.0.md`](./docs/06-架构设计-v1.0.md) | **不能怎么改**：分层、依赖规则 R-A1～R-A10、ADR |
 | [`docs/07-AI-Prompts.md`](./docs/07-AI-Prompts.md) | 美术生成提示词包（63 张物品） |
 | [`docs/08-G1-拖拽手感检查报告-v1.0.md`](./docs/08-G1-拖拽手感检查报告-v1.0.md) | M1.D 出口检查点结论（V1.1 已改判 Go） |
+| [`docs/09-优化规划与11-20关设计-v1.0.md`](./docs/09-优化规划与11-20关设计-v1.0.md) | 下一阶段优化、底部托盘格形、11–20 关设计与验收目标 |
+| [`docs/releases/v0.1.0.md`](./docs/releases/v0.1.0.md) | v0.1.0 发布内容、验证结果与已知问题 |
 | [`CHANGELOG.md`](./CHANGELOG.md) | 每个 commit 改了哪些文件、为什么 |
 | [`art/ASSET-STATUS.md`](./art/ASSET-STATUS.md) | 美术资产覆盖率与返修清单（自动生成） |
 
